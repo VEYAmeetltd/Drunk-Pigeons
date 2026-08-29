@@ -462,7 +462,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         c.anim = 0;
         chipCount += 1;
         fatChips += 1;
-        if (onChip) onChip(chipCount);
+        if (onChip) onChip(chipCount, fatChips);
       }
     }
 
@@ -651,6 +651,10 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     },
     setSkinnyJabChance(c) {
       if (Number.isFinite(c) && c >= 0 && c <= 1) jabChance = c;
+    },
+    devSetFat(n) {
+      // dev/test only: force currentFatness (drives visible size + hitbox). Harmless in prod.
+      if (Number.isFinite(n) && n >= 0) fatChips = Math.floor(n);
     },
     setPintChance(c) {
       if (Number.isFinite(c) && c >= 0 && c <= 1) pintChance = c;

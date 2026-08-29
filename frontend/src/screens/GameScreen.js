@@ -102,6 +102,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
   const [score, setScore] = useState(0);
   const [chips, setChips] = useState(0);
+  const [fatChipsCur, setFatChipsCur] = useState(0); // currentFatness (resets on Skinny Jab); drives visible size
   const [obsGeom, setObsGeom] = useState(() =>
     Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ active: false, topH: 0, gap: CONFIG.GAP_BASE, kind: 0 }))
   );
@@ -127,12 +128,14 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
   // keep latest callbacks
   cbRef.current.onScore = (s) => setScore(s);
-  cbRef.current.onChip = (c) => {
+  cbRef.current.onChip = (c, fatCur) => {
     setChips(c);
+    setFatChipsCur(fatCur); // currentFatness (== total until a Skinny Jab resets it)
     Audio.chip();
   };
   cbRef.current.onSkinnyJab = () => {
     Audio.pop();
+    setFatChipsCur(0); // instant visible deflation to original size; total chips untouched
   };
   cbRef.current.onPint = () => {
     Audio.pint();
@@ -161,7 +164,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const buildEngine = useCallback(() => {
     return createEngine({
       onScore: (s) => cbRef.current.onScore(s),
-      onChip: (c) => cbRef.current.onChip(c),
+      onChip: (c, fat) => cbRef.current.onChip(c, fat),
       onCrash: (info) => cbRef.current.onCrash(info),
       onSkinnyJab: () => cbRef.current.onSkinnyJab(),
       onPint: () => cbRef.current.onPint(),
@@ -178,6 +181,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     runStartRef.current = performance.now();
     setScore(0);
     setChips(0);
+    setFatChipsCur(0);
     setOver(null);
     setCanRevive(true);
     setReviveBusy(false);
@@ -295,7 +299,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     startRun();
   }, [startRun]);
 
-  const fatLevel = fatLevelFor(chips);
+  const fatLevel = fatLevelFor(fatChipsCur);
 
   return (
     <View style={styles.root}>
