@@ -35,7 +35,7 @@ function rngFrom(seed) {
 // The drunk personality (sway, wobble, bob, hiccups, HIC!, bubbles, wing flail
 // and the 360° barrel roll) lives INSIDE, in DrunkPigeon, so it can never touch
 // physics — collision/hitbox use world.px/py + size only, not this visual transform.
-export function PigeonView({ world, pigeon, fatLevel }) {
+export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1 }) {
   const size = pigeonSizeFor(fatLevel);
   const style = useAnimatedStyle(() => {
     const w = world.value;
@@ -58,7 +58,7 @@ export function PigeonView({ world, pigeon, fatLevel }) {
   });
   return (
     <Animated.View style={[styles.abs, { width: size, height: size }, style]} pointerEvents="none">
-      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes testID="game-pigeon" />
+      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound testID="game-pigeon" />
     </Animated.View>
   );
 }
@@ -338,6 +338,45 @@ export function JabView({ world }) {
 const jabStyles = StyleSheet.create({
   sparkle: { position: 'absolute', top: 3, right: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' },
 });
+
+/* ---------------- Pub Pint (collectible drunk boost) ---------------- */
+export function PintView({ world }) {
+  const S = CONFIG.PINT_SIZE;
+  const style = useAnimatedStyle(() => {
+    const pt = world.value.pint;
+    if (!pt || !pt.active) return { opacity: 0, transform: [{ translateX: -999 }] };
+    const t = world.value.t || 0;
+    const bob = Math.sin(t / 260) * 3;
+    const rot = Math.sin(t / 500) * 10;
+    return {
+      opacity: 1,
+      transform: [{ translateX: pt.x - S / 2 }, { translateY: pt.y - S / 2 + bob }, { rotate: `${rot}deg` }],
+    };
+  });
+  const foam = useAnimatedStyle(() => {
+    const t = world.value.t || 0;
+    return { opacity: 0.5 + 0.5 * Math.abs(Math.sin(t / 200)) };
+  });
+  return (
+    <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
+      <Svg width={S} height={S} viewBox="0 0 40 40">
+        {/* glow halo */}
+        <Circle cx="20" cy="21" r="18" fill="rgba(255,196,0,0.16)" />
+        {/* glass mug */}
+        <SvgRect x="9" y="12" width="17" height="23" rx="2.5" fill="rgba(255,224,130,0.55)" stroke="#e8b53a" strokeWidth="1.6" />
+        {/* amber beer */}
+        <SvgRect x="10.5" y="18" width="14" height="15.5" rx="2" fill="#f2a71b" />
+        {/* handle */}
+        <Path d="M 26 16 q 8 1 8 8 q 0 7 -8 7" fill="none" stroke="#e8b53a" strokeWidth="2.4" />
+        {/* foam head */}
+        <Circle cx="13" cy="13" r="4.4" fill="#fffdf3" />
+        <Circle cx="18.5" cy="11.5" r="4.8" fill="#fffdf3" />
+        <Circle cx="23.5" cy="13" r="4.2" fill="#fffdf3" />
+      </Svg>
+      <Animated.View style={[jabStyles.sparkle, { backgroundColor: '#fffdf3' }, foam]} pointerEvents="none" />
+    </Animated.View>
+  );
+}
 
 
 /* ---------------- Feather ---------------- */

@@ -29,6 +29,9 @@ export default function MainMenu({
   onToggleSound,
   onLeetUnlock,
   onLeaderboard,
+  drunkStrength = 1,
+  drunkLabel = 'NORMAL',
+  onCycleDrunk,
 }) {
   const pigeon = getPigeon(selectedPigeon);
   const [showCode, setShowCode] = useState(false);
@@ -98,6 +101,9 @@ export default function MainMenu({
         <Pressable testID="sound-toggle" onPress={onToggleSound} style={styles.sound}>
           <Text style={styles.soundTxt}>{soundEnabled ? 'SOUND: ON' : 'SOUND: OFF'}</Text>
         </Pressable>
+        <Pressable testID="wobble-toggle" onPress={onCycleDrunk} style={styles.sound}>
+          <Text style={styles.soundTxt}>{`WOBBLE: ${drunkLabel}`}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.titleWrap}>
@@ -107,7 +113,7 @@ export default function MainMenu({
       </View>
 
       <Animated.View style={[styles.hero, pigeonStyle]}>
-        <DrunkPigeon pigeon={pigeon} fatLevel={2} size={150} intensity="full" eyes testID="menu-pigeon" />
+        <DrunkPigeon pigeon={pigeon} fatLevel={2} size={150} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
       </Animated.View>
 
       <View style={styles.stats}>
@@ -220,7 +226,7 @@ function Stat({ label, value, color, testID }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24, alignItems: 'center' },
-  top: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
+  top: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 6, paddingTop: 8 },
   codeMark: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
   sound: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, backgroundColor: COLORS.bgAlt },

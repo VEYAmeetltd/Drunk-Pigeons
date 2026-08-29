@@ -18,6 +18,7 @@ const KEYS = {
   nickname: 'dp_nickname',
   submittedBest: 'dp_submittedBest',
   submittedBestSilly: 'dp_submittedBestSilly',
+  drunk: 'dp_drunkLevel',
 };
 
 async function getNumber(key, def) {
@@ -40,7 +41,7 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy, removeAds] = await Promise.all([
+    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy, removeAds, drunk] = await Promise.all([
       getNumber(KEYS.best, 0),
       getNumber(KEYS.bestDist, 0),
       getNumber(KEYS.bestDistSilly, 0),
@@ -54,6 +55,7 @@ export const Persistence = {
       getString(KEYS.bundle, '0'),
       getString(KEYS.easy, '0'),
       getString(KEYS.removeAds, '0'),
+      getString(KEYS.drunk, '1'),
     ]);
     return {
       bestScore: best,
@@ -69,7 +71,11 @@ export const Persistence = {
       bundleOwned: bundle === '1',
       easyModeOwned: easy === '1',
       removeAdsOwned: removeAds === '1',
+      drunkLevel: [0, 1, 2].includes(Number(drunk)) ? Number(drunk) : 1,
     };
+  },
+  setDrunk(level) {
+    AsyncStorage.setItem(KEYS.drunk, String(level)).catch(() => {});
   },
   setEasyMode(on) {
     AsyncStorage.setItem(KEYS.easy, on ? '1' : '0').catch(() => {});

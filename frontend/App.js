@@ -16,6 +16,10 @@ import { Billing } from './src/store/billing';
 import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
 import { Ads } from './src/ads/ads';
 
+// Wobble-strength setting → drunk animation amplitude multiplier.
+const DRUNK_MULT = [0.55, 1, 1.7];
+const DRUNK_LABELS = ['CHILL', 'NORMAL', 'EXTRA'];
+
 export default function App() {
   const [ready, setReady] = useState(false);
   const [screen, setScreen] = useState('menu'); // menu | game | pigeons
@@ -33,6 +37,7 @@ export default function App() {
     bundleOwned: false,
     easyModeOwned: false,
     removeAdsOwned: false,
+    drunkLevel: 1,
   });
 
   useEffect(() => {
@@ -100,6 +105,15 @@ export default function App() {
       Persistence.setSound(soundEnabled);
       if (soundEnabled) Audio.ui();
       return { ...s, soundEnabled };
+    });
+  }, []);
+
+  const handleCycleDrunk = useCallback(() => {
+    setState((s) => {
+      const drunkLevel = (s.drunkLevel + 1) % 3;
+      Persistence.setDrunk(drunkLevel);
+      Audio.ui();
+      return { ...s, drunkLevel };
     });
   }, []);
 
@@ -258,6 +272,8 @@ export default function App() {
 
   if (!ready) return <View style={styles.boot} />;
 
+  const drunkStrength = DRUNK_MULT[state.drunkLevel] ?? 1;
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
@@ -273,6 +289,9 @@ export default function App() {
             easyModeOwned={state.easyModeOwned}
             easyPrice={Billing.priceFor(PRODUCTS.mode.easy) || DEFAULT_PRICES.easyMode}
             isDev={Billing.isDev}
+            drunkStrength={drunkStrength}
+            drunkLabel={DRUNK_LABELS[state.drunkLevel]}
+            onCycleDrunk={handleCycleDrunk}
             onPlay={() => setScreen('game')}
             onPigeons={() => setScreen('pigeons')}
             onSelectMap={handleSelectMap}
@@ -299,6 +318,7 @@ export default function App() {
             bundleOwned={state.bundleOwned}
             removeAdsOwned={state.removeAdsOwned}
             removeAdsPrice={Billing.priceFor(PRODUCTS.removeads) || DEFAULT_PRICES.removeAds}
+            drunkStrength={drunkStrength}
             onSelect={handleSelectPigeon}
             onBuyPigeon={buyPigeon}
             onBuyBundle={buyBundle}
@@ -314,6 +334,7 @@ export default function App() {
             mapSelection={state.selectedMap}
             bestScore={state.bestScore}
             bestDistance={modeForSelection(state.selectedMap) === 'easy' ? state.bestDistanceSilly : state.bestDistance}
+            drunkStrength={drunkStrength}
             onCrash={handleCrash}
             onExit={() => setScreen('menu')}
           />

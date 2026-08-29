@@ -71,6 +71,16 @@ export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66, droopy =
       <Line x1={cx - 6} y1={cy + ry} x2={cx - 6} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />
       <Line x1={cx + 8} y1={cy + ry} x2={cx + 8} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />
 
+      {/* Gym pigeon carries dumbbells (curl with the body during "One More Rep") */}
+      {p.id === 'gym' && (
+        <G>
+          {/* front dumbbell near the wing */}
+          <Line x1={cx - 4} y1={cy + ry * 0.28} x2={cx + 16} y2={cy + ry * 0.28} stroke="#3a3a42" strokeWidth={3} />
+          <Rect x={cx - 10} y={cy + ry * 0.28 - 6} width={7} height={12} rx={2} fill="#2b2b30" />
+          <Rect x={cx + 15} y={cy + ry * 0.28 - 6} width={7} height={12} rx={2} fill="#2b2b30" />
+        </G>
+      )}
+
       {/* accessories */}
       <Accessory type={p.accessory} cx={cx} cy={cy} rx={rx} ry={ry} grow={grow} color="#e23b3b" />
     </Svg>

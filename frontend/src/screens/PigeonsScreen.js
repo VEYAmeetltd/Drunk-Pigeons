@@ -18,6 +18,7 @@ export default function PigeonsScreen({
   bundleOwned = false,
   removeAdsOwned = false,
   removeAdsPrice = '£2.99',
+  drunkStrength = 1,
   onSelect,
   onBuyPigeon,
   onBuyBundle,
@@ -98,7 +99,7 @@ export default function PigeonsScreen({
       {/* Preview panel */}
       <View style={styles.previewCard}>
         <View style={styles.previewSprite}>
-          <DrunkPigeon pigeon={previewP} fatLevel={1} size={130} intensity="full" eyes testID={`preview-pigeon-${previewP.id}`} />
+          <DrunkPigeon pigeon={previewP} fatLevel={1} size={130} intensity="full" eyes strength={drunkStrength} testID={`preview-pigeon-${previewP.id}`} />
           {!previewEnt.canUse && (
             <View style={styles.previewLock} testID="preview-lock">
               <Text style={styles.lockEmoji}>LOCKED</Text>
@@ -151,7 +152,7 @@ export default function PigeonsScreen({
               style={[styles.card, active && styles.cardActive, preview === p.id && styles.cardPreview]}
             >
               <View style={styles.cardSprite}>
-                <DrunkPigeon pigeon={p} fatLevel={0} size={70} intensity="calm" eyes={false} testID={`grid-pigeon-${p.id}`} />
+                <DrunkPigeon pigeon={p} fatLevel={0} size={70} intensity="calm" eyes={false} strength={drunkStrength} testID={`grid-pigeon-${p.id}`} />
                 {!e.canUse && (
                   <View style={styles.cardLock}>
                     <Text style={styles.cardLockTxt}>🔒</Text>

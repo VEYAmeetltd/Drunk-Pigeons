@@ -5,7 +5,7 @@ const OW = CONFIG.OBSTACLE_WIDTH;
 
 // Pure(ish) game simulation. No rendering. Mutates internal state each step.
 // Rendering layer reads getSnapshot(). Collision/scoring use plain JS state.
-export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
+export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) {
   let W = 400;
   let H = 800;
 
@@ -24,6 +24,9 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
   let popT = 0; // timestamp of the last Skinny Jab collection (drives the POP! effect)
   let jabChance = CONFIG.SKINNY_JAB_CHANCE; // dev-overridable
   const jab = { active: false, x: 0, y: 0, anim: 0 };
+  const pint = { active: false, x: 0, y: 0, anim: 0 };
+  let pintChance = CONFIG.PINT_CHANCE; // dev-overridable
+  let pintT = 0; // timestamp of the last pint collection (drives the visual boost window)
   let distance = 0;
   let running = false;
   let dead = false;
@@ -212,6 +215,24 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
     }
   }
 
+  // Pub pint: fairly common, one at a time, validated safe placement (reuses the
+  // same bounds check as the jab since sizes match). Purely a visual-boost pickup.
+  function maybeSpawnPint(B) {
+    if (pint.active) return;
+    if (Math.random() >= pintChance) return;
+    const cx = B.x + OW / 2;
+    const cy = B.topH + B.gap / 2;
+    for (const oy of [0, -22, 22, -44, 44]) {
+      if (isJabPosSafe(cx, cy + oy)) {
+        pint.active = true;
+        pint.x = cx;
+        pint.y = cy + oy;
+        pint.anim = 0;
+        return;
+      }
+    }
+  }
+
   // Generate validated chips for a newly placed obstacle: a couple inside its gap
   // corridor, plus a short trail in the OPEN sky between it and the previous obstacle.
   function generateChipsForObstacle(idx) {
@@ -258,6 +279,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
       }
     }
     maybeSpawnSkinnyJab(B);
+    if (!jab.active) maybeSpawnPint(B);
   }
 
   function explodeFeathers(x, y, feather) {
@@ -293,6 +315,8 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
     skinnyJabCount = 0;
     popT = 0;
     jab.active = false;
+    pint.active = false;
+    pintT = 0;
     distance = 0;
     running = true;
     dead = false;
@@ -463,6 +487,24 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
       }
     }
 
+    // Pub pint: movement + collection (triggers a temporary visual drunk boost only)
+    if (pint.active) {
+      pint.anim += dt;
+      pint.x -= speed * dt;
+      if (pint.x < -40) {
+        pint.active = false;
+      } else {
+        const bdx = pint.x - pigeon.x;
+        const bdy = pint.y - pigeon.y;
+        const bpick = rr + CONFIG.PINT_SIZE * 0.5;
+        if (bdx * bdx + bdy * bdy < bpick * bpick) {
+          pint.active = false;
+          pintT = now;
+          if (onPint) onPint();
+        }
+      }
+    }
+
     // collision
     if (collides(now)) {
       dead = true;
@@ -561,6 +603,8 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
         life: Math.max(0, f.life),
       })),
       jab: { x: jab.x, y: jab.y, active: jab.active ? 1 : 0, anim: jab.anim },
+      pint: { x: pint.x, y: pint.y, active: pint.active ? 1 : 0, anim: pint.anim },
+      boost: now < pintT + CONFIG.PINT_BOOST_MS ? 1 : 0,
       pop: popT,
     };
   }
@@ -607,6 +651,9 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
     },
     setSkinnyJabChance(c) {
       if (Number.isFinite(c) && c >= 0 && c <= 1) jabChance = c;
+    },
+    setPintChance(c) {
+      if (Number.isFinite(c) && c >= 0 && c <= 1) pintChance = c;
     },
     get distanceMeters() {
       return Math.floor(distance / PPM);

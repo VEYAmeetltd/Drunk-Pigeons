@@ -10,6 +10,7 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import PigeonSprite from './PigeonSprite';
+import { Audio } from '../audio/audio';
 import { FONT } from '../ui/theme';
 
 // TEMPORARY development diagnostic. When true every pigeon fires its signature +
@@ -149,7 +150,9 @@ export default function DrunkPigeon({
   size = 120,
   intensity = 'full', // 'full' (gameplay / hero) | 'calm' (grid previews)
   eyes = true,        // enable blink/droopy eyes (skip on tiny sprites for perf)
-  boost = false,      // temporary extra drunkenness (Pub-style boost hook)
+  boost = false,      // temporary extra drunkenness (Pub pint boost)
+  strength = 1,       // player wobble-strength setting multiplier
+  sound = false,      // play tiny character sound on signatures (gameplay only)
   active = true,      // false pauses the random event scheduler
   testID,
 }) {
@@ -157,7 +160,7 @@ export default function DrunkPigeon({
   const calm = intensity === 'calm';
   const diag = DRUNK_DIAG;
   const fatF = 1 + Math.min(fatLevel, 6) * 0.14; // fatter => bigger + slower personality
-  const amp = (calm ? 0.62 : 1) * fatF * (boost ? 1.5 : 1) * (diag ? 2.2 : 1);
+  const amp = (calm ? 0.62 : 1) * fatF * (boost ? 1.5 : 1) * strength * (diag ? 2.2 : 1);
   const swayA = amp * prof.sway;
   const wobA = amp * prof.wob;
   const bobA = amp * prof.bob;
@@ -240,6 +243,7 @@ export default function DrunkPigeon({
   // ---- signature animations (visual only) ----
   const runSignature = (fs) => {
     const A = amp;
+    if (sound) Audio.drunkSig(prof.sig);
     const T = (ms) => Math.round(ms * fs); // fatter/slower
     switch (prof.sig) {
       case 'stagger': { // Classic — messy over-correcting stumble

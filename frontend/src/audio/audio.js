@@ -99,6 +99,44 @@ export const Audio = {
     tone({ freq: 900, slideTo: 180, type: 'square', dur: 0.14, gain: 0.28 });
     noise({ dur: 0.1, gain: 0.22 });
   },
+  pint() {
+    // cheerful "glug glug" pickup
+    tone({ freq: 300, slideTo: 460, type: 'triangle', dur: 0.1, gain: 0.2 });
+    tone({ freq: 340, slideTo: 520, type: 'triangle', dur: 0.1, gain: 0.2, delay: 0.12 });
+    tone({ freq: 660, slideTo: 990, type: 'sine', dur: 0.12, gain: 0.16, delay: 0.24 });
+  },
+  // Tiny character-specific sound for each signature drunk animation.
+  drunkSig(kind) {
+    switch (kind) {
+      case 'stagger': // messy "whoaa"
+        tone({ freq: 480, slideTo: 200, type: 'sawtooth', dur: 0.32, gain: 0.16 });
+        break;
+      case 'nap': // sleepy snore
+        tone({ freq: 150, slideTo: 90, type: 'sawtooth', dur: 0.5, gain: 0.16 });
+        noise({ dur: 0.4, gain: 0.1 });
+        break;
+      case 'nahgood': // confident "ayy"
+        tone({ freq: 330, slideTo: 500, type: 'square', dur: 0.16, gain: 0.16 });
+        tone({ freq: 500, slideTo: 620, type: 'square', dur: 0.14, gain: 0.14, delay: 0.14 });
+        break;
+      case 'salute': // little royal fanfare
+        [523, 784, 1047].forEach((f, i) => tone({ freq: f, type: 'triangle', dur: 0.16, gain: 0.18, delay: i * 0.1 }));
+        break;
+      case 'rep': // gym grunt
+        tone({ freq: 120, slideTo: 70, type: 'sawtooth', dur: 0.28, gain: 0.2 });
+        break;
+      case 'lost': // confused warble
+        tone({ freq: 600, slideTo: 400, type: 'sine', dur: 0.18, gain: 0.14 });
+        tone({ freq: 400, slideTo: 620, type: 'sine', dur: 0.18, gain: 0.14, delay: 0.16 });
+        break;
+      case 'gentleman': // polite "ahem" + tiny ding
+        tone({ freq: 220, slideTo: 180, type: 'sine', dur: 0.16, gain: 0.14 });
+        tone({ freq: 1320, type: 'triangle', dur: 0.12, gain: 0.12, delay: 0.2 });
+        break;
+      default:
+        break;
+    }
+  },
   leet() {
     [392, 523, 659, 784, 1047].forEach((f, i) =>
       tone({ freq: f, type: 'triangle', dur: 0.14, gain: 0.2, delay: i * 0.09 })

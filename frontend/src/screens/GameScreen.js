@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, JabView, FeatherView, HecklerView } from '../components/GameEntities';
+import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -94,7 +94,7 @@ function PopText({ world }) {
   );
 }
 
-export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, onCrash, onExit }) {
+export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
@@ -113,6 +113,8 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const [started, setStarted] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [heckler, setHeckler] = useState({ id: 0, text: '', reaction: 'fist' });
+  const [pintBoost, setPintBoost] = useState(false); // temporary extra-drunk visual after a pint
+  const boostTimer = useRef(null);
 
   const engineRef = useRef(null);
   const rafRef = useRef(0);
@@ -131,6 +133,12 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   };
   cbRef.current.onSkinnyJab = () => {
     Audio.pop();
+  };
+  cbRef.current.onPint = () => {
+    Audio.pint();
+    setPintBoost(true);
+    if (boostTimer.current) clearTimeout(boostTimer.current);
+    boostTimer.current = setTimeout(() => setPintBoost(false), CONFIG.PINT_BOOST_MS);
   };
   cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
     Audio.crash();
@@ -156,6 +164,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       onChip: (c) => cbRef.current.onChip(c),
       onCrash: (info) => cbRef.current.onCrash(info),
       onSkinnyJab: () => cbRef.current.onSkinnyJab(),
+      onPint: () => cbRef.current.onPint(),
     });
   }, []);
 
@@ -207,6 +216,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     return () => {
       cancelAnimationFrame(rafRef.current);
       if (shieldTimer.current) clearTimeout(shieldTimer.current);
+      if (boostTimer.current) clearTimeout(boostTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -306,6 +316,8 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
       {/* Skinny Jab rare pickup */}
       <JabView world={world} />
+      {/* Pub pint pickup */}
+      <PintView world={world} />
       <PopText world={world} />
 
       {/* feathers */}
@@ -314,7 +326,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       ))}
 
       {/* pigeon */}
-      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} />
+      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} />
 
       {/* flap input layer (below HUD buttons) */}
       <Pressable
