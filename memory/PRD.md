@@ -61,6 +61,12 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - DEV simulator (sim-success/cancel/fail + restore) only in dev builds; success updates entitlement + persists (dp_purchasedPigeons, dp_bundleOwned) and unlocks immediately; cancel/fail unlock nothing (fail shows friendly message). Bundle unlocks all five and hides. RESTORE PURCHASES with visible confirmation (restore-msg).
 - 733T remains a SEPARATE local `leet` entitlement (not a purchase record). Premium pigeons are cosmetic-only — zero gameplay advantage. Production billing to be injected via setBillingProvider() before release (Apple/Google authoritative for paid ownership).
 
+## Update 7 (2026-06) — Online Global Leaderboard + Anti-Cheat — verified 100% (iteration_8)
+- Backend: FastAPI + MongoDB (motor). Endpoints /api/leaderboard/register|submit|top. Collections players{playerId,nickname,bestDistance,updatedAt} + runs{runId unique} + flagged. Env MONGO_URL/DB_NAME (backend/.env, load_dotenv).
+- Ranked ONLY by best distance (m). Anonymous local playerId (uuid), sanitized nickname (<=16, HTML/URL/control/profanity filtered). Best distance never decreases (atomic $max). Top 100 + your-rank fallback + highlight.
+- Anti-cheat (server-authoritative, mirrors engine SPEED_MAX 380 / PPM 24 => ~15.83 m/s): rejects negative/NaN/Inf/over-cap(100000)/too-fast(distance>duration*maxMps*1.15+60)/impossible-chips(>1.2/m)/bad-id/duplicate runId(unique index=replay protection); flags plausible-but-extreme(>=40000) out of Top; in-memory rate limiter (20/60s/player).
+- Frontend: LEADERBOARD menu button + LeaderboardScreen (nickname entry+validation, list, your-rank, offline 'LEADERBOARD UNAVAILABLE' state, retry). Submission is async/fire-and-forget on real crash ONLY when distance>submittedBest and nickname set; manual restart submits nothing; revive keeps same run. Game fully playable offline. dp_playerId/dp_nickname/dp_submittedBest persisted. Backend tests: /app/backend/tests/test_leaderboard.py (24 cases).
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks.

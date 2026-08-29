@@ -1,0 +1,22 @@
+{
+  "summary": "Iteration 8: Tested new global leaderboard + anti-cheat backend and leaderboard UI. Created /app/backend/tests/test_leaderboard.py (24 pytest cases, all passing) covering register sanitisation (empty, >16, <>, http://, www., control chars, &#, profanity, bad playerId), submit accept/reject (plausible, over-cap 999999999, negative, too-fast 5000m/2s, impossible chips, duplicate runId, bad-id), best-only-increases, top endpoint sort DESC + rank + isYou + you-fallback, rate limiting (>20/min), rejected scores never on Top. Frontend UI: leaderboard-button opens screen; nickname flow works — profanity ('fuckPigeon') and HTML ('hello<script>') both trigger nickname-error 'TRY ANOTHER NAME, PIGEON.'; clean name saves, hides entry, loads list of 6 rows sorted DESC (3000, 842, 842, 500, 100, 1); own-row highlight untestable via UI (requires real crash submission) — validated via backend isYou flag instead; nickname persists across navigation. Offline state selectors exist in code but not reachable (backend is up).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_leaderboard.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py classify() correctly returns status='rejected' with ok:true for anti-cheat rejections (recorded to flagged, kept out of Top). Duplicate runId short-circuits before classify — matches spec.",
+    "sanitize_nickname whitelist regex is strict (letters/digits/space/_-.!) which correctly rejects <, >, urls, control chars; profanity list is basic but sufficient for MVP.",
+    "Atomic $max update on bestDistance guarantees monotonic increase — verified via test_best_only_increases.",
+    "In-memory rate limiter is per-instance; note behind multi-worker deployment RL_MAX may be effectively N*worker. Acceptable for single-worker preview.",
+    "top() correctly excludes bestDistance==0 players so first-time users don't pollute list."
+  ],
+  "updated_files": ["/app/backend/tests/test_leaderboard.py"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of testable leaderboard UI paths"},
+  "test_credentials": "None (anonymous playerId).",
+  "seed_data_creation": "Created several transient TestPigeon/ArcadePigeon/SpamPigeon/LowScorer/HackyPigeon entries during tests. LowScorer(1m) + one HackyPigeon are visible in Top but harmless; consider a cleanup route if noise grows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend URL https://d3e2f44b-fbc3-4420-8e4f-db12ab08d51c.preview.emergentagent.com. Reuse /app/backend/tests/test_leaderboard.py as regression. Frontend viewport 430x920. Fresh localStorage triggers nickname card. Playwright rendering: TextNode inside row is contiguous (e.g. '#2FatPigeon69842m') — parse distance carefully (last '\\d+m' greedy match can merge digits in nickname). To test own-row highlight/your-rank in-UI you'd need a real crash submission; safer to trust backend isYou test.",
+  "rca of the issue": "N/A — no bugs found."
+}

@@ -11,6 +11,9 @@ const KEYS = {
   leet: 'dp_leetUnlock',
   purchased: 'dp_purchasedPigeons',
   bundle: 'dp_bundleOwned',
+  playerId: 'dp_playerId',
+  nickname: 'dp_nickname',
+  submittedBest: 'dp_submittedBest',
 };
 
 async function getNumber(key, def) {
@@ -63,6 +66,23 @@ export const Persistence = {
   },
   setBundle(on) {
     AsyncStorage.setItem(KEYS.bundle, on ? '1' : '0').catch(() => {});
+  },
+  setPlayerId(v) {
+    AsyncStorage.setItem(KEYS.playerId, v).catch(() => {});
+  },
+  setNickname(v) {
+    AsyncStorage.setItem(KEYS.nickname, v).catch(() => {});
+  },
+  setSubmittedBest(v) {
+    AsyncStorage.setItem(KEYS.submittedBest, String(v)).catch(() => {});
+  },
+  async loadLeaderboard() {
+    const [playerId, nickname, submittedBest] = await Promise.all([
+      getString(KEYS.playerId, ''),
+      getString(KEYS.nickname, ''),
+      getNumber(KEYS.submittedBest, 0),
+    ]);
+    return { playerId, nickname, submittedBest };
   },
   setLeet(on) {
     AsyncStorage.setItem(KEYS.leet, on ? '1' : '0').catch(() => {});

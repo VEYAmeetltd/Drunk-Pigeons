@@ -10,6 +10,7 @@ import { createEngine } from '../game/engine';
 import { CONFIG, fatLevelFor, FAT_LABELS, formatInt } from '../config';
 import { randomDeathMessage } from '../data/deathMessages';
 import { pickInsult, pickReaction } from '../data/insults';
+import { generateRunId } from '../leaderboard/api';
 import { Audio } from '../audio/audio';
 import { Ads } from '../ads/ads';
 import { FONT, COLORS } from '../ui/theme';
@@ -64,6 +65,8 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
   const cbRef = useRef({});
   const shieldTimer = useRef(null);
   const pausedRef = useRef(false);
+  const runIdRef = useRef('');
+  const runStartRef = useRef(0);
 
   // keep latest callbacks
   cbRef.current.onScore = (s) => setScore(s);
@@ -77,7 +80,15 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
     setOver({ message: randomDeathMessage(), score: sc, chips: ch, distance: dist, isNewBest });
     Ads.registerDeath();
-    if (onCrash) onCrash({ score: sc, chips: ch, distance: dist });
+    if (onCrash)
+      onCrash({
+        score: sc,
+        chips: ch,
+        distance: dist,
+        runId: runIdRef.current,
+        runDuration: (performance.now() - runStartRef.current) / 1000,
+        reviveUsed: !!(engineRef.current && engineRef.current.usedRevive),
+      });
   };
 
   const buildEngine = useCallback(() => {
@@ -91,6 +102,8 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
   const startRun = useCallback(() => {
     const eng = engineRef.current;
     eng.reset(width, height);
+    runIdRef.current = generateRunId();
+    runStartRef.current = performance.now();
     setScore(0);
     setChips(0);
     setOver(null);

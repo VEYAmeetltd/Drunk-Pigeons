@@ -22,6 +22,7 @@ export default function MainMenu({
   onSelectMap,
   onToggleSound,
   onLeetUnlock,
+  onLeaderboard,
 }) {
   const pigeon = getPigeon(selectedPigeon);
   const [showCode, setShowCode] = useState(false);
@@ -91,6 +92,13 @@ export default function MainMenu({
         <Button testID="play-button" label="PLAY" variant="primary" onPress={onPlay} style={{ flex: 1 }} />
         <Button testID="pigeons-button" label="PIGEONS" variant="pink" onPress={onPigeons} style={{ flex: 1 }} />
       </View>
+      <Button
+        testID="leaderboard-button"
+        label="🏆  LEADERBOARD"
+        variant="teal"
+        onPress={onLeaderboard}
+        style={{ width: '100%', marginTop: 12, marginBottom: 10 }}
+      />
 
       <SecretCode visible={showCode} onClose={() => setShowCode(false)} onUnlock={onLeetUnlock} />
     </SafeAreaView>

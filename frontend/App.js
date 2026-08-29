@@ -1,11 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import MainMenu from './src/screens/MainMenu';
 import PigeonsScreen from './src/screens/PigeonsScreen';
 import GameScreen from './src/screens/GameScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import { Persistence } from './src/storage/persistence';
+import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboard/api';
 import { Audio } from './src/audio/audio';
 import { loadFonts, COLORS } from './src/ui/theme';
 import { getPigeon } from './src/data/pigeons';
@@ -50,6 +52,32 @@ export default function App() {
   }, []);
 
   const update = useCallback((patch) => setState((s) => ({ ...s, ...patch })), []);
+
+  // Leaderboard identity (kept in a ref for stale-free access inside async crash handler)
+  const lbRef = useRef({ playerId: '', nickname: '', submittedBest: 0 });
+  const [nickname, setNickname] = useState('');
+
+  useEffect(() => {
+    Persistence.loadLeaderboard().then((lb) => {
+      let pid = lb.playerId;
+      if (!pid) {
+        pid = generatePlayerId();
+        Persistence.setPlayerId(pid);
+      }
+      lbRef.current = { playerId: pid, nickname: lb.nickname, submittedBest: lb.submittedBest };
+      setNickname(lb.nickname);
+    });
+  }, []);
+
+  const setLeaderboardName = useCallback(async (name) => {
+    const res = await LeaderboardAPI.register(lbRef.current.playerId, name);
+    if (res && res.ok) {
+      lbRef.current.nickname = res.nickname;
+      Persistence.setNickname(res.nickname);
+      setNickname(res.nickname);
+    }
+    return res || { ok: false, offline: true };
+  }, []);
 
   const handleToggleSound = useCallback(() => {
     setState((s) => {
@@ -121,7 +149,7 @@ export default function App() {
     return restored.length;
   }, [state.purchasedPigeons, state.bundleOwned]);
 
-  const handleCrash = useCallback(({ score, distance }) => {
+  const handleCrash = useCallback(({ score, distance, chips, runId, runDuration, reviveUsed }) => {
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
       Persistence.setInjured(pigeonsInjured);
@@ -137,6 +165,27 @@ export default function App() {
       }
       return { ...s, pigeonsInjured, bestScore, bestDistance };
     });
+
+    // Async best-distance submission (never blocks PLAY AGAIN). Only a genuine new
+    // personal best is submitted, and only if the player has chosen a nickname.
+    const lb = lbRef.current;
+    if (lb.nickname && runId && distance > lb.submittedBest) {
+      LeaderboardAPI.submit({
+        playerId: lb.playerId,
+        runId,
+        nickname: lb.nickname,
+        reportedDistance: distance,
+        runDuration,
+        reviveUsed: !!reviveUsed,
+        chipCount: chips,
+        gameVersion: GAME_VERSION,
+      }).then((res) => {
+        if (res && res.ok && res.status === 'accepted') {
+          lbRef.current.submittedBest = distance;
+          Persistence.setSubmittedBest(distance);
+        }
+      });
+    }
   }, []);
 
   if (!ready) return <View style={styles.boot} />;
@@ -158,6 +207,15 @@ export default function App() {
             onSelectMap={handleSelectMap}
             onToggleSound={handleToggleSound}
             onLeetUnlock={handleLeetUnlock}
+            onLeaderboard={() => setScreen('leaderboard')}
+          />
+        )}
+        {screen === 'leaderboard' && (
+          <LeaderboardScreen
+            playerId={lbRef.current.playerId}
+            nickname={nickname}
+            onSetNickname={setLeaderboardName}
+            onBack={() => setScreen('menu')}
           />
         )}
         {screen === 'pigeons' && (
