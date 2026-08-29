@@ -1,14 +1,36 @@
-// Advertising hooks — placeholders only. NEVER blocks gameplay or testing.
-// Real AdMob / rewarded-ad SDK integration will replace these callbacks later.
+// Advertising hooks — placeholder module (no live AdMob SDK in this build).
+// Entitlement-aware: honours the permanent Remove Ads purchase. Real
+// AdMob / rewarded-ad SDK integration will replace these callbacks later,
+// but the entitlement gate + interval config below are already correct.
 let deathsSinceInterstitial = 0;
+let removeAdsOwned = false;
+let interstitialDeathInterval = 5; // configurable — every ~5 genuine deaths
 
 export const Ads = {
-  // Called after every crash. Returns whether an interstitial *would* show
-  // (every 4-6 deaths). In dev it only logs — no real ad, no blocking.
+  // Permanent Remove Ads entitlement. When true, NO automatic interstitial is
+  // ever requested/shown. Rewarded revive stays available regardless.
+  setRemoveAds(owned) {
+    removeAdsOwned = !!owned;
+  },
+  isRemoveAdsOwned() {
+    return removeAdsOwned;
+  },
+  setInterstitialInterval(n) {
+    if (Number.isFinite(n) && n > 0) interstitialDeathInterval = Math.floor(n);
+  },
+
+  // Whether automatic interstitials are currently enabled for this player.
+  interstitialsEnabled() {
+    return !removeAdsOwned;
+  },
+
+  // Called after every GENUINE death. Returns whether an automatic interstitial
+  // should show at the next natural transition. Always false when Remove Ads is
+  // owned (and we don't bother counting/requesting anything for those users).
   registerDeath() {
+    if (removeAdsOwned) return false; // Remove Ads — never auto-advertise
     deathsSinceInterstitial += 1;
-    const threshold = 4 + Math.floor(Math.random() * 3); // 4-6
-    if (deathsSinceInterstitial >= threshold) {
+    if (deathsSinceInterstitial >= interstitialDeathInterval) {
       deathsSinceInterstitial = 0;
       if (typeof console !== 'undefined') {
         console.log('[Ads] (dev) interstitial slot reached — no-op placeholder');
@@ -18,8 +40,9 @@ export const Ads = {
     return false;
   },
 
-  // Rewarded-ad revive hook. In dev, immediately succeeds (no real ad).
-  // Later: replace body with rewarded-ad load + onReward callback.
+  // Optional rewarded-ad revive — ALWAYS available, even with Remove Ads, because
+  // it's player-initiated and grants a reward. In dev it succeeds immediately.
+  // Later: replace body with rewarded-ad load + verified onReward callback.
   showRewardedRevive(onReward) {
     if (typeof console !== 'undefined') {
       console.log('[Ads] (dev) rewarded revive — granting immediately');

@@ -25,3 +25,8 @@ export function allPremiumUnlocked(pigeons, ent) {
 export function easyModeOwned(ent) {
   return !!(ent && ent.easyMode);
 }
+
+// Permanent Remove Ads entitlement — independent of pigeons/bundle/Easy Mode/733T.
+export function removeAdsOwned(ent) {
+  return !!(ent && ent.removeAds);
+}

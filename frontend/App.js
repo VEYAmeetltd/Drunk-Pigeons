@@ -14,6 +14,7 @@ import { getPigeon } from './src/data/pigeons';
 import { modeForSelection } from './src/data/maps';
 import { Billing } from './src/store/billing';
 import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
+import { Ads } from './src/ads/ads';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -31,6 +32,7 @@ export default function App() {
     purchasedPigeons: [],
     bundleOwned: false,
     easyModeOwned: false,
+    removeAdsOwned: false,
   });
 
   useEffect(() => {
@@ -54,6 +56,11 @@ export default function App() {
   }, []);
 
   const update = useCallback((patch) => setState((s) => ({ ...s, ...patch })), []);
+
+  // Keep the ad system's Remove Ads entitlement in sync — takes effect immediately.
+  useEffect(() => {
+    Ads.setRemoveAds(state.removeAdsOwned);
+  }, [state.removeAdsOwned]);
 
   // Leaderboard identity (kept in a ref for stale-free access inside async crash handler)
   const lbRef = useRef({ playerId: '', nickname: '', submittedBest: 0, submittedBestSilly: 0 });
@@ -150,6 +157,17 @@ export default function App() {
     return res.status;
   }, [update]);
 
+  // Purchase the permanent Remove Ads entitlement (£2.99). Disables automatic
+  // interstitials immediately; rewarded revive stays available.
+  const buyRemoveAds = useCallback(async (devOutcome) => {
+    const res = await Billing.purchase(PRODUCTS.removeads, devOutcome);
+    if (res.status === 'success') {
+      update({ removeAdsOwned: true });
+      Persistence.setRemoveAds(true);
+    }
+    return res.status;
+  }, [update]);
+
   // Restore non-consumable purchases. In production this queries Apple/Google
   // ownership; in DEV we simulate by restoring the locally-known owned products.
   const restorePurchases = useCallback(async () => {
@@ -157,6 +175,7 @@ export default function App() {
       ...state.purchasedPigeons.map((id) => PRODUCTS.pigeons[id]),
       ...(state.bundleOwned ? [PRODUCTS.bundle] : []),
       ...(state.easyModeOwned ? [PRODUCTS.mode.easy] : []),
+      ...(state.removeAdsOwned ? [PRODUCTS.removeads] : []),
     ];
     const restored = await Billing.restore(owned);
     const ids = Object.entries(PRODUCTS.pigeons)
@@ -164,14 +183,16 @@ export default function App() {
       .map(([id]) => id);
     const bundle = restored.includes(PRODUCTS.bundle);
     const easy = restored.includes(PRODUCTS.mode.easy);
+    const removeAds = restored.includes(PRODUCTS.removeads);
     setState((s) => {
       Persistence.setPurchased(ids);
       Persistence.setBundle(bundle);
       Persistence.setEasyMode(easy);
-      return { ...s, purchasedPigeons: ids, bundleOwned: bundle, easyModeOwned: easy };
+      Persistence.setRemoveAds(removeAds);
+      return { ...s, purchasedPigeons: ids, bundleOwned: bundle, easyModeOwned: easy, removeAdsOwned: removeAds };
     });
     return restored.length;
-  }, [state.purchasedPigeons, state.bundleOwned, state.easyModeOwned]);
+  }, [state.purchasedPigeons, state.bundleOwned, state.easyModeOwned, state.removeAdsOwned]);
 
   const handleCrash = useCallback(({ score, distance, chips, runId, runDuration, reviveUsed, mode = 'normal' }) => {
     const isEasy = mode === 'easy';
@@ -276,9 +297,12 @@ export default function App() {
             leetUnlock={state.leetUnlock}
             purchasedPigeons={state.purchasedPigeons}
             bundleOwned={state.bundleOwned}
+            removeAdsOwned={state.removeAdsOwned}
+            removeAdsPrice={Billing.priceFor(PRODUCTS.removeads) || DEFAULT_PRICES.removeAds}
             onSelect={handleSelectPigeon}
             onBuyPigeon={buyPigeon}
             onBuyBundle={buyBundle}
+            onBuyRemoveAds={buyRemoveAds}
             onRestore={restorePurchases}
             onBack={() => setScreen('menu')}
           />

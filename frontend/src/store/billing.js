@@ -25,6 +25,7 @@ PREMIUM_IDS.forEach((k) => {
 });
 priceMap[PRODUCTS.bundle] = DEFAULT_PRICES.bundle;
 priceMap[PRODUCTS.mode.easy] = DEFAULT_PRICES.easyMode;
+priceMap[PRODUCTS.removeads] = DEFAULT_PRICES.removeAds;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

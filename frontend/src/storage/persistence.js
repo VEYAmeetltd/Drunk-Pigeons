@@ -12,6 +12,7 @@ const KEYS = {
   purchased: 'dp_purchasedPigeons',
   bundle: 'dp_bundleOwned',
   easy: 'dp_easyOwned',
+  removeAds: 'dp_removeAdsOwned',
   bestDistSilly: 'dp_bestDistanceSilly',
   playerId: 'dp_playerId',
   nickname: 'dp_nickname',
@@ -39,7 +40,7 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy] = await Promise.all([
+    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy, removeAds] = await Promise.all([
       getNumber(KEYS.best, 0),
       getNumber(KEYS.bestDist, 0),
       getNumber(KEYS.bestDistSilly, 0),
@@ -52,6 +53,7 @@ export const Persistence = {
       getString(KEYS.purchased, ''),
       getString(KEYS.bundle, '0'),
       getString(KEYS.easy, '0'),
+      getString(KEYS.removeAds, '0'),
     ]);
     return {
       bestScore: best,
@@ -66,10 +68,14 @@ export const Persistence = {
       purchasedPigeons: purchased ? purchased.split(',').filter(Boolean) : [],
       bundleOwned: bundle === '1',
       easyModeOwned: easy === '1',
+      removeAdsOwned: removeAds === '1',
     };
   },
   setEasyMode(on) {
     AsyncStorage.setItem(KEYS.easy, on ? '1' : '0').catch(() => {});
+  },
+  setRemoveAds(on) {
+    AsyncStorage.setItem(KEYS.removeAds, on ? '1' : '0').catch(() => {});
   },
   setBestDistanceSilly(v) {
     AsyncStorage.setItem(KEYS.bestDistSilly, String(v)).catch(() => {});

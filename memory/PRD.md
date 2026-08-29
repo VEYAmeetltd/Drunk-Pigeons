@@ -97,6 +97,12 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Sunny London: blue sky + clouds + red-brick terraces (chimneys/windows) + red double-decker bus + street lamp + green ground. Gritty: dark sky, grimy brick blocks with pink windows, rooftop aerial, graffiti tag accent, chain-link fence. Chippy Sunset (most colourful): multi-stop sunset gradient + glowing low sun + dark rooftops with warm glowing windows + striped chippy awning + seagull. Random: subtle 3-way vertical split of the standard manors (day/night/dusk skies + hint buildings + dusk sun) with the existing "?" overlay on top — NO Easy Mode imagery. Easy Mode: peaceful blue sky, fluffy clouds, rolling green hills, distant simple buildings (lots of open room).
 - Preserved: card size, yellow selected border, manor names, horizontal layout, tap/select behaviour, Random functionality, Easy Mode lock + £14.99 purchase behaviour. Gameplay maps NOT modified. Verified via screenshot; 0 lint errors.
 
+## Update 13 (2026-06) — £2.99 Remove Ads permanent entitlement — verified (store flow via screenshot)
+- New non-consumable one-time purchase `drunkpigeons.removeads` (£2.99) via the existing pluggable Billing + DEV simulator (Success/Cancel/Fail/Restore). Independent of pigeons/bundle (£1.99/£7.99), Easy Mode (£14.99) and the 733T unlock.
+- Entitlement `removeAdsOwned`: persisted (dp_removeAdsOwned), restored via the existing Restore Purchases, and kept in sync with the ad system via App useEffect → Ads.setRemoveAds() (takes effect immediately, no restart).
+- ads.js is now entitlement-aware: registerDeath() returns no-interstitial when Remove Ads is owned (configurable interstitialDeathInterval=5); interstitialsEnabled()/isRemoveAdsOwned() helpers added. Rewarded revive (showRewardedRevive) stays available for everyone (player-initiated). NOTE: no live AdMob SDK in this web build yet — interstitials remain placeholders, but the gate/config are correct for when the real SDK is plugged in.
+- UI: unobtrusive "REMOVE ADS — £2.99" row in the Pigeons store (below Restore Purchases), flips to "ADS REMOVED ✓" once owned. Verified: buy→owned flip, price display, independence (pigeons stay locked). 0 lint errors.
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks; inject real StoreKit/Play Billing provider (pigeons + easymode + restore).

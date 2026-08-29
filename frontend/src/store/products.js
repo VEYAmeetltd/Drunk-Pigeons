@@ -13,6 +13,8 @@ export const PRODUCTS = {
   mode: {
     easy: 'drunkpigeons.mode.easymode',
   },
+  // Permanent Remove Ads entitlement (non-consumable, one-time).
+  removeads: 'drunkpigeons.removeads',
 };
 
 // The five current premium (paid) pigeon ids.
@@ -25,6 +27,7 @@ export const DEFAULT_PRICES = {
   bundle: '£7.99',
   bundleSave: '£1.96', // 5 x £1.99 (£9.95) - £7.99
   easyMode: '£14.99',
+  removeAds: '£2.99',
 };
 
 export const pigeonProductId = (id) => PRODUCTS.pigeons[id];

@@ -16,9 +16,12 @@ export default function PigeonsScreen({
   leetUnlock,
   purchasedPigeons = [],
   bundleOwned = false,
+  removeAdsOwned = false,
+  removeAdsPrice = '£2.99',
   onSelect,
   onBuyPigeon,
   onBuyBundle,
+  onBuyRemoveAds,
   onRestore,
   onBack,
 }) {
@@ -43,6 +46,11 @@ export default function PigeonsScreen({
     setMsg('');
     setSheet({ kind: 'bundle', price: Billing.priceFor(Billing.products.bundle) || DEFAULT_PRICES.bundle });
   };
+  const openRemoveAdsSheet = () => {
+    Audio.ui();
+    setMsg('');
+    setSheet({ kind: 'removeads', price: Billing.priceFor(Billing.products.removeads) || removeAdsPrice });
+  };
   const closeSheet = () => {
     setSheet(null);
     setBusy(false);
@@ -53,8 +61,10 @@ export default function PigeonsScreen({
     if (busy || !sheet) return;
     setBusy(true);
     setMsg('');
-    const status =
-      sheet.kind === 'bundle' ? await onBuyBundle(devOutcome) : await onBuyPigeon(sheet.id, devOutcome);
+    let status;
+    if (sheet.kind === 'bundle') status = await onBuyBundle(devOutcome);
+    else if (sheet.kind === 'removeads') status = await onBuyRemoveAds(devOutcome);
+    else status = await onBuyPigeon(sheet.id, devOutcome);
     setBusy(false);
     if (status === 'success') {
       Audio.highscore();
@@ -166,12 +176,24 @@ export default function PigeonsScreen({
         <Text style={styles.restoreMsg} testID="restore-msg">{restoreMsg}</Text>
       )}
 
+      {/* Remove Ads — unobtrusive permanent purchase */}
+      {removeAdsOwned ? (
+        <View style={styles.removeAdsRow} testID="remove-ads-owned">
+          <Text style={styles.removeAdsOwnedTxt}>ADS REMOVED ✓</Text>
+        </View>
+      ) : (
+        <Pressable testID="remove-ads-button" onPress={openRemoveAdsSheet} style={styles.removeAdsRow}>
+          <Text style={styles.removeAdsTitle} testID="remove-ads-price">REMOVE ADS — {removeAdsPrice}</Text>
+          <Text style={styles.removeAdsSub}>no interstitials · optional revive stays</Text>
+        </Pressable>
+      )}
+
       {/* Purchase sheet (native flow placeholder + DEV simulator) */}
       {sheet && (
         <View style={styles.sheetOverlay} testID="purchase-sheet" onStartShouldSetResponder={() => true}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>
-              {sheet.kind === 'bundle' ? 'UNLOCK ALL 5 PIGEONS' : `UNLOCK ${(PIGEONS.find((p) => p.id === sheet.id) || {}).name || ''}`}
+              {sheet.kind === 'bundle' ? 'UNLOCK ALL 5 PIGEONS' : sheet.kind === 'removeads' ? 'REMOVE ADS' : `UNLOCK ${(PIGEONS.find((p) => p.id === sheet.id) || {}).name || ''}`}
             </Text>
             <Text style={styles.sheetPrice}>{sheet.price}</Text>
             <Text style={styles.sheetNote}>
@@ -228,6 +250,10 @@ const styles = StyleSheet.create({
   restore: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 14, marginBottom: 6 },
   restoreTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 2, textDecorationLine: 'underline' },
   restoreMsg: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', letterSpacing: 1, textAlign: 'center', marginTop: -2, marginBottom: 8 },
+  removeAdsRow: { alignSelf: 'center', alignItems: 'center', backgroundColor: COLORS.bgAlt, borderRadius: 14, paddingVertical: 9, paddingHorizontal: 22, marginBottom: 12 },
+  removeAdsTitle: { fontFamily: FONT, color: COLORS.text, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
+  removeAdsSub: { fontFamily: FONT, color: COLORS.textDim, fontSize: 10, marginTop: 2 },
+  removeAdsOwnedTxt: { fontFamily: FONT, color: COLORS.teal, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
   sheetOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.8)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 60 },
   sheet: { width: '100%', maxWidth: 340, backgroundColor: COLORS.card, borderRadius: 24, padding: 22, alignItems: 'center' },
   sheetTitle: { fontFamily: FONT, color: COLORS.text, fontSize: 18, fontWeight: '700', textAlign: 'center' },
