@@ -42,7 +42,14 @@ export const CONFIG = {
 
   // Revive
   REVIVE_INVINCIBLE_MS: 2000,
+
+  // Distance: how many world pixels equal one displayed metre
+  PIXELS_PER_METRE: 24,
 };
+
+// Integer with thousands separators (no decimals). Safe on web + native (no Intl needed).
+export const formatInt = (n) =>
+  String(Math.floor(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 export const fatLevelFor = (chips) =>
   Math.min(CONFIG.MAX_FAT_LEVEL, Math.floor(chips / 10));

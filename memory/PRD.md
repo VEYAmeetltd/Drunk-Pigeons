@@ -26,13 +26,17 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
   - audio/audio.js — Web Audio synth SFX (flap/chip/crash/ui/highscore/revive)
   - ads/ads.js — DEV placeholder hooks (rewarded revive grants immediately; interstitial no-op). MOCKED by design.
 
-## Implemented (2026-06) — verified 100% by testing agent (iteration_1)
-- Complete playable loop: Menu → Play → flap/gravity → procedural obstacles → chips → progressive fattening (6 stages) → distance score → gradual difficulty → funny crash w/ feathers + random death message → Game Over → Play Again.
+## Implemented (2026-06) — verified 100% by testing agent (iteration_1)- Complete playable loop: Menu → Play → flap/gravity → procedural obstacles → chips → progressive fattening (6 stages) → distance score → gradual difficulty → funny crash w/ feathers + random death message → Game Over → Play Again.
 - Best Score + lifetime Pigeons Injured persist across reload.
 - Revive: one per run, 2s shield banner, keeps score/chips; ad-hook-ready.
 - 3 maps (day/night/dusk) selectable on menu; sound toggle persists.
 - Pigeons screen: Classic (selected) + Business unlocked; roadman/king/gym/tourist/fancy locked but preview their look.
 - Mobile-first portrait, safe areas, page-scroll prevented on web.
+
+## Update 1 (2026-06) — verified 100% by testing agent (iteration_2)
+- Live DISTANCE meter in metres (thousands separators, no decimals): starts 0 each run, counts smoothly, stops on crash, continues through revive. PPM=24 (config).
+- BEST DISTANCE persisted locally (dp_bestDistance); shown on Game Over (go-distance / go-best-distance).
+- In-game RESTART button (↻) with RESTART RUN? confirm overlay: pauses run, Cancel resumes exact run, Restart begins fresh run (distance/score/chips/fat/revive reset, same pigeon+map). Restart does NOT count as injury/death, no game-over, no menu return. Input-safe (restart taps never flap; Space ignored while paused).
 
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.

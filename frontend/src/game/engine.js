@@ -1,5 +1,7 @@
 import { CONFIG, fatLevelFor, pigeonRadiusFor } from '../config';
 
+const PPM = CONFIG.PIXELS_PER_METRE;
+
 // Pure(ish) game simulation. No rendering. Mutates internal state each step.
 // Rendering layer reads getSnapshot(). Collision/scoring use plain JS state.
 export function createEngine({ onScore, onChip, onCrash }) {
@@ -247,7 +249,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
       dead = true;
       running = false;
       explodeFeathers(pigeon.x, pigeon.y);
-      if (onCrash) onCrash({ score, chips: chipCount });
+      if (onCrash) onCrash({ score, chips: chipCount, distance: Math.floor(distance / PPM) });
     }
   }
 
@@ -282,6 +284,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
       flap: flapPulse,
       fat,
       inv,
+      distM: Math.floor(distance / PPM),
       dead: dead ? 1 : 0,
       obs: obstacles.map((o) => ({ x: o.x, active: o.active ? 1 : 0 })),
       chips: chips.map((c) => ({
@@ -330,6 +333,9 @@ export function createEngine({ onScore, onChip, onCrash }) {
     },
     get chipCount() {
       return chipCount;
+    },
+    get distanceMeters() {
+      return Math.floor(distance / PPM);
     },
     get dead() {
       return dead;

@@ -2,12 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
+import { formatInt } from '../config';
 
 export default function GameOverOverlay({
   message,
   score,
   best,
   chips,
+  distance,
+  bestDistance,
   isNewBest,
   canRevive,
   onPlayAgain,
@@ -23,6 +26,8 @@ export default function GameOverOverlay({
         {isNewBest && <Text style={styles.newBest} testID="new-best-badge">NEW BEST!</Text>}
 
         <View style={styles.rows}>
+          <Row label="DISTANCE" value={`${formatInt(distance)}m`} color={COLORS.orange} testID="go-distance" />
+          <Row label="BEST DISTANCE" value={`${formatInt(bestDistance)}m`} color={COLORS.teal} testID="go-best-distance" />
           <Row label="SCORE" value={score} color={COLORS.yellow} testID="go-score" />
           <Row label="BEST" value={best} color={COLORS.teal} testID="go-best" />
           <Row label="CHIPS EATEN" value={chips} color={COLORS.pink} testID="go-chips" />

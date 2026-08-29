@@ -1,0 +1,27 @@
+{
+  "summary": "UPDATE 1 (Distance HUD + Best Distance persistence + in-game Restart with confirmation) tested end-to-end via Playwright on the mobile viewport (430x900). All 13 acceptance criteria verified: distance-hud visible & formatted with 'm', starts at 0 and increases (~10m/s) during active run, stops on crash, restart-button pauses gameplay and shows restart-confirm-overlay, Cancel resumes exact run (distance/score preserved), Confirm resets distance/score/chips to 0 and revive becomes available again without incrementing pigeonsInjured and without showing game-over/menu, Space is ignored while overlay open, GameOver overlay shows go-distance and go-best-distance rows, dp_bestDistance persists across full page reload, real crashes still increment pigeonsInjured and update bestDistance. No regressions observed on menu, injured stat, or run state after manual restart. No JS/console errors during tests.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "GameScreen (initial)", "issues": ["World scroll & distance begin accumulating immediately on entering the game screen even while the 'TAP TO FLAP' hint is showing. Not a spec violation (spec says 'starts at 0m for every new run and begins increasing immediately'), just a UX note — pigeon can crash before user's first tap on some map layouts. Consider gating world.step on `started` if a countdown-style start is desired."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GameScreen.js:73 isNewBest uses OR (sc > bestScore || dist > bestDistance) — correct for lighting up the NEW BEST badge on either record, but note the highscore audio then triggers even when only distance record is broken. Intentional-looking.",
+    "GameScreen.js:168 openRestartConfirm no-ops when eng.dead — good (prevents opening on Game Over). restart-button is still rendered on top of game-over overlay in the DOM tree; if you want it invisible/inert during game-over consider hiding it, though the guard makes it a no-op.",
+    "engine.js:105-108 reset() sets distance = 0 — verified. revive() intentionally does NOT reset distance (matches spec).",
+    "persistence.js OK — dp_bestDistance key added, loadAll returns bestDistance, setBestDistance persists. No _id / Mongo concerns (client-only)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100%"},
+  "test_credentials": "None (no auth).",
+  "seed_data_creation": "localStorage was cleared at start of each test run via localStorage.clear().",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend is Expo web served at REACT_APP-style preview URL (root). To keep pigeon alive, press keyboard Space at ~400ms intervals — page.click on flap-area works but Space via page.keyboard.press is more reliable. Fast/steady flapping will pin the pigeon to obstacle tops and crash it early; keep flapping duration short before invoking restart. localStorage keys: dp_bestScore, dp_bestDistance, dp_pigeonsInjured, dp_selectedPigeon, dp_selectedMap, dp_soundEnabled, dp_unlockedPigeons.",
+  "rca of the issue": "N/A — all criteria pass."
+}

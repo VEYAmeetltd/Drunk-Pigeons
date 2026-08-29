@@ -5,8 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
 import { PigeonView, ObstacleView, ChipView, FeatherView } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
+import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
-import { CONFIG, fatLevelFor, FAT_LABELS } from '../config';
+import { CONFIG, fatLevelFor, FAT_LABELS, formatInt } from '../config';
 import { randomDeathMessage } from '../data/deathMessages';
 import { Audio } from '../audio/audio';
 import { Ads } from '../ads/ads';
@@ -21,7 +22,25 @@ function emptySnapshot() {
   };
 }
 
-export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) {
+// Live distance readout — isolates re-renders to just this tiny component.
+function DistanceHUD({ world }) {
+  const [m, setM] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      try {
+        setM(world.value.distM || 0);
+      } catch {}
+    }, 60);
+    return () => clearInterval(id);
+  }, [world]);
+  return (
+    <View style={styles.distHud} testID="distance-hud" pointerEvents="none">
+      <Text style={styles.distTxt}>{formatInt(m)}m</Text>
+    </View>
+  );
+}
+
+export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
 
@@ -34,12 +53,14 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
   const [canRevive, setCanRevive] = useState(true);
   const [shield, setShield] = useState(false);
   const [started, setStarted] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   const engineRef = useRef(null);
   const rafRef = useRef(0);
   const lastRef = useRef(0);
   const cbRef = useRef({});
   const shieldTimer = useRef(null);
+  const pausedRef = useRef(false);
 
   // keep latest callbacks
   cbRef.current.onScore = (s) => setScore(s);
@@ -47,13 +68,13 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
     setChips(c);
     Audio.chip();
   };
-  cbRef.current.onCrash = ({ score: sc, chips: ch }) => {
+  cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
     Audio.crash();
-    const isNewBest = sc > bestScore;
+    const isNewBest = sc > bestScore || dist > bestDistance;
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
-    setOver({ message: randomDeathMessage(), score: sc, chips: ch, isNewBest });
+    setOver({ message: randomDeathMessage(), score: sc, chips: ch, distance: dist, isNewBest });
     Ads.registerDeath();
-    onCrash && onCrash({ score: sc, chips: ch });
+    onCrash && onCrash({ score: sc, chips: ch, distance: dist });
   };
 
   const buildEngine = useCallback(() => {
@@ -84,6 +105,11 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
 
     const loop = (now) => {
       const eng = engineRef.current;
+      if (pausedRef.current) {
+        lastRef.current = now;
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
       let dt = (now - lastRef.current) / 1000;
       lastRef.current = now;
       if (dt > 1 / 30) dt = 1 / 30;
@@ -116,6 +142,7 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
   }, []);
 
   const doFlap = useCallback(() => {
+    if (pausedRef.current) return;
     Audio.unlock();
     if (!started) setStarted(true);
     const eng = engineRef.current;
@@ -137,6 +164,30 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
       shieldTimer.current = setTimeout(() => setShield(false), CONFIG.REVIVE_INVINCIBLE_MS);
     });
   }, []);
+
+  const openRestartConfirm = useCallback(() => {
+    const eng = engineRef.current;
+    if (!eng || eng.dead) return; // only during an active run
+    Audio.ui();
+    pausedRef.current = true;
+    setConfirmRestart(true);
+  }, []);
+
+  const cancelRestart = useCallback(() => {
+    Audio.ui();
+    setConfirmRestart(false);
+    lastRef.current = performance.now();
+    pausedRef.current = false;
+  }, []);
+
+  const confirmRestartNow = useCallback(() => {
+    Audio.ui();
+    setConfirmRestart(false);
+    pausedRef.current = false;
+    lastRef.current = performance.now();
+    setStarted(true);
+    startRun();
+  }, [startRun]);
 
   const fatLevel = fatLevelFor(chips);
 
@@ -172,9 +223,15 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
       {/* HUD */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
         <View style={styles.hudTop} pointerEvents="box-none">
-          <Pressable testID="exit-button" onPress={onExit} style={styles.exit}>
-            <Text style={styles.exitTxt}>‹ MENU</Text>
-          </Pressable>
+          <View style={styles.leftCluster} pointerEvents="box-none">
+            <Pressable testID="restart-button" onPress={openRestartConfirm} style={styles.restartBtn}>
+              <Text style={styles.restartIcon}>↻</Text>
+            </Pressable>
+            <Pressable testID="exit-button" onPress={onExit} style={styles.exit}>
+              <Text style={styles.exitTxt}>‹ MENU</Text>
+            </Pressable>
+          </View>
+          <DistanceHUD world={world} />
           <View style={styles.chipHud} testID="chip-hud">
             <View style={styles.chipIcon} />
             <Text style={styles.chipTxt}>{chips}</Text>
@@ -200,12 +257,25 @@ export default function GameScreen({ pigeon, map, bestScore, onCrash, onExit }) 
         </View>
       )}
 
+      {confirmRestart && (
+        <View style={styles.confirmOverlay} testID="restart-confirm-overlay" onStartShouldSetResponder={() => true}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>RESTART RUN?</Text>
+            <Text style={styles.confirmSub}>Start fresh with the same pigeon & map</Text>
+            <Button testID="restart-confirm-yes" label="Restart" variant="primary" onPress={confirmRestartNow} style={styles.confirmBtn} />
+            <Button testID="restart-cancel" label="Cancel" variant="ghost" onPress={cancelRestart} style={styles.confirmBtn} />
+          </View>
+        </View>
+      )}
+
       {over && (
         <GameOverOverlay
           message={over.message}
           score={over.score}
           best={Math.max(bestScore, over.score)}
           chips={over.chips}
+          distance={over.distance}
+          bestDistance={Math.max(bestDistance, over.distance)}
           isNewBest={over.isNewBest}
           canRevive={canRevive}
           onPlayAgain={() => {
@@ -224,6 +294,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   hud: { ...StyleSheet.absoluteFillObject, paddingHorizontal: 16 },
   hudTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6 },
+  leftCluster: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  restartBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
+  restartIcon: { fontFamily: FONT, color: '#fff', fontSize: 24, fontWeight: '700', marginTop: -2 },
+  distHud: { backgroundColor: 'rgba(0,0,0,0.3)', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 16 },
+  distTxt: { fontFamily: FONT, color: '#fff', fontWeight: '700', fontSize: 16, letterSpacing: 0.5 },
   exit: { backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
   exitTxt: { fontFamily: FONT, color: '#fff', fontWeight: '700', fontSize: 14 },
   chipHud: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
@@ -238,4 +313,9 @@ const styles = StyleSheet.create({
   hint: { position: 'absolute', top: '46%', left: 0, right: 0, alignItems: 'center' },
   hintTxt: { fontFamily: FONT, color: '#fff', fontSize: 34, fontWeight: '700', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
   hintSub: { fontFamily: FONT, color: '#fff', fontSize: 15, marginTop: 4, opacity: 0.9 },
+  confirmOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.78)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  confirmCard: { width: '100%', maxWidth: 340, backgroundColor: COLORS.card, borderRadius: 24, padding: 24, alignItems: 'center' },
+  confirmTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 28, fontWeight: '700', letterSpacing: 1 },
+  confirmSub: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, marginTop: 6, textAlign: 'center' },
+  confirmBtn: { width: '100%', marginTop: 12 },
 });

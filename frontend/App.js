@@ -16,6 +16,7 @@ export default function App() {
   const [screen, setScreen] = useState('menu'); // menu | game | pigeons
   const [state, setState] = useState({
     bestScore: 0,
+    bestDistance: 0,
     pigeonsInjured: 0,
     soundEnabled: true,
     selectedPigeon: 'classic',
@@ -66,7 +67,7 @@ export default function App() {
     Audio.ui();
   }, [update]);
 
-  const handleCrash = useCallback(({ score }) => {
+  const handleCrash = useCallback(({ score, distance }) => {
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
       Persistence.setInjured(pigeonsInjured);
@@ -75,7 +76,12 @@ export default function App() {
         bestScore = score;
         Persistence.setBest(bestScore);
       }
-      return { ...s, pigeonsInjured, bestScore };
+      let bestDistance = s.bestDistance;
+      if (distance > bestDistance) {
+        bestDistance = distance;
+        Persistence.setBestDistance(bestDistance);
+      }
+      return { ...s, pigeonsInjured, bestScore, bestDistance };
     });
   }, []);
 
@@ -112,6 +118,7 @@ export default function App() {
             pigeon={getPigeon(state.selectedPigeon)}
             map={getMap(state.selectedMap)}
             bestScore={state.bestScore}
+            bestDistance={state.bestDistance}
             onCrash={handleCrash}
             onExit={() => setScreen('menu')}
           />
