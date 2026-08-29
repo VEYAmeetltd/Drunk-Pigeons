@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 13 security-hardening verification for Drunk Pigeons leaderboard. Wrote 19 pytest cases against the external REACT_APP_BACKEND_URL. All 19 passed. Verified normal register/submit/top flow, duplicate-runId replay protection (P3a returns error:'duplicate-run'), strict /top playerId validation (P3b: injection-style, Mongo-operator, over-long, symbol-laden, and too-short IDs are all safely ignored and return ok:true with you=null), mode separation (easy submit never leaks into normal board and vice versa), anti-cheat (negative distance, too-fast, bad IDs all rejected), and rate-limit sanity (a burst of 10 legit registers is NOT IP-rate-limited under the 240/min IP cap, while the per-playerId cap still fires within 25 rapid submits). Backend logs show clean startup with TTL indexes created without errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_leaderboard_hardening.py",
+    "/app/test_reports/pytest/iteration_13.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py returns HTTP 200 with {ok:false,error:...} for client-side errors (bad-id, rate-limited, duplicate-run). Considered non-blocking (existing convention across iterations), but semantically these are 4xx cases and would be better surfaced with 400/409/429 status codes for observability.",
+    "CORS is allow_origins=['*']; acceptable for an anonymous public leaderboard, but worth pinning to the production frontend origin as further hardening.",
+    "ip_rate_limited/rate_limited use in-memory deques — per-instance only. If the backend is ever scaled horizontally, the effective IP cap becomes RL_IP_MAX * N. Fine for MVP; note for future."
+  ],
+  "updated_files": ["/app/backend/tests/test_leaderboard_hardening.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "not tested (per request)"},
+  "test_credentials": "None — anonymous. Fresh UUID hex playerId/runId generated per request.",
+  "seed_data_creation": "Tests generate TEST_ prefixed nicknames and per-test unique playerIds; no cleanup performed (players collection isn't TTL'd), but data is inert and won't affect other tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression suite lives at /app/backend/tests/test_leaderboard_hardening.py — covers register/submit/top happy path, P3a duplicate-runId, P3b malformed-playerId matrix on /top, mode separation, anti-cheat, and rate-limit sanity. Run with: pytest backend/tests/test_leaderboard_hardening.py -v. Uses REACT_APP_BACKEND_URL from frontend/.env automatically.",
+  "rca of the issue": "N/A — no regressions found. Hardening (P3a specific-DuplicateKeyError catch + P3b valid_id() gating of /top playerId + per-IP 240/min limiter + BSON createdAt TTL indexes) all behaves as intended."
+}

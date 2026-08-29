@@ -7,10 +7,11 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -73,6 +74,33 @@ def rate_limited(pid: str) -> bool:
     return False
 
 
+# ---- per-IP rate limiter (defence against playerId rotation / anonymous floods) ----
+# Generous: a whole household / mobile-network / public IP shares this budget, so
+# it is set well above what many simultaneous legit players would ever produce,
+# while still capping a single flooder rotating self-generated playerIds.
+_rl_ip = defaultdict(lambda: deque())
+RL_IP_WINDOW = 60.0
+RL_IP_MAX = 240  # requests per IP per minute (register + submit combined)
+
+
+def client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def ip_rate_limited(ip: str) -> bool:
+    now = time.time()
+    q = _rl_ip[ip]
+    while q and now - q[0] > RL_IP_WINDOW:
+        q.popleft()
+    if len(q) >= RL_IP_MAX:
+        return True
+    q.append(now)
+    return False
+
+
 def sanitize_nickname(raw: str):
     if not isinstance(raw, str):
         return None
@@ -119,6 +147,11 @@ async def _startup():
     await db.players.create_index("playerId", unique=True)
     await db.players.create_index([("bestDistance", -1)])
     await db.players.create_index([("sillyBestDistance", -1)])
+    # Retention/TTL: run dedup records and flagged attempts are transient abuse-
+    # control data, not the leaderboard itself, so they auto-expire to cap growth.
+    # The persistent `players` collection (rankings) is never TTL'd.
+    await db.runs.create_index("createdAt", expireAfterSeconds=7 * 24 * 3600)      # 7 days
+    await db.flagged.create_index("createdAt", expireAfterSeconds=30 * 24 * 3600)  # 30 days
 
 
 @app.get("/api/health")
@@ -127,7 +160,9 @@ async def health():
 
 
 @app.post("/api/leaderboard/register")
-async def register(req: RegisterReq):
+async def register(req: RegisterReq, request: Request):
+    if ip_rate_limited(client_ip(request)):
+        return {"ok": False, "error": "rate-limited"}
     if not valid_id(req.playerId):
         return {"ok": False, "error": "bad-id"}
     name = sanitize_nickname(req.nickname)
@@ -172,7 +207,9 @@ def classify(req: SubmitReq, mode: str):
 
 
 @app.post("/api/leaderboard/submit")
-async def submit(req: SubmitReq):
+async def submit(req: SubmitReq, request: Request):
+    if ip_rate_limited(client_ip(request)):
+        return {"ok": False, "error": "rate-limited"}
     if not valid_id(req.playerId) or not valid_id(req.runId):
         return {"ok": False, "error": "bad-id"}
     if rate_limited(req.playerId):
@@ -184,13 +221,15 @@ async def submit(req: SubmitReq):
     mode = norm_mode(req.mode)
     field = MODE_FIELD[mode]
 
-    # replay protection: each runId processed once
+    # replay protection: each runId processed once (unique index). Only a genuine
+    # duplicate is treated as such — other DB errors are NOT masked.
     try:
         await db.runs.insert_one(
             {"runId": req.runId, "playerId": req.playerId, "mode": mode,
-             "at": datetime.now(timezone.utc).isoformat()}
+             "at": datetime.now(timezone.utc).isoformat(),
+             "createdAt": datetime.now(timezone.utc)}  # BSON Date -> TTL retention
         )
-    except Exception:
+    except DuplicateKeyError:
         return {"ok": False, "error": "duplicate-run"}
 
     status, reason = classify(req, mode)
@@ -211,7 +250,8 @@ async def submit(req: SubmitReq):
         await db.flagged.insert_one(
             {"playerId": req.playerId, "runId": req.runId, "distance": d,
              "mode": mode, "status": status, "reason": reason,
-             "at": datetime.now(timezone.utc).isoformat()}
+             "at": datetime.now(timezone.utc).isoformat(),
+             "createdAt": datetime.now(timezone.utc)}  # BSON Date -> TTL retention
         )
         cur = await db.players.find_one({"playerId": req.playerId}) or {}
         return {"ok": True, "status": status, "mode": mode,
@@ -239,6 +279,9 @@ async def submit(req: SubmitReq):
 @app.get("/api/leaderboard/top")
 async def top(playerId: str | None = None, mode: str = "normal", limit: int = 100):
     limit = max(1, min(100, limit))
+    # Strictly validate playerId using the same format rules as elsewhere;
+    # ignore malformed values (still return the board, just without "you").
+    pid = playerId if (playerId and valid_id(playerId)) else None
     field = MODE_FIELD[norm_mode(mode)]
     cursor = db.players.find(
         {field: {"$gt": 0}}, {"_id": 0, "nickname": 1, field: 1, "playerId": 1}
@@ -249,11 +292,11 @@ async def top(playerId: str | None = None, mode: str = "normal", limit: int = 10
     for i, r in enumerate(rows):
         entry = {"rank": i + 1, "nickname": r.get("nickname", "Pigeon"),
                  "bestDistance": int(r.get(field, 0)),
-                 "isYou": playerId is not None and r.get("playerId") == playerId}
+                 "isYou": pid is not None and r.get("playerId") == pid}
         top_list.append(entry)
 
-    if playerId:
-        me = await db.players.find_one({"playerId": playerId})
+    if pid:
+        me = await db.players.find_one({"playerId": pid})
         if me and me.get(field, 0) > 0:
             best = me.get(field, 0)
             rank = await db.players.count_documents({field: {"$gt": best}}) + 1

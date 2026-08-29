@@ -119,6 +119,19 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Visuals: GameEntities.JabView = teal cartoon syringe SVG (bob/rotation/sparkle glow); GameScreen.PopText = big "POP!" (testid skinny-jab-pop) that scales/pops, floats up and fades ~1s above the pigeon; both pointerEvents=none (never block flap). Deflation is instant (size reads fatLevelFor(fatChips)). No changes to distance/score/speed/gravity/collision/revive/leaderboard/manors. Works in all manors + Easy Mode.
 - Verified: /app/frontend/tests/engine_skinny_jab.test.mjs (10/10) — snapshot shape, 0 obstacle overlaps over 4000 steps, fatChips-vs-chipCount split, reset cleanup, setSkinnyJabChance validation, crash payload. UI mount/reset + no page errors confirmed. Temp test values (1.0/1) reverted to prod (0.005/10).
 
+## Update 17 (2026-06) — Security hardening SEC-002 + P3 fixes (server-only, no gameplay change)
+- SEC-002 (anonymous-write abuse): added a per-IP rate limiter (client_ip via X-Forwarded-For; RL_IP_MAX=240/min) ON TOP of the existing per-playerId limiter (20/min), applied to BOTH /api/leaderboard/register and /submit — caps a single flooder rotating self-generated playerIds while staying generous enough for households/mobile/public IPs sharing one address. No extra personal data collected.
+- SEC-002 (unbounded growth): TTL retention indexes so transient abuse-control data auto-expires — runs.createdAt 7d, flagged.createdAt 30d (BSON Date fields added). The persistent `players`/leaderboard collection is NEVER TTL'd; ranking logic untouched.
+- P3a: replay-protection insert now catches only pymongo DuplicateKeyError → 'duplicate-run'; other DB errors are no longer masked as duplicates (surface as real failures).
+- P3b: GET /api/leaderboard/top now strictly validates the playerId query param with valid_id() (same rules as elsewhere); malformed values are ignored (board still returns, just without "you") — confirmed an injection-style string is safely dropped.
+- NOT changed (per user): CORS lockdown (origins not final), gameplay/physics/manors/skinny-jab/chips/purchases/ads/revive/1000m/ranking/UI.
+
+## PRE-PRODUCTION SECURITY REQUIREMENTS (must-do before store submission)
+1. SEC-001 — implement REAL server-side purchase entitlement verification (Apple StoreKit + Google Play Billing receipt validation) before accepting production paid entitlements (Easy Mode £14.99, pigeons £1.99, bundle £7.99, Remove Ads £2.99). Entitlements are currently client-side (AsyncStorage) with a dev simulator — acceptable ONLY for pre-production. 733T remains a cosmetic-pigeon-only cheat and must not grant paid entitlements.
+2. Re-run the Security Audit AFTER production IAP/receipt verification is implemented.
+3. Re-run the Security Audit IMMEDIATELY BEFORE store submission (also finalise CORS origin allow-list + AdMob UMP/ATT consent at that time).
+- SEC-003 (leaderboard plausibility/anti-cheat): retained as-is for launch prep (lightweight plausibility + duplicate + flagging); no signed-telemetry system at this stage.
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks; inject real StoreKit/Play Billing provider (pigeons + easymode + restore).
