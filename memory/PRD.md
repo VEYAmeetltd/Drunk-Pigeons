@@ -192,3 +192,6 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Gameplay screen FX: new `DrunkScreenFX` (GameEntities) rendered BELOW the HUD — a breathing soft-focus haze (opacity, both platforms) + web backdrop-blur (~0..2.9px) that gently pulses, scaling with level. HUD (distance/chips/buttons/GameOver) stays crisp; obstacles/gaps/chips remain readable. VERIFIED at PIGEONED: world softened, HUD sharp.
 - FAIRNESS: deliberately NO world tilt/translate (would desync visuals from hitboxes) — per the spec's own rule; FX is opacity/backdrop only, physics/collision untouched.
 - Pub pint boost raises effective FX level (+0.4, clamped ≤1.4) and DrunkPigeon amp — in-character, ~4.2s. 1000m blackout overlay still renders last (unaffected). Menus/previews get personality scaling only (no screen blur). Lint 0 errors.
+
+## Update 25 (2026-06) — Drunkness slider label alignment fix (cosmetic)
+- DrunknessSlider labels now absolutely positioned & centre-aligned under 0%/50%/100% of the track (measured track width, left = anchor*w - LABEL_HALF). Track inset by LABEL_HALF so end labels never clip. VERIFIED by pixel measurement: label centres = track-left / midpoint / track-right, consistent at 390/480/768px. No functionality/colour/value/persistence changes.
