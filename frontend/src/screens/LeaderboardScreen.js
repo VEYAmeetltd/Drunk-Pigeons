@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
@@ -61,6 +61,10 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  // Live name availability: '' (idle) | 'checking' | 'free' | 'taken' | 'invalid' | 'offline'
+  const [avail, setAvail] = useState('');
+  const checkTimer = useRef(null);
+  const checkSeq = useRef(0);
   const [board, setBoard] = useState('normal'); // 'normal' (Global) | 'silly' (Easy Mode)
   const isSilly = board === 'silly';
   const podium = isSilly ? top.slice(0, 3) : [];
@@ -83,7 +87,27 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
     load();
   }, [load]);
 
+  const onChangeName = useCallback((v) => {
+    setName(v);
+    setErr('');
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    const trimmed = v.trim();
+    if (!trimmed) { setAvail(''); return; }
+    setAvail('checking');
+    const seq = ++checkSeq.current;
+    checkTimer.current = setTimeout(async () => {
+      const res = await LeaderboardAPI.check(trimmed, playerId);
+      if (seq !== checkSeq.current) return; // ignore out-of-order responses
+      if (!res || (!res.ok && res.offline)) { setAvail('offline'); return; }
+      if (res.available) setAvail('free');
+      else setAvail(res.reason === 'invalid' ? 'invalid' : 'taken');
+    }, 450);
+  }, [playerId]);
+
+  useEffect(() => () => { if (checkTimer.current) clearTimeout(checkTimer.current); }, []);
+
   const submitName = async () => {
+    if (avail !== 'free') return;
     setErr('');
     setSaving(true);
     const res = await onSetNickname(name);
@@ -95,6 +119,9 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       setErr('LEADERBOARD UNAVAILABLE');
     } else if (res && res.error === 'USERNAME_TAKEN') {
       setErr('That pigeon name is already taken.');
+      setAvail('taken');
+    } else if (res && res.error === 'NAME_LOCKED') {
+      setErr('Your pigeon name is already locked in.');
     } else {
       setErr('TRY ANOTHER NAME, PIGEON.');
     }
@@ -123,19 +150,41 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       {!nickname && !offline && (
         <View style={styles.nameCard}>
           <Text style={styles.nameLabel}>PICK A LEADERBOARD NAME</Text>
-          <TextInput
-            testID="nickname-input"
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. FatPigeon69"
-            placeholderTextColor="#8a7bb5"
-            maxLength={16}
-            autoCorrect={false}
-            onSubmitEditing={submitName}
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              testID="nickname-input"
+              style={styles.input}
+              value={name}
+              onChangeText={onChangeName}
+              placeholder="e.g. FatPigeon69"
+              placeholderTextColor="#8a7bb5"
+              maxLength={16}
+              autoCorrect={false}
+              onSubmitEditing={submitName}
+            />
+            <View style={styles.statusBox} testID="nickname-status">
+              {avail === 'checking' && <ActivityIndicator size="small" color={COLORS.textDim} testID="nickname-checking" />}
+              {avail === 'free' && <Text style={styles.tick} testID="nickname-available">✓</Text>}
+              {(avail === 'taken' || avail === 'invalid' || avail === 'offline') && (
+                <Text style={styles.cross} testID="nickname-unavailable">✕</Text>
+              )}
+            </View>
+          </View>
+          {avail === 'free' && <Text style={styles.hintOk} testID="nickname-hint">Nice — that name is free.</Text>}
+          {avail === 'taken' && <Text style={styles.hintBad} testID="nickname-hint">That pigeon name is already taken.</Text>}
+          {avail === 'invalid' && <Text style={styles.hintBad} testID="nickname-hint">That name won't fly, pigeon.</Text>}
+          {avail === 'offline' && <Text style={styles.hintDim} testID="nickname-hint">Can't check right now — try again.</Text>}
+          <Text style={styles.warnNote} testID="nickname-warning">⚠ Choose carefully — this cannot be changed.</Text>
           {!!err && <Text style={styles.err} testID="nickname-error">{err}</Text>}
-          <Button testID="nickname-save" label={saving ? '…' : 'SAVE NAME'} variant="primary" small onPress={submitName} style={{ marginTop: 10 }} />
+          <Button
+            testID="nickname-save"
+            label={saving ? '…' : 'SAVE NAME'}
+            variant="primary"
+            small
+            disabled={avail !== 'free' || saving}
+            onPress={submitName}
+            style={{ marginTop: 10 }}
+          />
         </View>
       )}
 
@@ -192,7 +241,15 @@ const styles = StyleSheet.create({
   empty: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, textAlign: 'center', marginTop: 30 },
   nameCard: { backgroundColor: COLORS.card, borderRadius: 16, padding: 14, marginTop: 10 },
   nameLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 1, fontWeight: '600' },
-  input: { backgroundColor: COLORS.bgAlt, borderRadius: 12, borderWidth: 2, borderColor: '#6a5a95', color: '#fff', fontFamily: FONT, fontSize: 18, fontWeight: '700', paddingVertical: 10, paddingHorizontal: 12, marginTop: 8 },
+  input: { backgroundColor: COLORS.bgAlt, borderRadius: 12, borderWidth: 2, borderColor: '#6a5a95', color: '#fff', fontFamily: FONT, fontSize: 18, fontWeight: '700', paddingVertical: 10, paddingHorizontal: 12, marginTop: 8, flex: 1 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusBox: { width: 30, height: 30, marginTop: 8, alignItems: 'center', justifyContent: 'center' },
+  tick: { color: COLORS.teal, fontSize: 24, fontWeight: '900' },
+  cross: { color: COLORS.textDim, fontSize: 22, fontWeight: '900' },
+  hintOk: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  hintBad: { fontFamily: FONT, color: COLORS.pink, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  hintDim: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  warnNote: { fontFamily: FONT, color: COLORS.yellow, fontSize: 12, fontWeight: '700', marginTop: 8, letterSpacing: 0.3 },
   err: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, fontWeight: '700', marginTop: 8 },
   list: { paddingVertical: 12, gap: 6 },
   podiumWrap: { paddingTop: 6, paddingBottom: 14, alignItems: 'center' },

@@ -299,3 +299,38 @@ def test_submit_with_taken_name_still_records_score(s):
                 params={"playerId": other, "mode": "normal", "limit": 100}, timeout=15).json()
     assert top["you"] is not None
     assert top["you"]["nickname"] != name
+
+
+# ---------- Live name availability check + permanent-name lock ----------
+def test_check_availability(s):
+    name = uniq("Chk")
+    p1, p2 = new_pid(), new_pid()
+    # free before anyone claims it
+    r0 = s.get(f"{API}/leaderboard/check", params={"nickname": name}, timeout=15).json()
+    assert r0["ok"] and r0["available"] is True
+    # p1 claims it
+    s.post(f"{API}/leaderboard/register", json={"playerId": p1, "nickname": name}, timeout=15)
+    # now taken for a different player (and case-insensitively so)
+    r1 = s.get(f"{API}/leaderboard/check",
+               params={"nickname": name.upper(), "playerId": p2}, timeout=15).json()
+    assert r1["available"] is False and r1["reason"] == "taken"
+    # but available to the owner themselves
+    r2 = s.get(f"{API}/leaderboard/check",
+               params={"nickname": name, "playerId": p1}, timeout=15).json()
+    assert r2["available"] is True
+    # invalid name
+    r3 = s.get(f"{API}/leaderboard/check", params={"nickname": "   "}, timeout=15).json()
+    assert r3["available"] is False and r3["reason"] == "invalid"
+
+
+def test_name_is_permanent_locked(s):
+    pid = new_pid()
+    n1, n2 = uniq("Perm"), uniq("Perm")
+    r1 = s.post(f"{API}/leaderboard/register", json={"playerId": pid, "nickname": n1}, timeout=15).json()
+    assert r1["ok"] is True
+    # trying a different name is refused
+    r2 = s.post(f"{API}/leaderboard/register", json={"playerId": pid, "nickname": n2}, timeout=15).json()
+    assert r2["ok"] is False and r2["error"] == "NAME_LOCKED"
+    # re-saving the SAME name still succeeds (idempotent)
+    r3 = s.post(f"{API}/leaderboard/register", json={"playerId": pid, "nickname": n1}, timeout=15).json()
+    assert r3["ok"] is True and r3["nickname"] == n1

@@ -201,6 +201,24 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/leaderboard/check")
+async def check_name(nickname: str = "", playerId: str | None = None):
+    """Live availability check for the name picker. Read-only, never writes.
+    available=True only when the (sanitized) name is valid AND not held by
+    another player. A player's own current name reads as available to them."""
+    name = sanitize_nickname(nickname)
+    if not name:
+        return {"ok": True, "available": False, "reason": "invalid"}
+    norm = normalize_nickname(name)
+    if not norm:
+        return {"ok": True, "available": False, "reason": "invalid"}
+    pid = playerId if (playerId and valid_id(playerId)) else None
+    holder = await db.players.find_one({"normalized_nickname": norm}, {"_id": 0, "playerId": 1})
+    if holder and holder.get("playerId") != pid:
+        return {"ok": True, "available": False, "reason": "taken"}
+    return {"ok": True, "available": True}
+
+
 @app.post("/api/leaderboard/register")
 async def register(req: RegisterReq, request: Request):
     if ip_rate_limited(client_ip(request)):
@@ -213,6 +231,11 @@ async def register(req: RegisterReq, request: Request):
     norm = normalize_nickname(name)
     if not norm:
         return {"ok": False, "error": "bad-name"}
+    # Names are permanent: once a player has set one, they cannot switch to a
+    # DIFFERENT name (re-saving the same identity, e.g. capitalisation, is fine).
+    existing = await db.players.find_one({"playerId": req.playerId}, {"_id": 0, "normalized_nickname": 1})
+    if existing and existing.get("normalized_nickname") and existing["normalized_nickname"] != norm:
+        return {"ok": False, "error": "NAME_LOCKED"}
     try:
         await db.players.update_one(
             {"playerId": req.playerId},

@@ -11,18 +11,20 @@ const VARIANTS = {
   ghost: { bg: 'transparent', fg: COLORS.text, border: '#6a5a95' },
 };
 
-export default function Button({ label, onPress, variant = 'primary', style, testID, small }) {
+export default function Button({ label, onPress, variant = 'primary', style, testID, small, disabled }) {
   const v = VARIANTS[variant] || VARIANTS.primary;
   const scale = useSharedValue(1);
   const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
-    <Animated.View style={[aStyle, style]}>
+    <Animated.View style={[aStyle, style, disabled && styles.disabled]}>
       <Pressable
         testID={testID}
-        onPressIn={() => (scale.value = withTiming(0.94, { duration: 70 }))}
-        onPressOut={() => (scale.value = withTiming(1, { duration: 90 }))}
+        disabled={disabled}
+        onPressIn={() => { if (!disabled) scale.value = withTiming(0.94, { duration: 70 }); }}
+        onPressOut={() => { if (!disabled) scale.value = withTiming(1, { duration: 90 }); }}
         onPress={() => {
+          if (disabled) return;
           Audio.ui();
           onPress && onPress();
         }}
@@ -54,4 +56,5 @@ const styles = StyleSheet.create({
   small: { paddingVertical: 11, paddingHorizontal: 18, borderRadius: 30 },
   txt: { fontFamily: FONT, fontSize: 22, fontWeight: '700', letterSpacing: 1 },
   txtSmall: { fontSize: 15 },
+  disabled: { opacity: 0.45 },
 });
