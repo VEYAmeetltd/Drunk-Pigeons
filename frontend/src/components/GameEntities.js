@@ -233,29 +233,51 @@ function Roof({ roof, flip, color }) {
   return <View style={[obStyles.cap, flip ? { bottom: -4 } : { top: -4 }, { backgroundColor: color }]} pointerEvents="none" />;
 }
 
-/* ---------------- Chip (a British chip / fry) ---------------- */
+/* ---------------- Chip (golden potato crisp) ---------------- */
 export function ChipView({ world, index }) {
   const S = CONFIG.CHIP_SIZE;
   const style = useAnimatedStyle(() => {
     const c = world.value.chips[index];
     if (!c || !c.active) return { opacity: 0, transform: [{ translateX: -999 }] };
+    const t = world.value.t || 0;
+    const phase = index * 1.7;
+    const wobble = Math.sin(t / 260 + phase) * 10; // gentle rotation
+    const bob = Math.sin(t / 300 + phase) * 2; // gentle bob
     const scale = c.eaten ? 1 + c.anim * 1.4 : 1;
     const opacity = c.eaten ? 1 - c.anim : 1;
     return {
       opacity,
       transform: [
         { translateX: c.x - S / 2 },
-        { translateY: c.y - S / 2 },
-        { rotate: '35deg' },
+        { translateY: c.y - S / 2 + bob },
+        { rotate: `${wobble}deg` },
         { scale },
       ],
     };
   });
+  // shimmer highlight pulses subtly
+  const shimmer = useAnimatedStyle(() => {
+    const t = world.value.t || 0;
+    return { opacity: 0.55 + 0.35 * Math.abs(Math.sin(t / 220 + index)) };
+  });
   return (
     <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
-      <View style={chipStyles.chip}>
-        <View style={chipStyles.chipHi} />
-      </View>
+      <Svg width={S} height={S} viewBox="0 0 32 32">
+        {/* irregular curved potato-crisp body */}
+        <Path
+          d="M6.5 15 C4 8 10 4.5 15 4.5 C20.5 4.5 27 7 27.5 13 C28 18 25 22 21 25 C17 28 10.5 27.5 8 23 C6 19.5 7.5 17 6.5 15 Z"
+          fill="#f2b83a"
+          stroke="#c9861a"
+          strokeWidth="1.4"
+        />
+        {/* darker toasted patches for texture */}
+        <Path d="M11 19 C13 21 17 21 19 19" stroke="#d99a24" strokeWidth="1.2" fill="none" opacity="0.7" />
+        <Circle cx="12" cy="12" r="1.1" fill="#c9861a" opacity="0.55" />
+        <Circle cx="20" cy="16" r="1" fill="#c9861a" opacity="0.5" />
+        <Circle cx="16" cy="22" r="0.9" fill="#c9861a" opacity="0.5" />
+      </Svg>
+      {/* shimmer highlight */}
+      <Animated.View style={[chipStyles.shine, shimmer]} pointerEvents="none" />
     </Animated.View>
   );
 }
@@ -277,68 +299,75 @@ export function FeatherView({ world, index, color }) {
   );
 }
 
-/* ---------------- Window heckler (tiny angry person + speech bubble) ---------------- */
+/* ---------------- Window heckler (person clipped inside a window) ---------------- */
 export function HecklerView({ world, text, reaction, theme }) {
+  const WIN = 36;
   const style = useAnimatedStyle(() => {
     const h = world.value.heckler;
     if (!h || !h.active) return { opacity: 0, transform: [{ translateX: -999 }] };
     const op = h.life > 0.35 ? 1 : Math.max(0, h.life / 0.35);
-    return { opacity: op, transform: [{ translateX: h.x - 20 }, { translateY: h.y - 20 }] };
+    return { opacity: op, transform: [{ translateX: h.x - WIN / 2 }, { translateY: h.y - WIN / 2 }] };
   });
   return (
-    <Animated.View style={[styles.abs, { width: 40, height: 40 }, style]} pointerEvents="none" testID="heckler">
+    <Animated.View style={[styles.abs, { width: WIN, height: WIN }, style]} pointerEvents="none" testID="heckler">
+      {/* speech bubble points down to the window */}
       <View style={hkStyles.bubble}>
         <Text style={hkStyles.bubbleTxt} numberOfLines={2} testID="heckler-insult">{text}</Text>
         <View style={hkStyles.bubbleTail} />
       </View>
-      <WindowPerson reaction={reaction} theme={theme} />
+      {/* window opening clips the person's body (lower body hidden behind wall) */}
+      <View style={[hkStyles.window, { width: WIN, height: WIN, backgroundColor: theme.window, borderColor: theme.obstacleDark }]}>
+        <WindowPerson reaction={reaction} theme={theme} win={WIN} />
+      </View>
     </Animated.View>
   );
 }
 
 function WindowPerson({ reaction, theme }) {
-  const frame = theme.obstacleDark;
-  const glass = theme.window;
   const skin = '#f3c9a0';
   const cloth = theme.accent;
+  // Drawn taller than the window; the parent window View clips the lower body.
   return (
-    <Svg width={40} height={40} viewBox="0 0 40 40">
-      <SvgRect x="1" y="1" width="38" height="38" rx="4" fill={glass} stroke={frame} strokeWidth="3" />
-      <SvgRect x="12" y="24" width="16" height="15" rx="4" fill={cloth} />
-      <Circle cx="20" cy="18" r="7" fill={skin} />
-      <Circle cx="17" cy="17" r="1.3" fill="#20232b" />
-      <Circle cx="23" cy="17" r="1.3" fill="#20232b" />
+    <Svg width={36} height={54} viewBox="0 0 36 54" style={{ position: 'absolute', top: 4, left: 0 }}>
+      {/* body/shoulders (extends below the window, gets clipped) */}
+      <SvgRect x="7" y="24" width="22" height="30" rx="6" fill={cloth} />
+      {/* head */}
+      <Circle cx="18" cy="15" r="9" fill={skin} />
+      <Circle cx="14.5" cy="14" r="1.5" fill="#20232b" />
+      <Circle cx="21.5" cy="14" r="1.5" fill="#20232b" />
       {reaction === 'horrified' ? (
-        <Circle cx="20" cy="21.5" r="2.2" fill="#20232b" />
+        <Circle cx="18" cy="19" r="2.4" fill="#20232b" />
       ) : (
-        <Path d="M17 21 Q20 19.5 23 21" stroke="#20232b" strokeWidth="1.6" fill="none" />
+        <Path d="M14.5 19 Q18 17 21.5 19" stroke="#20232b" strokeWidth="1.7" fill="none" />
       )}
-      <Line x1="15" y1="14.5" x2="18.5" y2="15.6" stroke="#20232b" strokeWidth="1.4" />
-      <Line x1="25" y1="14.5" x2="21.5" y2="15.6" stroke="#20232b" strokeWidth="1.4" />
+      {/* angry brows */}
+      <Line x1="12" y1="11" x2="16.5" y2="12.4" stroke="#20232b" strokeWidth="1.6" />
+      <Line x1="24" y1="11" x2="19.5" y2="12.4" stroke="#20232b" strokeWidth="1.6" />
+      {/* reaction arm / prop */}
       {reaction === 'fist' && (
         <G>
-          <Line x1="26" y1="29" x2="33" y2="20" stroke={skin} strokeWidth="3" />
-          <Circle cx="34" cy="18" r="3.6" fill={skin} />
+          <Line x1="26" y1="30" x2="31" y2="20" stroke={skin} strokeWidth="3.2" />
+          <Circle cx="32" cy="18" r="4" fill={skin} />
         </G>
       )}
       {reaction === 'wave' && (
         <G>
-          <Line x1="26" y1="29" x2="32" y2="17" stroke={skin} strokeWidth="3" />
-          <Circle cx="33" cy="15" r="3" fill={skin} />
+          <Line x1="26" y1="30" x2="30" y2="18" stroke={skin} strokeWidth="3.2" />
+          <Circle cx="31" cy="16" r="3.4" fill={skin} />
         </G>
       )}
       {reaction === 'point' && (
         <G>
-          <Line x1="14" y1="29" x2="3" y2="24" stroke={skin} strokeWidth="3" />
-          <Circle cx="2.5" cy="24" r="2.6" fill={skin} />
+          <Line x1="10" y1="30" x2="2" y2="24" stroke={skin} strokeWidth="3.2" />
+          <Circle cx="1.5" cy="24" r="3" fill={skin} />
         </G>
       )}
-      {reaction === 'mug' && <SvgRect x="27" y="27" width="7" height="8" rx="1.5" fill="#ffffff" stroke={frame} strokeWidth="1.5" />}
-      {reaction === 'newspaper' && <SvgRect x="24" y="27" width="12" height="9" rx="1" fill="#ffffff" stroke={frame} strokeWidth="1" />}
+      {reaction === 'mug' && <SvgRect x="25" y="28" width="8" height="9" rx="1.6" fill="#ffffff" stroke={theme.obstacleDark} strokeWidth="1.6" />}
+      {reaction === 'newspaper' && <SvgRect x="22" y="28" width="13" height="10" rx="1" fill="#ffffff" stroke={theme.obstacleDark} strokeWidth="1" />}
       {reaction === 'confused' && (
         <G>
-          <Line x1="26" y1="28" x2="26" y2="14" stroke={skin} strokeWidth="3" />
-          <Circle cx="26" cy="12" r="2.6" fill={skin} />
+          <Line x1="26" y1="28" x2="26" y2="14" stroke={skin} strokeWidth="3.2" />
+          <Circle cx="26" cy="12" r="3" fill={skin} />
         </G>
       )}
     </Svg>
@@ -350,6 +379,11 @@ const styles = StyleSheet.create({
 });
 
 const hkStyles = StyleSheet.create({
+  window: {
+    borderRadius: 5,
+    borderWidth: 3,
+    overflow: 'hidden',
+  },
   bubble: {
     position: 'absolute',
     bottom: 44,
@@ -400,24 +434,14 @@ const obStyles = StyleSheet.create({
 });
 
 const chipStyles = StyleSheet.create({
-  chip: {
-    width: CONFIG.CHIP_SIZE,
-    height: CONFIG.CHIP_SIZE * 0.5,
-    marginTop: CONFIG.CHIP_SIZE * 0.25,
-    backgroundColor: '#f4c542',
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: '#c99a1e',
-    overflow: 'hidden',
-  },
-  chipHi: {
+  shine: {
     position: 'absolute',
-    top: 2,
-    left: 3,
-    right: 3,
+    top: '26%',
+    left: '30%',
+    width: 7,
     height: 4,
     borderRadius: 3,
-    backgroundColor: '#fff3c4',
+    backgroundColor: '#fff4c4',
   },
 });
 

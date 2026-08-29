@@ -1,6 +1,7 @@
 import { CONFIG, fatLevelFor, pigeonRadiusFor } from '../config';
 
 const PPM = CONFIG.PIXELS_PER_METRE;
+const OW = CONFIG.OBSTACLE_WIDTH;
 
 // Pure(ish) game simulation. No rendering. Mutates internal state each step.
 // Rendering layer reads getSnapshot(). Collision/scoring use plain JS state.
@@ -17,7 +18,6 @@ export function createEngine({ onScore, onChip, onCrash }) {
   let score = 0;
   let chipCount = 0;
   let distance = 0;
-  let chipTimer = 0;
   let running = false;
   let dead = false;
   let invincibleUntil = 0;
@@ -25,8 +25,8 @@ export function createEngine({ onScore, onChip, onCrash }) {
   let flapPulse = 0;
   const dirtyObstacles = new Set();
 
-  // Window heckler (tiny angry person) — single slot, at most one on screen.
-  const heckler = { active: false, x: 0, y: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
+  // Window heckler (tiny angry person) — single slot, bound to an obstacle window.
+  const heckler = { active: false, obsIndex: -1, side: 'bottom', wx: 0, wy: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
   let hecklerTimer = 4;
   let hecklerPending = false;
 
@@ -52,6 +52,8 @@ export function createEngine({ onScore, onChip, onCrash }) {
   }
 
   function placeObstacle(idx, x) {
+    // if a heckler is bound to this slot, release it before reuse
+    if (heckler.active && heckler.obsIndex === idx) heckler.active = false;
     const { gap } = difficulty();
     const minTop = CONFIG.MIN_TOP;
     const maxTop = groundY() - CONFIG.MIN_BOTTOM - gap;
@@ -65,6 +67,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
     o.seed = Math.floor(Math.random() * 1000000);
     o.passed = false;
     dirtyObstacles.add(idx);
+    generateChipsForObstacle(idx);
   }
 
   function lastObstacleX() {
@@ -73,29 +76,41 @@ export function createEngine({ onScore, onChip, onCrash }) {
     return max;
   }
 
-  // Attach a tiny angry heckler to a window on an on-screen building.
+  // Attach a tiny angry heckler to a valid window on a fully on-screen building.
+  // The person becomes a dependent of that obstacle slot (moves/dies with it).
+  const WIN_W = 36;
+  const WIN_H = 36;
   function trySpawnHeckler() {
     if (heckler.active) return;
-    const w = CONFIG.OBSTACLE_WIDTH;
-    const cands = obstacles.filter((o) => o.active && o.x > W * 0.5 && o.x < W - 10);
-    if (cands.length === 0) return;
-    const o = cands[Math.floor(Math.random() * cands.length)];
     const gY = groundY();
-    const bottomTop = o.topH + o.gap;
-    const topTall = o.topH >= 90;
-    const bottomTall = gY - bottomTop >= 90;
-    let y;
-    if (bottomTall && (!topTall || Math.random() < 0.6)) {
-      y = bottomTop + 34 + Math.random() * Math.max(10, gY - bottomTop - 74);
-    } else if (topTall) {
-      y = 40 + Math.random() * Math.max(10, o.topH - 74);
-    } else {
-      return;
+    const cands = [];
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
+      // building must be fully on-screen (window can fit completely on screen)
+      if (o.active && o.x >= W * 0.45 && o.x + OW <= W - 4) cands.push(i);
     }
-    y = Math.max(150, Math.min(gY - 60, y));
+    if (cands.length === 0) return;
+    const idx = cands[Math.floor(Math.random() * cands.length)];
+    const o = obstacles[idx];
+    const bottomTop = o.topH + o.gap;
+    const pad = 12;
+    const topRoom = o.topH - (WIN_H + pad * 2);
+    const bottomRoom = gY - bottomTop - (WIN_H + pad * 2);
+    let side, top;
+    if (bottomRoom > 0 && (topRoom <= 0 || Math.random() < 0.6)) {
+      side = 'bottom';
+      top = bottomTop + pad + Math.random() * bottomRoom;
+    } else if (topRoom > 0) {
+      side = 'top';
+      top = pad + Math.random() * topRoom;
+    } else {
+      return; // no window fits => do not spawn
+    }
     heckler.active = true;
-    heckler.x = o.x + w * 0.5;
-    heckler.y = y;
+    heckler.obsIndex = idx;
+    heckler.side = side;
+    heckler.wx = OW / 2; // window centre within the column
+    heckler.wy = top + WIN_H / 2; // absolute vertical centre (building doesn't move vertically)
     heckler.life = 1.5 + Math.random() * 0.5;
     heckler.insultR = Math.random();
     heckler.reactionR = Math.random();
@@ -111,6 +126,77 @@ export function createEngine({ onScore, onChip, onCrash }) {
     c.anim = 0;
     c.x = x;
     c.y = y;
+  }
+
+  // Validate a chip's FULL bounds (+safe padding) against ground, ceiling and every
+  // active building. Returns true only if the chip sits entirely in open flying space.
+  function isChipPosSafe(x, y) {
+    const r = CONFIG.CHIP_SIZE * 0.5;
+    const pad = 12;
+    const gY = groundY();
+    if (y - r - pad < 6) return false;
+    if (y + r + pad > gY) return false;
+    for (const o of obstacles) {
+      if (!o.active) continue;
+      const bx1 = o.x - pad;
+      const bx2 = o.x + OW + pad;
+      if (x + r < bx1 || x - r > bx2) continue; // not horizontally near this column
+      // near this column: chip must fit fully inside the open gap band
+      if (y - r - pad < o.topH) return false; // would clip the top building
+      if (y + r + pad > o.topH + o.gap) return false; // would clip the bottom building
+    }
+    return true;
+  }
+
+  function placeIfSafe(x, y) {
+    if (isChipPosSafe(x, y)) spawnChip(x, y);
+  }
+
+  // Generate validated chips for a newly placed obstacle: a couple inside its gap
+  // corridor, plus a short trail in the OPEN sky between it and the previous obstacle.
+  function generateChipsForObstacle(idx) {
+    const B = obstacles[idx];
+    if (!B || !B.active) return;
+    const r = CONFIG.CHIP_SIZE * 0.5;
+    const pad = 12;
+
+    // 1) up to 2 chips inside B's own gap (safe by construction, still validated)
+    const gapCy = B.topH + B.gap / 2;
+    let placedGap = 0;
+    for (const oy of [0, -24, 24]) {
+      if (placedGap >= 2) break;
+      if (isChipPosSafe(B.x + OW / 2, gapCy + oy)) {
+        spawnChip(B.x + OW / 2, gapCy + oy);
+        placedGap += 1;
+      }
+    }
+
+    // 2) trail in the open span between the previous building and B
+    let prev = null;
+    for (const o of obstacles) {
+      if (o.active && o !== B && o.x < B.x) {
+        if (!prev || o.x > prev.x) prev = o;
+      }
+    }
+    if (prev) {
+      const x1 = prev.x + OW + pad + r + 8;
+      const x2 = B.x - pad - r - 8;
+      if (x2 - x1 > 44) {
+        const n = 2 + Math.floor(Math.random() * 3); // 2-4
+        const form = Math.floor(Math.random() * 4); // line / arc / rise / fall
+        const gY = groundY();
+        const baseY = 100 + Math.random() * (gY - 200);
+        for (let k = 0; k < n; k++) {
+          const t = n === 1 ? 0.5 : k / (n - 1);
+          const x = x1 + (x2 - x1) * t;
+          let y = baseY;
+          if (form === 1) y = baseY - Math.sin(t * Math.PI) * 70;
+          else if (form === 2) y = baseY - (t - 0.5) * 120;
+          else if (form === 3) y = baseY + (t - 0.5) * 120;
+          placeIfSafe(x, y); // each chip validated independently; invalid ones skipped
+        }
+      }
+    }
   }
 
   function explodeFeathers(x, y, feather) {
@@ -142,7 +228,6 @@ export function createEngine({ onScore, onChip, onCrash }) {
     score = 0;
     chipCount = 0;
     distance = 0;
-    chipTimer = 0.8;
     running = true;
     dead = false;
     invincibleUntil = 0;
@@ -233,30 +318,18 @@ export function createEngine({ onScore, onChip, onCrash }) {
         score += 1;
         if (onScore) onScore(score);
       }
-      if (o.x + w < -20) o.active = false;
+      if (o.x + w < -20) {
+        o.active = false;
+        if (heckler.active && heckler.obsIndex === i) heckler.active = false;
+      }
     }
-    // spawn new obstacle to keep the course endless
+    // spawn new obstacle to keep the course endless (chips are generated in placeObstacle)
     const lx = lastObstacleX();
     if (lx < W - spacing) {
       const free = obstacles.findIndex((o) => !o.active);
       if (free >= 0) {
         placeObstacle(free, Math.max(W + 40, lx + spacing));
-        // chance to drop chips inside/around the new gap
-        const o = obstacles[free];
-        const cy = o.topH + o.gap / 2;
-        const n = 1 + Math.floor(Math.random() * 3);
-        for (let k = 0; k < n; k++) {
-          spawnChip(o.x + w / 2 + (k - (n - 1) / 2) * 42, cy + (Math.random() - 0.5) * (o.gap * 0.5));
-        }
       }
-    }
-
-    // ambient chip stream between obstacles
-    chipTimer -= dt;
-    if (chipTimer <= 0) {
-      chipTimer = CONFIG.CHIP_SPAWN_MIN + Math.random() * (CONFIG.CHIP_SPAWN_MAX - CONFIG.CHIP_SPAWN_MIN);
-      const y = 80 + Math.random() * (groundY() - 160);
-      spawnChip(W + 30, y);
     }
 
     // move chips + collection
@@ -292,11 +365,15 @@ export function createEngine({ onScore, onChip, onCrash }) {
       if (onCrash) onCrash({ score, chips: chipCount, distance: Math.floor(distance / PPM) });
     }
 
-    // window heckler: move with the world, expire, and occasionally spawn
+    // window heckler: bound to its building; expire on life, or when the building
+    // is gone / has scrolled off. Never repositioned independently.
     if (heckler.active) {
-      heckler.x -= speed * dt;
+      const o = obstacles[heckler.obsIndex];
       heckler.life -= dt;
-      if (heckler.life <= 0 || heckler.x < -80) heckler.active = false;
+      const px = o && o.active ? o.x + heckler.wx : -9999;
+      if (!o || !o.active || px < -60 || px > W + 60 || heckler.life <= 0) {
+        heckler.active = false;
+      }
     }
     hecklerTimer -= dt;
     if (hecklerTimer <= 0) {
@@ -339,12 +416,18 @@ export function createEngine({ onScore, onChip, onCrash }) {
       distM: Math.floor(distance / PPM),
       distPx: distance,
       dead: dead ? 1 : 0,
-      heckler: {
-        x: heckler.x,
-        y: heckler.y,
-        active: heckler.active ? 1 : 0,
-        life: Math.max(0, heckler.life),
-      },
+      heckler: (() => {
+        const o = heckler.active ? obstacles[heckler.obsIndex] : null;
+        const on = o && o.active;
+        return {
+          x: on ? o.x + heckler.wx : -999,
+          y: heckler.wy,
+          w: WIN_W,
+          h: WIN_H,
+          active: on ? 1 : 0,
+          life: Math.max(0, heckler.life),
+        };
+      })(),
       obs: obstacles.map((o) => ({ x: o.x, active: o.active ? 1 : 0 })),
       chips: chips.map((c) => ({
         x: c.x,

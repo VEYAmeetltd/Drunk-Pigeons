@@ -17,7 +17,7 @@ import { FONT, COLORS } from '../ui/theme';
 function emptySnapshot() {
   return {
     px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0,
-    heckler: { x: -999, y: 0, active: 0, life: 0 },
+    heckler: { x: -999, y: 0, w: 36, h: 36, active: 0, life: 0 },
     obs: Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ x: -999, active: 0 })),
     chips: Array.from({ length: CONFIG.CHIP_POOL }, () => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 })),
     feathers: Array.from({ length: CONFIG.FEATHER_POOL }, () => ({ x: -999, y: 0, rot: 0, active: 0, life: 0 })),

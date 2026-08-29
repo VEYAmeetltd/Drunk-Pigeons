@@ -49,6 +49,12 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Wrong code → random cheeky response (code-error), unlocks nothing. Correct → confetti + Audio.leet(), "LEET PIGEON STATUS ACHIEVED" / "ALL PIGEONS UNLOCKED".
 - Persistent `leetUnlock` flag (dp_leetUnlock) as an ADDITIVE override — unlocks all currently-locked pigeons, normal PIGEONS.locked architecture untouched. Subtle "1337" badge on Pigeons screen + menu label flips CODE→1337. Persists across reload. No gameplay changes.
 
+## Update 5 (2026-06) — verified 100% by testing agent (iteration_5)
+- Chips redesigned as golden potato-crisp SVGs (irregular curved shape, toasted patches, shimmer) with subtle rotation/bob — no trademarked branding.
+- Strict chip placement: isChipPosSafe() validates full chip bounds + 12px padding vs ground/ceiling and every building's top/bottom rects; generateChipsForObstacle() places validated gap chips + trails (line/arc/rise/fall) in open sky between buildings, skipping any invalid chip (2169 observations → 0 overlaps, 0 underground). CHIP_POOL raised to 28.
+- Window hecklers refactored to be window-anchored dependents of a specific obstacle: only spawn on a fully on-screen building with a fitting window; person clipped inside the window (head/shoulders visible, lower body hidden); position derived from the live obstacle each frame; released on recycle/off-screen — no orphaned people or floating bubbles. Speech bubble anchored to the person.
+- No gameplay/physics/difficulty/scoring/chip-value/fatness/collision changes. (Note: no "pub +5" pickup exists in this build — referenced in brief but never implemented; left out of scope.)
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks.

@@ -1,0 +1,35 @@
+{
+  "summary": "UPDATE 5 (chip potato-crisp visual + strict chip placement validation + window-anchored hecklers) verified on mobile viewport 430x920 across all three maps (day/night/dusk) using Playwright against the public preview URL. RESULT: PASS.\n\nCritical placement guarantee (chips never overlap/behind buildings, never underground): across ~35 runs and 3 maps, 2169+ live chip observations were compared against every visible building bounding box every ~180-300ms. Result: 0 overlaps, 0 underground chips. isChipPosSafe correctly validates full chip bounds + 12px padding against ground, ceiling and every active obstacle column (top rect + bottom rect). generateChipsForObstacle validates every trail sample independently and skips invalid ones (as designed — partial/broken trails near a building are acceptable).\n\nChip visual: golden potato-crisp SVG with irregular curved Path, darker toasted patches, subtle shimmer highlight, gentle rotation (Math.sin(t/260)*10deg) + bob (Math.sin(t/300)*2px). No brand names/logos. Verified visually in screenshots.\n\nWindow heckler: captured on-screen mid-run (screenshot /app/test_reports/heckler_visible.png). Person is clearly clipped INSIDE a real building window (head+shoulders visible, lower body hidden behind wall via overflow:hidden window View). Speech bubble anchored above pointing down to the window (bubbleTail rotate 45deg). Insult text 'FLY STRAIGHT, YA $%&!' rendered via data-testid='heckler-insult'. Heckler element has data-testid='heckler'. Verified in engine.js: (a) trySpawnHeckler only picks fully-on-screen buildings (o.x>=W*0.45 && o.x+OW<=W-4) with fitting window; stores obsIndex+wx+wy; (b) getSnapshot derives heckler.x from live obstacle (x=-999 when o inactive); (c) step() deactivates heckler when o!active || px<-60 || px>W+60 || life<=0; (d) placeObstacle releases bound heckler on recycle. After every game-over across all runs, HecklerView renders opacity:0 + translateX(-999px) — no orphan floating head or bubble ever remained in the visible viewport.\n\nRegression on maps: all 3 map testids (map-day, map-night, map-dusk) selectable from menu; PLAY navigates to flap-area; Space keyboard triggers flap; distance-hud counts up; obstacles scroll and passing increments score-hud; chip-hud increments on pickup (observed run with 4 chips eaten); on crash game-over-overlay renders with all 5 rows (go-distance, go-best-distance, go-score, go-best, go-chips) — verified across 12+ runs. Revive flow works (dev-mocked Ads auto-callback); after revive canRevive → false and revive button shows 'REVIVE USED'. NEW BEST badge appears when distance beats best.\n\nCONFIG.CHIP_POOL=28 confirmed. Zero JS/console errors during ~90s of extended play across ~35 runs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_5.json",
+    "/app/test_reports/heckler_visible.png",
+    "/app/test_reports/extended_run.png",
+    "/app/test_reports/gameover.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "engine.js:133-149 isChipPosSafe correctly considers CHIP_SIZE*0.5 radius + 12px pad against ground, ceiling and every active obstacle's top rect (0..topH) AND bottom rect (topH+gap..groundY). Empirically verified 0 overlaps in 2169 observations.",
+    "engine.js:157-200 generateChipsForObstacle: gap chips are validated (safe by construction but double-checked), and trail formations (line/arc-sine/rise/fall) sample each of 2-4 points then placeIfSafe — invalid ones silently skipped (spec: partial/broken trails acceptable).",
+    "engine.js:83-119 trySpawnHeckler: gates on o.x>=W*0.45 && o.x+OW<=W-4 (building must fit fully on screen for the window to be visible); computes bottom/top room accounting for WIN_H=36 + 12px pad twice; never spawns if no window fits. Stores wx=OW/2 (window centre) and absolute wy — building doesn't move vertically so wy is stable.",
+    "engine.js:370-377 heckler lifecycle in step(): tied to obstacles[heckler.obsIndex]; deactivates when obstacle inactive or scrolled to px<-60 or px>W+60 or life<=0. engine.js:56 placeObstacle explicitly releases heckler on slot reuse — matches spec.",
+    "engine.js:419-430 getSnapshot: heckler.x = live obstacle.x + wx (or -999 when obstacle gone); heckler.active reflects live obstacle activity; ensures no stale position leaks to the renderer.",
+    "GameEntities.js:303-324 HecklerView: when !h.active returns opacity:0 + translateX:-999 (confirmed at game-over: opacity='0', transform='translateX(-999px)') — no visible orphan possible. Window View has overflow:'hidden' and WindowPerson SVG is 36x54 taller than the 36x36 window, so lower body is naturally clipped. Speech bubble uses absolute positioning bottom:44 left:-58 with rotated tail — anchored to the same Animated.View that translates with the heckler snapshot position, so bubble scrolls with the person and disappears with it.",
+    "GameEntities.js:237-283 ChipView: Path forms an irregular curved potato-crisp silhouette with #f2b83a fill, #c9861a stroke, darker toasted patch details and animated shimmer highlight (opacity 0.55-0.9 sinusoidal). No trademarked branding. Rotation/bob amplitudes are subtle as spec'd.",
+    "GameScreen.js keyboard handler wires Space/ArrowUp to doFlap — confirmed working (pigeon reaches 42m distance with rapid Space presses).",
+    "Minor: React Native Web deprecation warnings for shadow*/textShadow*/pointerEvents style props are pre-existing noise (not errors) and were not counted as console errors."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% — all 8 review criteria PASS"},
+  "test_credentials": "None (no auth).",
+  "seed_data_creation": "localStorage cleared at test start; localStorage keys populated normally through gameplay (best score/distance/pigeons injured).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Map testids are 'map-day','map-night','map-dusk' (NOT 'map-map-day'). Chip SVG selector: svg[viewBox=\"0 0 32 32\"]. Building column selector heuristic can miss occasionally — a more robust one is to select divs where width==74 AND (borderTopWidth+borderRightWidth+borderBottomWidth+borderLeftWidth all == 3px). Keyboard Space works reliably via page.keyboard.press('Space') when body has focus; page.mouse.click at flap-area top-third accidentally hits the restart-button testid and pauses the game — avoid it. Runs are hard to prolong (~1.7s to first obstacle) but revive-button (visible on first crash of each fresh run) plus rapid Space (~160-200ms cadence) can extend runs enough (>3.5s) to spawn hecklers. Heckler after game-over renders as opacity:0 translateX(-999px) — element persists in DOM but is invisible; do NOT test 'node removed' — test opacity/transform.",
+  "rca of the issue": "N/A — no bug found. All UPDATE 5 acceptance criteria met."
+}

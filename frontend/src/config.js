@@ -31,7 +31,7 @@ export const CONFIG = {
   SPEED_PER_SCORE: 2.6,
 
   // Chips
-  CHIP_POOL: 18,
+  CHIP_POOL: 28,
   CHIP_SIZE: 30,
   CHIP_SPAWN_MIN: 0.55, // seconds between chip spawns
   CHIP_SPAWN_MAX: 1.35,
