@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import Svg, { Defs, LinearGradient, Stop, Rect, Ellipse } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Rect, Ellipse, Path } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { CONFIG } from '../config';
 
@@ -27,6 +27,22 @@ function genSkyline(width, seed, minH, maxH, bwMin, bwMax) {
     x += w;
   }
   return items;
+}
+
+// Seamless rolling-hill silhouette for EASY MODE. Uses integer frequencies over one
+// tile width so the wave repeats perfectly and tiles under the parallax scroll.
+function hillPath(tileW, height, baseFrac, amp, n1, n2, phase) {
+  const base = height * baseFrac;
+  const step = Math.max(8, Math.round(tileW / 48));
+  const totalW = tileW * 2;
+  let d = `M 0 ${height}`;
+  for (let x = 0; x <= totalW; x += step) {
+    const t = (x % tileW) / tileW;
+    const y = base + amp * (0.6 * Math.sin(2 * Math.PI * n1 * t) + 0.4 * Math.sin(2 * Math.PI * n2 * t + phase));
+    d += ` L ${x} ${y.toFixed(1)}`;
+  }
+  d += ` L ${totalW} ${height} Z`;
+  return d;
 }
 
 function ParallaxLayer({ world, factor, tileW, top, height, children }) {
@@ -72,6 +88,7 @@ function SkylineSvg({ tileW, height, items, color, windowColor, opacity }) {
 export default function Background({ theme, width, height, world }) {
   const groundY = height - CONFIG.GROUND_H;
   const tileW = Math.max(320, Math.round(width));
+  const isEasy = theme.id === 'easy';
 
   const far = useMemo(() => genSkyline(tileW, 1337, groundY * 0.18, groundY * 0.42, 54, 92), [tileW, groundY]);
   const near = useMemo(() => genSkyline(tileW, 9042, groundY * 0.12, groundY * 0.3, 42, 70), [tileW, groundY]);
@@ -115,27 +132,59 @@ export default function Background({ theme, width, height, world }) {
         </Svg>
       </ParallaxLayer>
 
-      {/* far skyline */}
-      <ParallaxLayer world={world} factor={0.16} tileW={tileW} top={0} height={groundY}>
-        <SkylineSvg tileW={tileW} height={groundY} items={far} color={theme.skylineBack} windowColor={theme.window} opacity={0.7} />
-      </ParallaxLayer>
+      {/* far / near environment — EASY MODE swaps the dense city skyline for sparse
+          rolling hills so it instantly reads as the calm, open "chill mode" */}
+      {isEasy ? (
+        <>
+          <ParallaxLayer world={world} factor={0.12} tileW={tileW} top={0} height={groundY}>
+            <Svg width={tileW * 2} height={groundY} opacity={0.7}>
+              <Path d={hillPath(tileW, groundY, 0.74, groundY * 0.10, 2, 3, 1.2)} fill={theme.skylineBack} />
+            </Svg>
+          </ParallaxLayer>
+          <ParallaxLayer world={world} factor={0.3} tileW={tileW} top={0} height={groundY}>
+            <Svg width={tileW * 2} height={groundY} opacity={0.95}>
+              <Path d={hillPath(tileW, groundY, 0.86, groundY * 0.08, 1, 2, 0.4)} fill={theme.skyline} />
+            </Svg>
+          </ParallaxLayer>
+        </>
+      ) : (
+        <>
+          {/* far skyline */}
+          <ParallaxLayer world={world} factor={0.16} tileW={tileW} top={0} height={groundY}>
+            <SkylineSvg tileW={tileW} height={groundY} items={far} color={theme.skylineBack} windowColor={theme.window} opacity={0.7} />
+          </ParallaxLayer>
 
-      {/* near skyline */}
-      <ParallaxLayer world={world} factor={0.36} tileW={tileW} top={0} height={groundY}>
-        <SkylineSvg tileW={tileW} height={groundY} items={near} color={theme.skyline} windowColor={theme.window} opacity={0.9} />
-      </ParallaxLayer>
+          {/* near skyline */}
+          <ParallaxLayer world={world} factor={0.36} tileW={tileW} top={0} height={groundY}>
+            <SkylineSvg tileW={tileW} height={groundY} items={near} color={theme.skyline} windowColor={theme.window} opacity={0.9} />
+          </ParallaxLayer>
+        </>
+      )}
 
       {/* ground */}
       <View style={{ position: 'absolute', top: groundY, width, height: CONFIG.GROUND_H, backgroundColor: theme.ground }} />
       <View style={{ position: 'absolute', top: groundY, width, height: 10, backgroundColor: theme.groundTop }} />
-      {/* scrolling street detail (kerb dashes) */}
-      <ParallaxLayer world={world} factor={1.0} tileW={tileW} top={groundY + 22} height={16}>
-        <View style={{ flexDirection: 'row', width: tileW * 2 }}>
-          {Array.from({ length: Math.ceil((tileW * 2) / 44) }).map((_, i) => (
-            <View key={i} style={{ width: 24, height: 6, marginRight: 20, borderRadius: 3, backgroundColor: theme.groundTop, opacity: 0.5 }} />
-          ))}
-        </View>
-      </ParallaxLayer>
+      {/* scrolling ground detail — city kerb dashes, or sparse grass tufts in Easy Mode */}
+      {isEasy ? (
+        <ParallaxLayer world={world} factor={1.0} tileW={tileW} top={groundY - 8} height={20}>
+          <Svg width={tileW * 2} height={20}>
+            {Array.from({ length: Math.ceil((tileW * 2) / 128) }).map((_, i) => (
+              <React.Fragment key={i}>
+                <Ellipse cx={24 + i * 128} cy={14} rx={7} ry={9} fill={theme.groundTop} opacity={0.55} />
+                <Ellipse cx={24 + i * 128 + 12} cy={16} rx={5} ry={6} fill={theme.groundTop} opacity={0.45} />
+              </React.Fragment>
+            ))}
+          </Svg>
+        </ParallaxLayer>
+      ) : (
+        <ParallaxLayer world={world} factor={1.0} tileW={tileW} top={groundY + 22} height={16}>
+          <View style={{ flexDirection: 'row', width: tileW * 2 }}>
+            {Array.from({ length: Math.ceil((tileW * 2) / 44) }).map((_, i) => (
+              <View key={i} style={{ width: 24, height: 6, marginRight: 20, borderRadius: 3, backgroundColor: theme.groundTop, opacity: 0.5 }} />
+            ))}
+          </View>
+        </ParallaxLayer>
+      )}
     </View>
   );
 }

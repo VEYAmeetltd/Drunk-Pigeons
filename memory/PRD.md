@@ -80,6 +80,10 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - SILLY MODE leaderboard: server stores independent bestDistance (Global) and sillyBestDistance (Silly) per player; submit() routes STRICTLY by validated `mode` field (norm_mode coerces anything but 'easy' → 'normal') so Easy runs can NEVER enter Global. classify(req, mode) uses FLAG_DISTANCE_EASY=250000 so legit long Silly runs aren't flagged. GET /top?mode=normal|easy. Frontend: LeaderboardScreen show-silly/show-global toggle (🏆 GLOBAL ↔ 🏆 SILLY MODE), shared anonymous nickname. App.handleCrash submits mode-appropriately with separate submittedBest / submittedBestSilly. Backend regression: /app/backend/tests/test_mode_leaderboard.py (18 cases) + test_leaderboard.py (24).
 - MOCKED: store billing (dev simulator) — real StoreKit/Play Billing injected via setBillingProvider() before release.
 
+## Update 10 (2026-06) — Silly Podium + Easy Skyline polish — verified visually
+- SILLY PODIUM: the Silly Mode leaderboard now opens with a cheeky "🏆 SILLY HALL OF FAME" top-3 podium — 👑 gold #1 (tallest, centre), 🥈 silver #2 (left), 🥉 bronze #3 (right), each with medal, nickname, distance and a coloured plinth; empty slots read "up for grabs"; your-row highlighted teal. Ranks #4+ render as the normal list below. Global leaderboard keeps the plain list (podium is Silly-only). (LeaderboardScreen.js SillyPodium + podium/rest split.)
+- EASY SKYLINE: Easy Mode background swaps the dense city skyline for sparse, seamless rolling hills (Background.js hillPath — integer-frequency sine wave that tiles under parallax) in two green depth layers, plus soft grass tufts instead of kerb dashes, over the bright meadow palette. Standard maps unchanged (isEasy branch only).
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks; inject real StoreKit/Play Billing provider (pigeons + easymode + restore).

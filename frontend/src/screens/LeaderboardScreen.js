@@ -7,6 +7,52 @@ import { LeaderboardAPI } from '../leaderboard/api';
 import { formatInt } from '../config';
 import { Audio } from '../audio/audio';
 
+// Cheeky gold/silver/bronze top-3 podium — Silly Mode only.
+function SillyPodium({ entries }) {
+  const byRank = {
+    1: entries.find((e) => e.rank === 1),
+    2: entries.find((e) => e.rank === 2),
+    3: entries.find((e) => e.rank === 3),
+  };
+  const order = [
+    { key: 2, medal: '🥈', color: '#c9d2e0', h: 74 },
+    { key: 1, medal: '👑', color: COLORS.yellow, h: 104 },
+    { key: 3, medal: '🥉', color: '#d08b52', h: 56 },
+  ];
+  return (
+    <View style={styles.podiumWrap} testID="silly-podium">
+      <Text style={styles.podiumTitle}>🏆 SILLY HALL OF FAME</Text>
+      <View style={styles.podiumRow}>
+        {order.map(({ key, medal, color, h }) => {
+          const p = byRank[key];
+          return (
+            <View key={key} style={styles.podCol} testID={p ? `podium-${key}` : undefined}>
+              {p ? (
+                <>
+                  <Text style={styles.podMedal}>{medal}</Text>
+                  <Text style={[styles.podNick, p.isYou && styles.txtYou]} numberOfLines={1}>{p.nickname}</Text>
+                  <Text style={[styles.podDist, p.isYou && styles.txtYou]}>{formatInt(p.bestDistance)}m</Text>
+                  <View style={[styles.podBlock, { height: h, backgroundColor: color }, p.isYou && styles.podBlockYou]}>
+                    <Text style={styles.podRank}>{key}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.podMedalDim}>·</Text>
+                  <Text style={styles.podEmpty}>up for grabs</Text>
+                  <View style={[styles.podBlock, styles.podBlockEmpty, { height: h }]}>
+                    <Text style={styles.podRank}>{key}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function LeaderboardScreen({ playerId, nickname, onSetNickname, onBack }) {
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
@@ -17,6 +63,8 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   const [saving, setSaving] = useState(false);
   const [board, setBoard] = useState('normal'); // 'normal' (Global) | 'silly' (Easy Mode)
   const isSilly = board === 'silly';
+  const podium = isSilly ? top.slice(0, 3) : [];
+  const rest = isSilly ? top.slice(3) : top;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +149,8 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
         <>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
             {top.length === 0 && <Text style={styles.empty}>NO SCORES YET. BE THE FIRST DRUNK PIGEON.</Text>}
-            {top.map((r) => (
+            {isSilly && podium.length > 0 && <SillyPodium entries={podium} />}
+            {rest.map((r) => (
               <View key={r.rank} style={[styles.row, r.isYou && styles.rowYou]} testID={`lb-row-${r.rank}`}>
                 <Text style={[styles.rank, r.isYou && styles.txtYou]}>#{r.rank}</Text>
                 <Text style={[styles.nick, r.isYou && styles.txtYou]} numberOfLines={1}>{r.nickname}</Text>
@@ -144,6 +193,19 @@ const styles = StyleSheet.create({
   input: { backgroundColor: COLORS.bgAlt, borderRadius: 12, borderWidth: 2, borderColor: '#6a5a95', color: '#fff', fontFamily: FONT, fontSize: 18, fontWeight: '700', paddingVertical: 10, paddingHorizontal: 12, marginTop: 8 },
   err: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, fontWeight: '700', marginTop: 8 },
   list: { paddingVertical: 12, gap: 6 },
+  podiumWrap: { paddingTop: 6, paddingBottom: 14, alignItems: 'center' },
+  podiumTitle: { fontFamily: FONT, color: COLORS.pink, fontSize: 15, fontWeight: '700', letterSpacing: 1, marginBottom: 12 },
+  podiumRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8, width: '100%' },
+  podCol: { flex: 1, alignItems: 'center', maxWidth: 130 },
+  podMedal: { fontSize: 26 },
+  podMedalDim: { fontSize: 22, opacity: 0.35 },
+  podNick: { fontFamily: FONT, color: COLORS.text, fontSize: 13, fontWeight: '700', maxWidth: '100%', marginTop: 2 },
+  podEmpty: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontStyle: 'italic', marginTop: 2 },
+  podDist: { fontFamily: FONT, color: COLORS.yellow, fontSize: 13, fontWeight: '700', marginBottom: 6 },
+  podBlock: { width: '100%', borderTopLeftRadius: 12, borderTopRightRadius: 12, alignItems: 'center', paddingTop: 6 },
+  podBlockEmpty: { backgroundColor: COLORS.bgAlt, opacity: 0.5 },
+  podBlockYou: { borderWidth: 2, borderColor: COLORS.teal },
+  podRank: { fontFamily: FONT, color: 'rgba(20,12,40,0.6)', fontSize: 24, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.bgAlt, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14 },
   rowYou: { backgroundColor: COLORS.card, borderWidth: 2, borderColor: COLORS.teal },
   rank: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, fontWeight: '700', width: 64 },
