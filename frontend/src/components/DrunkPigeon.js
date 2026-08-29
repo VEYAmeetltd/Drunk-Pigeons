@@ -153,6 +153,7 @@ export default function DrunkPigeon({
   boost = false,      // temporary extra drunkenness (Pub pint boost)
   strength = 1,       // player wobble-strength setting multiplier
   sound = false,      // play tiny character sound on signatures (gameplay only)
+  deflateSignal = 0,  // increments on Skinny Jab -> quick squash-then-shrink
   active = true,      // false pauses the random event scheduler
   testID,
 }) {
@@ -180,6 +181,8 @@ export default function DrunkPigeon({
   const sigY = useSharedValue(0);
   const sigSX = useSharedValue(1);
   const sigSY = useSharedValue(1);
+  const defSX = useSharedValue(1); // Skinny Jab deflate squash
+  const defSY = useSharedValue(1);
 
   const [bubbles, setBubbles] = useState([]);
   const [hicShown, setHicShown] = useState(false);
@@ -234,7 +237,7 @@ export default function DrunkPigeon({
     bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => {
       mounted.current = false;
-      [sway, wob, bob, roll, hic, flail, bigWob, sigRot, sigY, sigSX, sigSY].forEach(cancelAnimation);
+      [sway, wob, bob, roll, hic, flail, bigWob, sigRot, sigY, sigSX, sigSY, defSX, defSY].forEach(cancelAnimation);
       timers.current.forEach(clearTimeout);
       timers.current = [];
     };
@@ -447,6 +450,21 @@ export default function DrunkPigeon({
     };
   }, [active, eyes]);
 
+  // Skinny Jab deflate: quick squash (fat & flat) then a bouncy shrink back to base.
+  useEffect(() => {
+    if (!deflateSignal) return;
+    defSX.value = withSequence(
+      withTiming(1.32, { duration: 110, easing: Easing.out(Easing.quad) }),
+      withTiming(0.9, { duration: 150, easing: Easing.inOut(Easing.sin) }),
+      withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) }),
+    );
+    defSY.value = withSequence(
+      withTiming(0.6, { duration: 110, easing: Easing.out(Easing.quad) }),
+      withTiming(1.1, { duration: 150, easing: Easing.inOut(Easing.sin) }),
+      withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) }),
+    );
+  }, [deflateSignal]);
+
   const bodyStyle = useAnimatedStyle(() => {
     const swayDeg = (sway.value - 0.5) * 2 * 10 * swayA;
     const wobDeg = (wob.value - 0.5) * 2 * 5 * wobA;
@@ -461,8 +479,8 @@ export default function DrunkPigeon({
       transform: [
         { translateY: bobPx + hicY + sigY.value },
         { rotate: `${leanDeg + swayDeg + wobDeg + rollDeg + flailDeg + bigDeg + sigRot.value}deg` },
-        { scaleX: (2 - flailScaleY) * hicScale * sigSX.value },
-        { scaleY: flailScaleY * hicScale * sigSY.value },
+        { scaleX: (2 - flailScaleY) * hicScale * sigSX.value * defSX.value },
+        { scaleY: flailScaleY * hicScale * sigSY.value * defSY.value },
       ],
     };
   });

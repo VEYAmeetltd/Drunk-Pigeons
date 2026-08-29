@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX } from '../components/GameEntities';
+import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -103,6 +103,8 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const [score, setScore] = useState(0);
   const [chips, setChips] = useState(0);
   const [fatChipsCur, setFatChipsCur] = useState(0); // currentFatness (resets on Skinny Jab); drives visible size
+  const [deflateN, setDeflateN] = useState(0); // increments on jab -> squash animation
+  const [skinnyKey, setSkinnyKey] = useState(0); // remounts the SKINNY AGAIN! toast
   const [obsGeom, setObsGeom] = useState(() =>
     Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ active: false, topH: 0, gap: CONFIG.GAP_BASE, kind: 0 }))
   );
@@ -135,7 +137,9 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   };
   cbRef.current.onSkinnyJab = () => {
     Audio.pop();
-    setFatChipsCur(0); // instant visible deflation to original size; total chips untouched
+    setFatChipsCur(0); // instant fatness reset; squash + toast add the comedic beat
+    setDeflateN((n) => n + 1);
+    setSkinnyKey((k) => k + 1);
   };
   cbRef.current.onPint = () => {
     Audio.pint();
@@ -330,10 +334,13 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       ))}
 
       {/* pigeon */}
-      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} />
+      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} />
 
       {/* Drunk soft-focus over the WORLD only (never moves it) — below the HUD */}
       <DrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />
+
+      {/* "SKINNY AGAIN!" toast on jab pickup — above the blur so it stays crisp */}
+      {skinnyKey > 0 && <SkinnyToast key={skinnyKey} />}
 
       {/* flap input layer (below HUD buttons) */}
       <Pressable

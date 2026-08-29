@@ -35,7 +35,7 @@ function rngFrom(seed) {
 // The drunk personality (sway, wobble, bob, hiccups, HIC!, bubbles, wing flail
 // and the 360° barrel roll) lives INSIDE, in DrunkPigeon, so it can never touch
 // physics — collision/hitbox use world.px/py + size only, not this visual transform.
-export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1 }) {
+export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1, deflateSignal = 0 }) {
   const size = pigeonSizeFor(fatLevel);
   const style = useAnimatedStyle(() => {
     const w = world.value;
@@ -58,10 +58,45 @@ export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 
   });
   return (
     <Animated.View style={[styles.abs, { width: size, height: size }, style]} pointerEvents="none">
-      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound testID="game-pigeon" />
+      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound deflateSignal={deflateSignal} testID="game-pigeon" />
     </Animated.View>
   );
 }
+
+/* "SKINNY AGAIN!" toast — flashes on Skinny Jab pickup, then fades. */
+export function SkinnyToast() {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.quad) });
+  }, []);
+  const st = useAnimatedStyle(() => {
+    const inA = Math.min(p.value / 0.14, 1);
+    const outA = p.value < 0.6 ? 1 : 1 - (p.value - 0.6) / 0.4;
+    return {
+      opacity: Math.max(0, Math.min(inA, outA)),
+      transform: [{ translateY: -p.value * 46 }, { scale: 0.6 + inA * 0.7 }, { rotate: `${(p.value - 0.5) * 10}deg` }],
+    };
+  });
+  return (
+    <View pointerEvents="none" style={skinnyStyles.host}>
+      <Animated.Text style={[skinnyStyles.txt, st]}>SKINNY AGAIN!</Animated.Text>
+    </View>
+  );
+}
+
+const skinnyStyles = StyleSheet.create({
+  host: { position: 'absolute', top: '32%', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
+  txt: {
+    fontFamily: FONT,
+    color: '#7ef0c0',
+    fontWeight: '900',
+    fontSize: 34,
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 4,
+  },
+});
 
 /* ---------------- Obstacle ---------------- */
 export function ObstacleView({ world, index, geom, theme, screenH }) {
