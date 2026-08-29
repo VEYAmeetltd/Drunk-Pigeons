@@ -386,7 +386,7 @@ export default function DrunkPigeon({
     const runEvent = (kind) => {
       if (kind === 'sig') {
         const now = Date.now();
-        const cd = (diag ? 1400 : prof.sigCd) * (boost ? 0.6 : 1);
+        const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boost ? 0.6 : 1);
         if (now - lastSig.current < cd) { spawnBubbles(2); return 700; }
         lastSig.current = now;
         return runSignature(fs);
@@ -399,16 +399,25 @@ export default function DrunkPigeon({
       return 700;
     };
 
+    let first = true;
     const tick = () => {
       if (stopped || !mounted.current) return;
-      const kind = diag && Math.random() < 0.6 ? 'sig' : weightedPick(prof.weights);
+      let kind;
+      if (first) {
+        first = false;
+        kind = 'sig';
+        lastSig.current = 0; // allow the very first signature immediately
+      } else {
+        kind = diag && Math.random() < 0.6 ? 'sig' : weightedPick(prof.weights);
+      }
       const dur = runEvent(kind);
       const [lo, hi] = prof.cadence;
-      const gapBase = diag ? rand(500, 900) : calm ? rand(lo * 1.5, hi * 1.5) : rand(lo, hi);
-      const gap = gapBase * (boost ? 0.6 : 1);
+      // Keep personality lively so it is unmistakable even in short runs.
+      const gapBase = diag ? rand(400, 800) : calm ? rand(lo * 0.9, hi * 0.9) : rand(lo * 0.5, hi * 0.5);
+      const gap = gapBase * (boost ? 0.55 : 1);
       pushTimer(tick, dur + gap);
     };
-    pushTimer(tick, diag ? 500 : calm ? 1400 : 800);
+    pushTimer(tick, diag ? 400 : 650);
     const amb = setInterval(() => spawnBubbles(1), diag ? 700 : calm ? 2600 : 1600);
     return () => {
       stopped = true;
@@ -433,15 +442,15 @@ export default function DrunkPigeon({
   }, [active, eyes]);
 
   const bodyStyle = useAnimatedStyle(() => {
-    const swayDeg = (sway.value - 0.5) * 2 * 6 * swayA;
-    const wobDeg = (wob.value - 0.5) * 2 * 3 * wobA;
-    const bobPx = (bob.value - 0.5) * 2 * size * 0.045 * bobA;
+    const swayDeg = (sway.value - 0.5) * 2 * 10 * swayA;
+    const wobDeg = (wob.value - 0.5) * 2 * 5 * wobA;
+    const bobPx = (bob.value - 0.5) * 2 * size * 0.07 * bobA;
     const rollDeg = roll.value * 360;
-    const flailDeg = Math.sin(flail.value * Math.PI * 8) * 10 * amp;
-    const flailScaleY = 1 + Math.sin(flail.value * Math.PI * 8) * 0.07;
-    const bigDeg = bigWob.value * 15 * amp;
-    const hicY = -hic.value * size * 0.09;
-    const hicScale = 1 + hic.value * 0.09;
+    const flailDeg = Math.sin(flail.value * Math.PI * 8) * 12 * amp;
+    const flailScaleY = 1 + Math.sin(flail.value * Math.PI * 8) * 0.08;
+    const bigDeg = bigWob.value * 18 * amp;
+    const hicY = -hic.value * size * 0.1;
+    const hicScale = 1 + hic.value * 0.1;
     return {
       transform: [
         { translateY: bobPx + hicY + sigY.value },
