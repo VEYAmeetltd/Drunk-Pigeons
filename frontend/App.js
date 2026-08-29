@@ -11,7 +11,7 @@ import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboar
 import { Audio } from './src/audio/audio';
 import { loadFonts, COLORS } from './src/ui/theme';
 import { getPigeon } from './src/data/pigeons';
-import { getMap, modeForSelection } from './src/data/maps';
+import { modeForSelection } from './src/data/maps';
 import { Billing } from './src/store/billing';
 import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
 

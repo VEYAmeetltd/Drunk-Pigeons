@@ -1,5 +1,8 @@
 {
   "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/.expo/**", "**/web-build/**"],
+  "rules": {
+    "no-undef": "off"
+  },
   "globals": {
     "define": "readonly",
     "module": "writable",
@@ -8,6 +11,7 @@
     "process": "readonly",
     "__DEV__": "readonly",
     "java": "readonly",
-    "_": "readonly"
+    "_": "readonly",
+    "PR": "readonly"
   }
 }

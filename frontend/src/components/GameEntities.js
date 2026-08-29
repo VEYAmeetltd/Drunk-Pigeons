@@ -89,9 +89,15 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
 function Building({ height, theme, seed, flip, ground }) {
   const cfg = useMemo(() => {
     const r = rngFrom((seed || 1) + (flip ? 7777 : 13));
-    const bodyF = 0.82 + r() * 0.36;
-    const body = shade(theme.obstacle, bodyF);
-    const border = shade(theme.obstacle, bodyF * 0.68);
+    const bricks = theme.brickPalette && theme.brickPalette.length ? theme.brickPalette : [theme.obstacle];
+    const base = bricks[Math.floor(r() * bricks.length)] || theme.obstacle;
+    const bodyF = 0.9 + r() * 0.2;
+    const body = shade(base, bodyF);
+    const border = shade(base, bodyF * 0.66);
+    const roofs = theme.roofPalette && theme.roofPalette.length ? theme.roofPalette : [border];
+    const roofColor = roofs[Math.floor(r() * roofs.length)] || border;
+    const doors = theme.doorPalette && theme.doorPalette.length ? theme.doorPalette : [shade(base, 0.5)];
+    const doorColor = doors[Math.floor(r() * doors.length)] || shade(base, 0.5);
     const type = Math.floor(r() * 5); // 0 residential 1 rundown 2 commercial 3 pub 4 office
     const cols = type === 2 || type === 3 ? 1 : r() > 0.35 ? 2 : 1;
     const roof = Math.floor(r() * 3); // 0 flat bar, 1 parapet, 2 pitched
@@ -101,7 +107,7 @@ function Building({ height, theme, seed, flip, ground }) {
     const balcony = type === 0 && r() > 0.55;
     const front = ground ? (type === 3 ? 'pub' : type === 2 ? 'shop' : 'door') : null;
     const litSeed = r();
-    return { body, border, type, cols, roof, chimneys, antenna, drainpipe, balcony, front, litSeed };
+    return { body, border, roofColor, doorColor, type, cols, roof, chimneys, antenna, drainpipe, balcony, front, litSeed };
   }, [seed, flip, ground, theme]);
 
   const rows = useMemo(() => {
@@ -117,7 +123,7 @@ function Building({ height, theme, seed, flip, ground }) {
   return (
     <View style={[obStyles.col, { height, backgroundColor: cfg.body, borderColor: cfg.border }]}>
       {/* roof / parapet on the gap-facing edge */}
-      <Roof roof={cfg.roof} flip={flip} color={cfg.border} />
+      <Roof roof={cfg.roof} flip={flip} color={cfg.roofColor} />
       <View style={[obStyles.edgeDeco, edgeStyle]} pointerEvents="none">
         {Array.from({ length: cfg.chimneys }).map((_, i) => (
           <View
@@ -194,7 +200,7 @@ function Building({ height, theme, seed, flip, ground }) {
               <View style={obStyles.signDot} />
             </View>
           )}
-          <View style={[obStyles.door, { backgroundColor: shade(theme.obstacle, 0.5) }]} />
+          <View style={[obStyles.door, { backgroundColor: cfg.doorColor }]} />
         </View>
       )}
     </View>
@@ -263,12 +269,14 @@ export function ChipView({ world, index }) {
   return (
     <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
       <Svg width={S} height={S} viewBox="0 0 32 32">
+        {/* soft contrast halo so the crisp stays visible on bright/busy skies */}
+        <Circle cx="16" cy="16" r="15" fill="rgba(35,22,5,0.16)" />
         {/* irregular curved potato-crisp body */}
         <Path
           d="M6.5 15 C4 8 10 4.5 15 4.5 C20.5 4.5 27 7 27.5 13 C28 18 25 22 21 25 C17 28 10.5 27.5 8 23 C6 19.5 7.5 17 6.5 15 Z"
           fill="#f2b83a"
-          stroke="#c9861a"
-          strokeWidth="1.4"
+          stroke="#a86a12"
+          strokeWidth="1.7"
         />
         {/* darker toasted patches for texture */}
         <Path d="M11 19 C13 21 17 21 19 19" stroke="#d99a24" strokeWidth="1.2" fill="none" opacity="0.7" />

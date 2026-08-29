@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 10: Regression-tested visual-only manor polish (rebuilt Background.js parallax, expanded palettes in maps.js, per-manor obstacle colour variety, ChipView halo). Mobile viewport 430x920. Verified all 5 map tiles load and PLAY without runtime errors: map-day (Sunny London), map-night (Gritty), map-dusk (Chippy Sunset), map-random, map-easy. For each standard manor: play-button launches game, flap-area mounts, keyboard Space flaps, HUDs (distance-hud/score-hud/chip-hud) update, heckler element appears with data-testid='heckler' during the run, and on crash the Game Over overlay renders with PLAY AGAIN + REVIVE (dev) + MAIN MENU. PLAY AGAIN starts a fresh run (distance resets to 5m, flap-area re-mounts). REVIVE (dev) continues the run — survived to 22m and score-hud incremented to 1 (obstacle gap cleared → obstacles + collision + scoring intact). Screen-wide tap flap works: mouse.click at top/mid/bottom of flap-area all register (background decorative layers correctly use pointerEvents=none, don't block input). Easy Mode DEV purchase path (map-easy → easy-purchase-sheet → easy-sim-success) unlocks and auto-selects Easy; PLAY launches Easy Mode which renders the peaceful green rolling-hills background (visible in easy_playing.png and behind game-over overlay). Random Manor plays with a STANDARD manor palette (verified in prior iteration and again here — no green Easy hills leaked). CONSOLE: 0 page errors, 0 JS runtime errors across 5+ full run cycles including Background.js/GameEntities.js/engine.js code paths. Only pre-existing RN Web deprecation warnings ('shadow*' / 'textShadow*' / 'pointerEvents deprecated') — cosmetic, non-blocking, unchanged from iteration_9. No SVG prop errors from PropSvg/DistantSvg. Heckler bubble was visually anchored to building windows in every observed appearance (no orphan bubbles). Gameplay difficulty on standard maps is unchanged (engine.js untouched, gaps/speed feel identical). NOTE: bot Space-flapping is imprecise; chip-hud remained 0 because random chips didn't align with the bot flap pattern, but score=1 proves obstacle-passing mechanics work and the chip halo change is visual-only (behind ChipView, cannot affect collision). No regression detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "RN Web console", "issues": ["Pre-existing (not from this change): 'shadow*'/'textShadow*'/'pointerEvents' style props deprecation warnings — cosmetic, no impact."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Background.js correctly sets pointerEvents='none' on every layer (sky, clouds, distant landmarks, skyline, props, ground) — screen-wide tap flap is preserved. Verified by clicking top/mid/bottom of flap-area with no click-swallow.",
+    "ChipView halo is a purely decorative Circle rendered BEHIND the chip in the same SVG group; it cannot affect the chip's hitbox because collision is computed in engine.js against chip {x,y,r} — no regression risk.",
+    "GameEntities.Building() picks brick/roof/door colours from theme palette arrays but OBSTACLE_WIDTH and top/bottom rects are unchanged — geometry & collision boxes identical. Confirmed score increments on standard maps.",
+    "HecklerView still consumes theme.window/theme.obstacleDark and is positioned relative to a Building instance; no orphan bubbles observed across all 4 standard-map runs.",
+    "Consider suppressing the 'pointerEvents is deprecated' warning by migrating to style.pointerEvents in RN Web — cleaner console but low priority."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% of tested visual-polish regression paths"},
+  "test_credentials": "None — anonymous playerId.",
+  "seed_data_creation": "None (no backend writes performed this iteration beyond incidental run submissions from short crashes; all ≤22m distance, well below flag thresholds).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Visual-only manor polish is stable. If future iterations touch Background.js/GameEntities.js again, re-run: (1) all 5 map tiles → play → verify flap-area + no console errors; (2) screen-wide tap at top/mid/bottom of flap-area; (3) REVIVE + long flap to reach score>=1 confirming obstacle geometry intact; (4) Easy purchase via easy-sim-success then PLAY → confirm green hills render. Bot flapping cannot reliably collect chips, but chip-hud existence + halo being a background SVG element means collision cannot be affected — code review is sufficient for chip regression.",
+  "rca of the issue": "N/A — no bugs found."
+}
