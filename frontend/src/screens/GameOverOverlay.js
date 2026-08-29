@@ -36,15 +36,19 @@ export default function GameOverOverlay({
         </View>
 
         <Button testID="play-again-button" label="PLAY AGAIN" variant="primary" onPress={onPlayAgain} style={styles.btn} />
-        <Button
-          testID="revive-button"
-          label={reviveBusy ? 'LOADING AD…' : canRevive ? 'REVIVE' : 'REVIVE USED'}
-          variant={canRevive && !reviveBusy ? 'teal' : 'ghost'}
-          onPress={canRevive && !reviveBusy ? onRevive : undefined}
-          style={[styles.btn, (!canRevive || reviveBusy) && { opacity: 0.5 }]}
-        />
-        {canRevive && !reviveMsg && <Text style={styles.devNote}>Watch an ad to continue</Text>}
-        {!!reviveMsg && <Text style={styles.reviveMsg} testID="revive-unavailable">{reviveMsg}</Text>}
+        {canRevive && (
+          <>
+            <Button
+              testID="revive-button"
+              label={reviveBusy ? 'LOADING AD…' : 'REVIVE'}
+              variant={reviveBusy ? 'ghost' : 'teal'}
+              onPress={reviveBusy ? undefined : onRevive}
+              style={[styles.btn, reviveBusy && { opacity: 0.5 }]}
+            />
+            {!reviveMsg && <Text style={styles.devNote}>Watch an ad to continue</Text>}
+            {!!reviveMsg && <Text style={styles.reviveMsg} testID="revive-unavailable">{reviveMsg}</Text>}
+          </>
+        )}
         <Button testID="menu-button" label="MAIN MENU" variant="ghost" onPress={onMenu} style={styles.btn} />
       </View>
     </View>
