@@ -7,7 +7,8 @@ import { FONT, COLORS } from '../ui/theme';
 import PigeonSprite from '../components/PigeonSprite';
 import SecretCode from '../components/SecretCode';
 import { getPigeon } from '../data/pigeons';
-import { MAPS } from '../data/maps';
+import { MAPS, EASY_MAP } from '../data/maps';
+import { Billing } from '../store/billing';
 import { Audio } from '../audio/audio';
 
 export default function MainMenu({
@@ -17,15 +18,22 @@ export default function MainMenu({
   selectedPigeon,
   selectedMap,
   leetUnlock,
+  easyModeOwned = false,
+  easyPrice = '£14.99',
+  isDev = false,
   onPlay,
   onPigeons,
   onSelectMap,
+  onBuyEasy,
   onToggleSound,
   onLeetUnlock,
   onLeaderboard,
 }) {
   const pigeon = getPigeon(selectedPigeon);
   const [showCode, setShowCode] = useState(false);
+  const [easySheet, setEasySheet] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [purchaseMsg, setPurchaseMsg] = useState('');
   const bob = useSharedValue(0);
   React.useEffect(() => {
     bob.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
@@ -33,6 +41,44 @@ export default function MainMenu({
   const pigeonStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -10 + bob.value * 20 }, { rotate: `${-6 + bob.value * 12}deg` }],
   }));
+
+  const openEasySheet = () => {
+    Audio.unlock();
+    Audio.ui();
+    setPurchaseMsg('');
+    setEasySheet(true);
+  };
+  const closeEasySheet = () => {
+    setEasySheet(false);
+    setBusy(false);
+    setPurchaseMsg('');
+  };
+  const runEasyPurchase = async (devOutcome) => {
+    if (busy) return;
+    setBusy(true);
+    setPurchaseMsg('');
+    const status = await onBuyEasy(devOutcome);
+    setBusy(false);
+    if (status === 'success') {
+      Audio.highscore();
+      setEasySheet(false);
+      onSelectMap('easy'); // immediately selectable/selected, no restart needed
+    } else if (status === 'cancelled') {
+      closeEasySheet(); // nothing happens
+    } else {
+      Audio.crash();
+      setPurchaseMsg("PURCHASE COULDN'T BE COMPLETED");
+    }
+  };
+
+  const onManorPress = (id) => {
+    if (id === 'easy' && !easyModeOwned) {
+      openEasySheet();
+      return;
+    }
+    Audio.ui();
+    onSelectMap(id);
+  };
 
   return (
     <SafeAreaView style={styles.root}>
@@ -68,24 +114,54 @@ export default function MainMenu({
         <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
       </View>
 
-      <Text style={styles.mapLabel}>PICK YOUR MANOR</Text>
+      <Text style={styles.mapLabel}>CHOOSE YOUR MANOR</Text>
       <View style={styles.maps}>
         {MAPS.map((m) => (
           <Pressable
             key={m.id}
             testID={`map-${m.id}`}
-            onPress={() => {
-              Audio.ui();
-              onSelectMap(m.id);
-            }}
+            onPress={() => onManorPress(m.id)}
             style={[styles.mapCard, selectedMap === m.id && styles.mapCardActive]}
           >
             <View style={[styles.mapSwatch, { backgroundColor: m.skyTop }]}>
               <View style={[styles.mapSwatchGround, { backgroundColor: m.ground }]} />
             </View>
-            <Text style={styles.mapName}>{m.name}</Text>
+            <Text style={styles.mapName} numberOfLines={1}>{m.name}</Text>
           </Pressable>
         ))}
+
+        {/* RANDOM MANOR — picks one of the 3 standard maps each run (never Easy Mode) */}
+        <Pressable
+          testID="map-random"
+          onPress={() => onManorPress('random')}
+          style={[styles.mapCard, selectedMap === 'random' && styles.mapCardActive]}
+        >
+          <View style={styles.randomSwatch}>
+            {MAPS.map((m) => (
+              <View key={m.id} style={[styles.randomStripe, { backgroundColor: m.skyTop }]} />
+            ))}
+            <View style={styles.randomQ}><Text style={styles.randomQTxt}>?</Text></View>
+          </View>
+          <Text style={styles.mapName} numberOfLines={1}>Random</Text>
+        </Pressable>
+
+        {/* EASY MODE — premium £14.99. Always visible; locked until purchased. */}
+        <Pressable
+          testID="map-easy"
+          onPress={() => onManorPress('easy')}
+          style={[styles.mapCard, selectedMap === 'easy' && styles.mapCardActive, styles.easyCard]}
+        >
+          <View style={[styles.mapSwatch, { backgroundColor: EASY_MAP.skyTop }]}>
+            <View style={[styles.mapSwatchGround, { backgroundColor: EASY_MAP.ground }]} />
+            {!easyModeOwned && (
+              <View style={styles.easyLock} testID="easy-lock">
+                <Text style={styles.easyLockTxt}>🔒</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.mapName} numberOfLines={1}>Easy Mode</Text>
+          {!easyModeOwned && <Text style={styles.easyPrice} testID="easy-price">{easyPrice}</Text>}
+        </Pressable>
       </View>
 
       <View style={styles.buttons}>
@@ -101,6 +177,35 @@ export default function MainMenu({
       />
 
       <SecretCode visible={showCode} onClose={() => setShowCode(false)} onUnlock={onLeetUnlock} />
+
+      {/* EASY MODE purchase sheet — deliberate, no auto-start, no nagging */}
+      {easySheet && (
+        <View style={styles.sheetOverlay} testID="easy-purchase-sheet" onStartShouldSetResponder={() => true}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetKicker}>EASY MODE</Text>
+            <Text style={styles.sheetPrice} testID="easy-sheet-price">{easyPrice}</Text>
+            <Text style={styles.sheetBlurb}>An absurdly easy version of Drunk Pigeons. Huge gaps, endless calm. Scores go to the Silly Mode leaderboard only.</Text>
+            <Text style={styles.sheetNote}>
+              {Billing.platform === 'ios' ? 'Billed via the App Store · one-time purchase' : Billing.platform === 'android' ? 'Billed via Google Play · one-time purchase' : 'Billed via your app store · one-time purchase'}
+            </Text>
+            {!!purchaseMsg && <Text style={styles.sheetError} testID="easy-purchase-error">{purchaseMsg}</Text>}
+
+            {isDev ? (
+              <>
+                <Text style={styles.devTag}>DEV SIMULATOR</Text>
+                <Button testID="easy-sim-success" label={busy ? '…' : 'Simulate Success'} variant="teal" small onPress={() => runEasyPurchase('success')} style={styles.sheetBtn} />
+                <View style={styles.simRow}>
+                  <Button testID="easy-sim-cancel" label="Cancelled" variant="ghost" small onPress={() => runEasyPurchase('cancelled')} style={{ flex: 1 }} />
+                  <Button testID="easy-sim-fail" label="Failed" variant="ghost" small onPress={() => runEasyPurchase('failed')} style={{ flex: 1 }} />
+                </View>
+              </>
+            ) : (
+              <Button testID="easy-buy-confirm" label={busy ? '…' : `BUY — ${easyPrice}`} variant="primary" onPress={() => runEasyPurchase('success')} style={styles.sheetBtn} />
+            )}
+            <Button testID="easy-buy-cancel" label="CANCEL" variant="ghost" small onPress={closeEasySheet} style={styles.sheetBtn} />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -137,11 +242,29 @@ const styles = StyleSheet.create({
   statLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontWeight: '600', letterSpacing: 1 },
   statValue: { fontFamily: FONT, fontSize: 30, fontWeight: '700' },
   mapLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 2, marginTop: 16, fontWeight: '600' },
-  maps: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  maps: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' },
   mapCard: { backgroundColor: COLORS.card, borderRadius: 14, padding: 8, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', width: 96 },
   mapCardActive: { borderColor: COLORS.yellow },
   mapSwatch: { width: 74, height: 44, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-end' },
   mapSwatchGround: { height: 14, width: '100%' },
   mapName: { fontFamily: FONT, color: COLORS.text, fontSize: 11, marginTop: 6, fontWeight: '600', textAlign: 'center' },
+  randomSwatch: { width: 74, height: 44, borderRadius: 8, overflow: 'hidden', flexDirection: 'row' },
+  randomStripe: { flex: 1, height: '100%' },
+  randomQ: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  randomQTxt: { fontFamily: FONT, color: '#fff', fontSize: 24, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
+  easyCard: { borderColor: 'rgba(126,200,242,0.35)' },
+  easyLock: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(20,12,40,0.42)' },
+  easyLockTxt: { fontSize: 20 },
+  easyPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 12, fontWeight: '700', marginTop: 2 },
   buttons: { flexDirection: 'row', gap: 14, marginTop: 22, width: '100%', marginBottom: 10 },
+  sheetOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.85)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 60 },
+  sheet: { width: '100%', maxWidth: 360, backgroundColor: COLORS.card, borderRadius: 24, padding: 22, alignItems: 'center' },
+  sheetKicker: { fontFamily: FONT, color: COLORS.teal, fontSize: 16, fontWeight: '700', letterSpacing: 3 },
+  sheetPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 40, fontWeight: '700', marginTop: 4 },
+  sheetBlurb: { fontFamily: FONT, color: COLORS.text, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  sheetNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, marginTop: 8, textAlign: 'center' },
+  sheetError: { fontFamily: FONT, color: COLORS.pink, fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center' },
+  devTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, letterSpacing: 2, marginTop: 14 },
+  sheetBtn: { width: '100%', marginTop: 10 },
+  simRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
 });

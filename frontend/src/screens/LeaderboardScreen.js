@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
@@ -15,10 +15,12 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  const [board, setBoard] = useState('normal'); // 'normal' (Global) | 'silly' (Easy Mode)
+  const isSilly = board === 'silly';
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await LeaderboardAPI.top(playerId);
+    const res = await LeaderboardAPI.top(playerId, isSilly ? 'easy' : 'normal');
     if (!res || !res.ok) {
       setOffline(true);
     } else {
@@ -27,7 +29,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       setYou(res.you || null);
     }
     setLoading(false);
-  }, [playerId]);
+  }, [playerId, isSilly]);
 
   useEffect(() => {
     load();
@@ -52,9 +54,21 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
         <Button testID="leaderboard-back" label="BACK" variant="ghost" small onPress={onBack} />
-        <Text style={styles.title}>🏆 GLOBAL</Text>
-        <View style={{ width: 70 }} />
+        <Text style={styles.title} testID="leaderboard-title">{isSilly ? '🏆 SILLY MODE' : '🏆 GLOBAL'}</Text>
+        {isSilly ? (
+          <Pressable testID="show-global" onPress={() => { Audio.ui(); setBoard('normal'); }} style={styles.toggle}>
+            <Text style={styles.toggleTxt}>‹ GLOBAL</Text>
+          </Pressable>
+        ) : (
+          <Pressable testID="show-silly" onPress={() => { Audio.ui(); setBoard('silly'); }} style={styles.sillyToggle}>
+            <Text style={styles.sillyToggleTxt}>🏆</Text>
+            <Text style={styles.sillyToggleLabel}>SILLY</Text>
+          </Pressable>
+        )}
       </View>
+      {isSilly && (
+        <Text style={styles.sillyNote} testID="silly-note">Easy Mode distances only — separate from Global.</Text>
+      )}
 
       {!nickname && !offline && (
         <View style={styles.nameCard}>
@@ -115,6 +129,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
   title: { fontFamily: FONT, color: COLORS.yellow, fontSize: 26, fontWeight: '700', letterSpacing: 2 },
+  toggle: { width: 70, alignItems: 'flex-end', paddingVertical: 6 },
+  toggleTxt: { fontFamily: FONT, color: COLORS.teal, fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  sillyToggle: { width: 70, alignItems: 'center', backgroundColor: COLORS.bgAlt, borderRadius: 12, paddingVertical: 4 },
+  sillyToggleTxt: { fontSize: 16 },
+  sillyToggleLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 1, marginTop: -1 },
+  sillyNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, textAlign: 'center', marginTop: 6, fontStyle: 'italic' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   offTitle: { fontFamily: FONT, color: COLORS.pink, fontSize: 20, fontWeight: '700', letterSpacing: 1 },
   offSub: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, marginTop: 6 },

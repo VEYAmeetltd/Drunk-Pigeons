@@ -39,11 +39,14 @@ async function post(path, body, timeout = 6000) {
 export const LeaderboardAPI = {
   register: (playerId, nickname) => post('/register', { playerId, nickname }),
   submit: (payload) => post('/submit', payload),
-  async top(playerId) {
+  async top(playerId, mode = 'normal') {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);
     try {
-      const q = playerId ? `?playerId=${encodeURIComponent(playerId)}` : '';
+      const params = [];
+      if (playerId) params.push(`playerId=${encodeURIComponent(playerId)}`);
+      if (mode) params.push(`mode=${encodeURIComponent(mode)}`);
+      const q = params.length ? `?${params.join('&')}` : '';
       const res = await fetch(`${API}/top${q}`, { signal: ctrl.signal });
       return await res.json();
     } catch {

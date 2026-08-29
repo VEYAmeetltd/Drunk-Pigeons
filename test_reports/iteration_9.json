@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 9: Tested new Easy Mode (£14.99) + Silly leaderboard + Random Manor + mode-based backend routing. Created /app/backend/tests/test_mode_leaderboard.py (18 pytest cases, ALL PASSING) covering: mode='normal' only writes to bestDistance (Global) and only appears in /top?mode=normal; mode='easy' only writes to sillyBestDistance and only appears in /top?mode=easy; two bests are fully independent per player; long legit Easy runs 18000m/1600s and 30000m/2500s ACCEPTED (below FLAG_DISTANCE_EASY=250000); normal-mode flag still enforced at 40000m (45000m/3200s flagged, not in Global top); anti-cheat still rejects negative, too-fast, duplicate runId, bad ids, NaN in BOTH modes; easy-magnitude run (22000m) NEVER surfaces in Global top; default mode=normal; unknown mode string coerced to normal. Frontend UI (viewport 430x920): all 5 manor tiles present (map-day/night/dusk/random/easy); Easy tile shows easy-lock + easy-price '£14.99' when unowned; tapping map-easy opens easy-purchase-sheet with '£14.99' via easy-sheet-price + DEV SIMULATOR (easy-sim-success, easy-sim-cancel, easy-sim-fail, easy-buy-cancel). easy-sim-cancel closes sheet, still locked; easy-sim-fail shows easy-purchase-error 'PURCHASE COULDN'T BE COMPLETED', still locked; easy-sim-success closes sheet, easy-lock & easy-price disappear, Easy Mode auto-selected (yellow border), no app restart. Pressing PLAY starts a run (flap-area present) — game runs without errors. Random tile is selectable + PLAY launches a game using a STANDARD-map palette (verified from crash-screen background — Chippy Sunset red obstacles, not the Easy green). Leaderboard defaults to '🏆 GLOBAL' with show-silly toggle; tapping switches to '🏆 SILLY MODE' with silly-note ('Easy Mode distances only — separate from Global.') and show-global control. Global top-5 vs Silly top-5 data confirmed DIFFERENT (Global: BestPigeon3000m, NormOnly1200m, FatPigeon69842m…; Silly: Silly30k30000m, Guard22000m, SepTest18000m…). Nickname shared across both boards (no re-prompt on Silly). 1000m blackout NOT re-tested per main agent instruction. Note: Silly top includes seed rows created by earlier and this iteration's backend tests (Silly30k, Guard, SepTest, Silly18k, Both…) — expected/harmless.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "RN Web console", "issues": ["Non-blocking warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — RN Web deprecation, cosmetic only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mode_leaderboard.py",
+    "/app/backend/tests/test_leaderboard.py",
+    "/app/test_reports/pytest/mode_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: mode routing is server-decided via MODE_FIELD dict; norm_mode() coerces anything except 'easy' to 'normal' — solid guarantee Easy runs can't leak into Global.",
+    "Atomic $max on the mode-specific field means neither best ever decreases and modes never overwrite each other.",
+    "FLAG_DISTANCE_EASY=250000 is generous enough for legit long Silly runs and still bounds abuse; combined with MAX_MPS*1.15*dur+60 speed check it's a sensible tolerance envelope.",
+    "MainMenu.runEasyPurchase clears busy on failure and only calls onSelectMap('easy') on 'success' — cannot silently unlock on cancel/failure. onManorPress opens sheet strictly when !easyModeOwned, so tapping the tile after purchase selects (never re-prompts).",
+    "LeaderboardScreen board state defaults to 'normal' and calls LeaderboardAPI.top(playerId, mode) — clean separation. show-silly / show-global toggle is symmetric and stateless outside board.",
+    "Minor: BADWORDS list still blocks common words (e.g. 'sex') which some players may hit for benign names, but that's a product tradeoff, not a bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_mode_leaderboard.py"],
+  "success_rate": {"backend": "100% (18/18 new mode tests + 24/24 legacy)", "frontend": "100% of tested Easy purchase / Random / Leaderboard toggle paths"},
+  "test_credentials": "None — anonymous playerId.",
+  "seed_data_creation": "Backend tests created transient Silly30k*, Silly18k*, Guard*, Both*, NormOnly*, EasyOnly*, Def*, Unk*, Neg*, Fast*, Dup*, NaN*, NormBig* entries in players/runs/flagged collections. Some Silly top rows now show these players — cosmetic only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend URL from /app/frontend/.env. Reuse /app/backend/tests/test_mode_leaderboard.py + test_leaderboard.py as regression (42 tests total). Frontend viewport 430x920. Easy Mode purchase state persists in localStorage — clear storage / new incognito context to re-test the locked flow. Random and Day-map runs both work; game auto-crashes fast (~5-6m) without user flap so 'game started' verified via flap-area presence rather than distance. 1000m blackout was NOT retested per main agent instruction.",
+  "rca of the issue": "N/A — no bugs found."
+}

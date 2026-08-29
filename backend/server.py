@@ -35,7 +35,21 @@ MAX_MPS = SPEED_MAX / PIXELS_PER_METRE          # ~15.83 m/s absolute ceiling
 DIST_CAP = 100000            # technical hard cap (m)
 CHIP_CAP_RATIO = 1.2         # chips per metre plausibility ceiling
 FLAG_DISTANCE = 40000        # plausible-but-extreme -> flag, keep out of Top list
+# Easy Mode is deliberately survivable for very long, so legit runs reach far
+# higher distances than standard. Use a much higher flag ceiling so genuine Silly
+# Mode scores are not hidden. (Easy is SLOWER than standard, so the speed check
+# below is already a safe upper bound for it — no separate speed cap needed.)
+FLAG_DISTANCE_EASY = 250000
 NICK_MAX = 16
+
+# Per-player best-distance field for each gameplay ruleset. Standard runs use the
+# original 'bestDistance' (Global leaderboard); Easy Mode uses a completely
+# independent 'sillyBestDistance' (Silly Mode leaderboard). Never mixed.
+MODE_FIELD = {"normal": "bestDistance", "easy": "sillyBestDistance"}
+
+
+def norm_mode(m):
+    return "easy" if m == "easy" else "normal"
 
 BADWORDS = [
     "fuck", "shit", "cunt", "nigg", "faggot", "rape", "nazi", "paki", "retard",
@@ -95,6 +109,7 @@ class SubmitReq(BaseModel):
     runDuration: float
     reviveUsed: bool = False
     chipCount: int = 0
+    mode: str = "normal"  # 'normal' (standard maps -> Global) | 'easy' (Easy Mode -> Silly)
     gameVersion: str = "1.0.0"
 
 
@@ -103,6 +118,7 @@ async def _startup():
     await db.runs.create_index("runId", unique=True)
     await db.players.create_index("playerId", unique=True)
     await db.players.create_index([("bestDistance", -1)])
+    await db.players.create_index([("sillyBestDistance", -1)])
 
 
 @app.get("/api/health")
@@ -126,7 +142,7 @@ async def register(req: RegisterReq):
     return {"ok": True, "playerId": req.playerId, "nickname": name}
 
 
-def classify(req: SubmitReq):
+def classify(req: SubmitReq, mode: str):
     d = req.reportedDistance
     dur = req.runDuration
     # impossible / malformed
@@ -138,15 +154,19 @@ def classify(req: SubmitReq):
         return "rejected", "over-cap"
     if dur is None or math.isnan(dur) or math.isinf(dur) or dur <= 0 or dur > 7200:
         return "rejected", "bad-duration"
-    # distance-vs-time plausibility (with generous tolerance + startup buffer)
+    # distance-vs-time plausibility (with generous tolerance + startup buffer).
+    # MAX_MPS is the standard ceiling; Easy Mode is slower, so this is still a
+    # valid (lenient) upper bound for it.
     max_possible = dur * MAX_MPS * 1.15 + 60
     if d > max_possible:
         return "rejected", "too-fast"
     # chip sanity (secondary signal)
     if req.chipCount < 0 or req.chipCount > d * CHIP_CAP_RATIO + 30:
         return "rejected", "chips"
-    # plausible but extreme -> flag (kept out of visible Top)
-    if d >= FLAG_DISTANCE:
+    # plausible but extreme -> flag (kept out of visible Top). Easy Mode tolerates
+    # far larger legit distances.
+    flag_at = FLAG_DISTANCE_EASY if mode == "easy" else FLAG_DISTANCE
+    if d >= flag_at:
         return "flagged", "extreme"
     return "accepted", "ok"
 
@@ -158,16 +178,22 @@ async def submit(req: SubmitReq):
     if rate_limited(req.playerId):
         return {"ok": False, "error": "rate-limited"}
 
+    # Server decides the ruleset field from the (validated) mode. This is what
+    # keeps Easy Mode runs out of the Global leaderboard: an Easy run can only
+    # ever write to sillyBestDistance, never bestDistance.
+    mode = norm_mode(req.mode)
+    field = MODE_FIELD[mode]
+
     # replay protection: each runId processed once
     try:
         await db.runs.insert_one(
-            {"runId": req.runId, "playerId": req.playerId,
+            {"runId": req.runId, "playerId": req.playerId, "mode": mode,
              "at": datetime.now(timezone.utc).isoformat()}
         )
     except Exception:
         return {"ok": False, "error": "duplicate-run"}
 
-    status, reason = classify(req)
+    status, reason = classify(req, mode)
     d = float(req.reportedDistance)
 
     # ensure player exists (nickname may come with submit for first-timers)
@@ -176,20 +202,22 @@ async def submit(req: SubmitReq):
     if not player and name:
         await db.players.insert_one(
             {"playerId": req.playerId, "nickname": name, "bestDistance": 0,
-             "status": "accepted", "updatedAt": datetime.now(timezone.utc).isoformat()}
+             "sillyBestDistance": 0, "status": "accepted",
+             "updatedAt": datetime.now(timezone.utc).isoformat()}
         )
 
     if status != "accepted":
         # record attempt but never let it reach the visible leaderboard
         await db.flagged.insert_one(
             {"playerId": req.playerId, "runId": req.runId, "distance": d,
-             "status": status, "reason": reason,
+             "mode": mode, "status": status, "reason": reason,
              "at": datetime.now(timezone.utc).isoformat()}
         )
         cur = await db.players.find_one({"playerId": req.playerId}) or {}
-        return {"ok": True, "status": status, "bestDistance": cur.get("bestDistance", 0)}
+        return {"ok": True, "status": status, "mode": mode,
+                "bestDistance": cur.get(field, 0)}
 
-    # atomic max update: best never decreases
+    # atomic max update on the mode-specific field: best never decreases
     set_fields = {"updatedAt": datetime.now(timezone.utc).isoformat()}
     if name:
         set_fields["nickname"] = name
@@ -197,36 +225,38 @@ async def submit(req: SubmitReq):
         {"playerId": req.playerId},
         [{"$set": {
             **set_fields,
-            "bestDistance": {"$max": [{"$ifNull": ["$bestDistance", 0]}, d]},
+            field: {"$max": [{"$ifNull": ["$" + field, 0]}, d]},
         }}],
         upsert=True,
     )
     cur = await db.players.find_one({"playerId": req.playerId})
-    best = cur.get("bestDistance", 0)
-    rank = await db.players.count_documents({"bestDistance": {"$gt": best}}) + 1
-    return {"ok": True, "status": "accepted", "bestDistance": best, "rank": rank}
+    best = cur.get(field, 0)
+    rank = await db.players.count_documents({field: {"$gt": best}}) + 1
+    return {"ok": True, "status": "accepted", "mode": mode,
+            "bestDistance": best, "rank": rank}
 
 
 @app.get("/api/leaderboard/top")
-async def top(playerId: str | None = None, limit: int = 100):
+async def top(playerId: str | None = None, mode: str = "normal", limit: int = 100):
     limit = max(1, min(100, limit))
+    field = MODE_FIELD[norm_mode(mode)]
     cursor = db.players.find(
-        {"bestDistance": {"$gt": 0}}, {"_id": 0, "nickname": 1, "bestDistance": 1, "playerId": 1}
-    ).sort("bestDistance", -1).limit(limit)
+        {field: {"$gt": 0}}, {"_id": 0, "nickname": 1, field: 1, "playerId": 1}
+    ).sort(field, -1).limit(limit)
     rows = await cursor.to_list(length=limit)
     top_list = []
     you = None
     for i, r in enumerate(rows):
         entry = {"rank": i + 1, "nickname": r.get("nickname", "Pigeon"),
-                 "bestDistance": int(r.get("bestDistance", 0)),
+                 "bestDistance": int(r.get(field, 0)),
                  "isYou": playerId is not None and r.get("playerId") == playerId}
         top_list.append(entry)
 
     if playerId:
         me = await db.players.find_one({"playerId": playerId})
-        if me and me.get("bestDistance", 0) > 0:
-            best = me.get("bestDistance", 0)
-            rank = await db.players.count_documents({"bestDistance": {"$gt": best}}) + 1
+        if me and me.get(field, 0) > 0:
+            best = me.get(field, 0)
+            rank = await db.players.count_documents({field: {"$gt": best}}) + 1
             you = {"rank": rank, "nickname": me.get("nickname", "Pigeon"),
                    "bestDistance": int(best), "inTop": rank <= len(top_list)}
-    return {"ok": True, "top": top_list, "you": you}
+    return {"ok": True, "mode": norm_mode(mode), "top": top_list, "you": you}

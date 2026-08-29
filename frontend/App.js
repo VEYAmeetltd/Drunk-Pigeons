@@ -11,9 +11,9 @@ import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboar
 import { Audio } from './src/audio/audio';
 import { loadFonts, COLORS } from './src/ui/theme';
 import { getPigeon } from './src/data/pigeons';
-import { getMap } from './src/data/maps';
+import { getMap, modeForSelection } from './src/data/maps';
 import { Billing } from './src/store/billing';
-import { PRODUCTS } from './src/store/products';
+import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -21,6 +21,7 @@ export default function App() {
   const [state, setState] = useState({
     bestScore: 0,
     bestDistance: 0,
+    bestDistanceSilly: 0,
     pigeonsInjured: 0,
     soundEnabled: true,
     selectedPigeon: 'classic',
@@ -29,6 +30,7 @@ export default function App() {
     leetUnlock: false,
     purchasedPigeons: [],
     bundleOwned: false,
+    easyModeOwned: false,
   });
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function App() {
   const update = useCallback((patch) => setState((s) => ({ ...s, ...patch })), []);
 
   // Leaderboard identity (kept in a ref for stale-free access inside async crash handler)
-  const lbRef = useRef({ playerId: '', nickname: '', submittedBest: 0 });
+  const lbRef = useRef({ playerId: '', nickname: '', submittedBest: 0, submittedBestSilly: 0 });
   const [nickname, setNickname] = useState('');
 
   useEffect(() => {
@@ -64,7 +66,12 @@ export default function App() {
         pid = generatePlayerId();
         Persistence.setPlayerId(pid);
       }
-      lbRef.current = { playerId: pid, nickname: lb.nickname, submittedBest: lb.submittedBest };
+      lbRef.current = {
+        playerId: pid,
+        nickname: lb.nickname,
+        submittedBest: lb.submittedBest,
+        submittedBestSilly: lb.submittedBestSilly,
+      };
       setNickname(lb.nickname);
     });
   }, []);
@@ -90,9 +97,12 @@ export default function App() {
   }, []);
 
   const handleSelectMap = useCallback((id) => {
-    update({ selectedMap: id });
-    Persistence.setMap(id);
-  }, [update]);
+    setState((s) => {
+      if (id === 'easy' && !s.easyModeOwned) return s; // locked -> menu opens the purchase sheet instead
+      Persistence.setMap(id);
+      return { ...s, selectedMap: id };
+    });
+  }, []);
 
   const handleSelectPigeon = useCallback((id) => {
     update({ selectedPigeon: id });
@@ -129,47 +139,78 @@ export default function App() {
     return res.status;
   }, [update]);
 
+  // Purchase the one-time, non-consumable EASY MODE unlock (£14.99). Independent
+  // of pigeon purchases and the 733T unlock.
+  const buyEasyMode = useCallback(async (devOutcome) => {
+    const res = await Billing.purchase(PRODUCTS.mode.easy, devOutcome);
+    if (res.status === 'success') {
+      update({ easyModeOwned: true });
+      Persistence.setEasyMode(true);
+    }
+    return res.status;
+  }, [update]);
+
   // Restore non-consumable purchases. In production this queries Apple/Google
   // ownership; in DEV we simulate by restoring the locally-known owned products.
   const restorePurchases = useCallback(async () => {
     const owned = [
       ...state.purchasedPigeons.map((id) => PRODUCTS.pigeons[id]),
       ...(state.bundleOwned ? [PRODUCTS.bundle] : []),
+      ...(state.easyModeOwned ? [PRODUCTS.mode.easy] : []),
     ];
     const restored = await Billing.restore(owned);
     const ids = Object.entries(PRODUCTS.pigeons)
       .filter(([, pid]) => restored.includes(pid))
       .map(([id]) => id);
     const bundle = restored.includes(PRODUCTS.bundle);
+    const easy = restored.includes(PRODUCTS.mode.easy);
     setState((s) => {
       Persistence.setPurchased(ids);
       Persistence.setBundle(bundle);
-      return { ...s, purchasedPigeons: ids, bundleOwned: bundle };
+      Persistence.setEasyMode(easy);
+      return { ...s, purchasedPigeons: ids, bundleOwned: bundle, easyModeOwned: easy };
     });
     return restored.length;
-  }, [state.purchasedPigeons, state.bundleOwned]);
+  }, [state.purchasedPigeons, state.bundleOwned, state.easyModeOwned]);
 
-  const handleCrash = useCallback(({ score, distance, chips, runId, runDuration, reviveUsed }) => {
+  const handleCrash = useCallback(({ score, distance, chips, runId, runDuration, reviveUsed, mode = 'normal' }) => {
+    const isEasy = mode === 'easy';
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
       Persistence.setInjured(pigeonsInjured);
-      let bestScore = s.bestScore;
-      if (score > bestScore) {
-        bestScore = score;
-        Persistence.setBest(bestScore);
+      const patch = { pigeonsInjured };
+      if (isEasy) {
+        // Easy Mode never touches the normal Global best score/distance.
+        let bestDistanceSilly = s.bestDistanceSilly;
+        if (distance > bestDistanceSilly) {
+          bestDistanceSilly = distance;
+          Persistence.setBestDistanceSilly(bestDistanceSilly);
+        }
+        patch.bestDistanceSilly = bestDistanceSilly;
+      } else {
+        let bestScore = s.bestScore;
+        if (score > bestScore) {
+          bestScore = score;
+          Persistence.setBest(bestScore);
+        }
+        let bestDistance = s.bestDistance;
+        if (distance > bestDistance) {
+          bestDistance = distance;
+          Persistence.setBestDistance(bestDistance);
+        }
+        patch.bestScore = bestScore;
+        patch.bestDistance = bestDistance;
       }
-      let bestDistance = s.bestDistance;
-      if (distance > bestDistance) {
-        bestDistance = distance;
-        Persistence.setBestDistance(bestDistance);
-      }
-      return { ...s, pigeonsInjured, bestScore, bestDistance };
+      return { ...s, ...patch };
     });
 
     // Async best-distance submission (never blocks PLAY AGAIN). Only a genuine new
     // personal best is submitted, and only if the player has chosen a nickname.
+    // Easy Mode runs are submitted with mode:'easy' and can ONLY reach the Silly
+    // Mode leaderboard — never Global.
     const lb = lbRef.current;
-    if (lb.nickname && runId && distance > lb.submittedBest) {
+    const prevSubmitted = isEasy ? lb.submittedBestSilly : lb.submittedBest;
+    if (lb.nickname && runId && distance > prevSubmitted) {
       LeaderboardAPI.submit({
         playerId: lb.playerId,
         runId,
@@ -178,11 +219,17 @@ export default function App() {
         runDuration,
         reviveUsed: !!reviveUsed,
         chipCount: chips,
+        mode: isEasy ? 'easy' : 'normal',
         gameVersion: GAME_VERSION,
       }).then((res) => {
         if (res && res.ok && res.status === 'accepted') {
-          lbRef.current.submittedBest = distance;
-          Persistence.setSubmittedBest(distance);
+          if (isEasy) {
+            lbRef.current.submittedBestSilly = distance;
+            Persistence.setSubmittedBestSilly(distance);
+          } else {
+            lbRef.current.submittedBest = distance;
+            Persistence.setSubmittedBest(distance);
+          }
         }
       });
     }
@@ -202,9 +249,13 @@ export default function App() {
             selectedPigeon={state.selectedPigeon}
             selectedMap={state.selectedMap}
             leetUnlock={state.leetUnlock}
+            easyModeOwned={state.easyModeOwned}
+            easyPrice={Billing.priceFor(PRODUCTS.mode.easy) || DEFAULT_PRICES.easyMode}
+            isDev={Billing.isDev}
             onPlay={() => setScreen('game')}
             onPigeons={() => setScreen('pigeons')}
             onSelectMap={handleSelectMap}
+            onBuyEasy={buyEasyMode}
             onToggleSound={handleToggleSound}
             onLeetUnlock={handleLeetUnlock}
             onLeaderboard={() => setScreen('leaderboard')}
@@ -236,9 +287,9 @@ export default function App() {
           <GameScreen
             key={state.selectedMap + state.selectedPigeon}
             pigeon={getPigeon(state.selectedPigeon)}
-            map={getMap(state.selectedMap)}
+            mapSelection={state.selectedMap}
             bestScore={state.bestScore}
-            bestDistance={state.bestDistance}
+            bestDistance={modeForSelection(state.selectedMap) === 'easy' ? state.bestDistanceSilly : state.bestDistance}
             onCrash={handleCrash}
             onExit={() => setScreen('menu')}
           />

@@ -22,8 +22,10 @@ export const CONFIG = {
   GAP_SHRINK_PER_SCORE: 1.1,
   SPACING_BASE: 300, // horizontal distance between obstacle pairs (px)
   SPACING_MIN: 232,
+  SPACING_SHRINK_PER_SCORE: 1.2,
   MIN_TOP: 58,
   MIN_BOTTOM: 70, // above ground
+  MAX_TOP_DELTA: 0, // 0 = unrestricted vertical variation (standard chaos)
 
   // Speed / difficulty
   SPEED_BASE: 235,
@@ -45,6 +47,11 @@ export const CONFIG = {
 
   // Distance: how many world pixels equal one displayed metre
   PIXELS_PER_METRE: 24,
+
+  // 1000m "pigeon closes its eyes" blackout Easter egg
+  BLACKOUT_TRIGGER_M: 1000, // distance (m) that fires the event, once per run
+  BLACKOUT_MS: 3500,        // how long the eyes stay closed
+  BLACKOUT_RECOVERY_MS: 800, // extra open-sky buffer after fade-out before obstacles resume
 };
 
 // Integer with thousands separators (no decimals). Safe on web + native (no Intl needed).
@@ -69,3 +76,22 @@ export const FAT_LABELS = [
   'Ridiculously fat',
   'ABSOLUTE UNIT',
 ];
+
+
+// EASY MODE tuning — premium £14.99 ruleset. Overrides the standard difficulty
+// numbers only (collision geometry, physics & controls stay identical). Absurdly
+// forgiving: huge gaps, long safe spaces, gentle vertical transitions, slow ramp.
+export const EASY_TUNING = {
+  GAP_BASE: 430,
+  GAP_MIN: 360,
+  GAP_SHRINK_PER_SCORE: 0.25,
+  SPACING_BASE: 470,
+  SPACING_MIN: 400,
+  SPACING_SHRINK_PER_SCORE: 0.3,
+  SPEED_BASE: 205,
+  SPEED_MAX: 300,
+  SPEED_PER_SCORE: 0.8,
+  MIN_TOP: 46,
+  MIN_BOTTOM: 60,
+  MAX_TOP_DELTA: 55, // clamp vertical jump between consecutive obstacles (no tight transitions)
+};

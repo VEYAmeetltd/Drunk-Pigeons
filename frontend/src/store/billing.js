@@ -24,6 +24,7 @@ PREMIUM_IDS.forEach((k) => {
   priceMap[PRODUCTS.pigeons[k]] = DEFAULT_PRICES.pigeon;
 });
 priceMap[PRODUCTS.bundle] = DEFAULT_PRICES.bundle;
+priceMap[PRODUCTS.mode.easy] = DEFAULT_PRICES.easyMode;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

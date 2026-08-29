@@ -55,3 +55,42 @@ export const MAPS = [
 
 export const DEFAULT_MAP = 'day';
 export const getMap = (id) => MAPS.find((m) => m.id === id) || MAPS[0];
+
+// EASY MODE — premium £14.99 landscape. Its own peaceful, open, spacious identity
+// (soft sky, rolling meadow, gentle pastel buildings) so players instantly know
+// they're in the chill mode. Same cartoon style, no clutter.
+export const EASY_MAP = {
+  id: 'easy',
+  name: 'Easy Mode',
+  blurb: 'you paid for peace',
+  skyTop: '#7ec8f2',
+  skyBottom: '#d8f4ff',
+  cloud: '#ffffff',
+  skyline: '#a8d98a',
+  skylineBack: '#c6e8ac',
+  ground: '#4e9d3f',
+  groundTop: '#82cd54',
+  obstacle: '#9fd67f',
+  obstacleDark: '#6fae56',
+  window: '#fff6c9',
+  accent: '#ffd23f',
+  feather: '#ffffff',
+};
+
+// The three STANDARD maps that count for the normal Global leaderboard.
+export const STANDARD_MAP_IDS = MAPS.map((m) => m.id);
+
+export const isEasySelection = (sel) => sel === 'easy';
+export const isRandomSelection = (sel) => sel === 'random';
+
+// Resolve the concrete map used for one run. RANDOM MANOR picks ONLY from the
+// three STANDARD maps — Easy Mode is permanently excluded from the random pool.
+export function getMapForSelection(sel) {
+  if (sel === 'easy') return EASY_MAP;
+  if (sel === 'random') return MAPS[Math.floor(Math.random() * MAPS.length)];
+  return getMap(sel);
+}
+
+// Gameplay ruleset a selection generates: only Easy Mode is 'easy'; everything
+// else (including Random Manor's standard picks) is 'normal'.
+export const modeForSelection = (sel) => (sel === 'easy' ? 'easy' : 'normal');

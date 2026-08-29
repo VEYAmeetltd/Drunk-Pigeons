@@ -9,6 +9,10 @@ export const PRODUCTS = {
     fancy: 'drunkpigeons.pigeon.fancy',
   },
   bundle: 'drunkpigeons.pigeons.unlockall',
+  // Gameplay MODE unlocks (non-consumable, one-time). Separate from pigeon cosmetics.
+  mode: {
+    easy: 'drunkpigeons.mode.easymode',
+  },
 };
 
 // The five current premium (paid) pigeon ids.
@@ -20,6 +24,7 @@ export const DEFAULT_PRICES = {
   pigeon: '£1.99',
   bundle: '£7.99',
   bundleSave: '£1.96', // 5 x £1.99 (£9.95) - £7.99
+  easyMode: '£14.99',
 };
 
 export const pigeonProductId = (id) => PRODUCTS.pigeons[id];

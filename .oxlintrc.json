@@ -6,6 +6,8 @@
     "require": "readonly",
     "exports": "writable",
     "process": "readonly",
-    "__DEV__": "readonly"
+    "__DEV__": "readonly",
+    "java": "readonly",
+    "_": "readonly"
   }
 }

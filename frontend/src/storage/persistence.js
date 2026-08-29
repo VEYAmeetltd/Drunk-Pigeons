@@ -11,9 +11,12 @@ const KEYS = {
   leet: 'dp_leetUnlock',
   purchased: 'dp_purchasedPigeons',
   bundle: 'dp_bundleOwned',
+  easy: 'dp_easyOwned',
+  bestDistSilly: 'dp_bestDistanceSilly',
   playerId: 'dp_playerId',
   nickname: 'dp_nickname',
   submittedBest: 'dp_submittedBest',
+  submittedBestSilly: 'dp_submittedBestSilly',
 };
 
 async function getNumber(key, def) {
@@ -36,9 +39,10 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, injured, sound, pigeon, map, unlocked, leet, purchased, bundle] = await Promise.all([
+    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy] = await Promise.all([
       getNumber(KEYS.best, 0),
       getNumber(KEYS.bestDist, 0),
+      getNumber(KEYS.bestDistSilly, 0),
       getNumber(KEYS.injured, 0),
       getString(KEYS.sound, '1'),
       getString(KEYS.pigeon, 'classic'),
@@ -47,10 +51,12 @@ export const Persistence = {
       getString(KEYS.leet, '0'),
       getString(KEYS.purchased, ''),
       getString(KEYS.bundle, '0'),
+      getString(KEYS.easy, '0'),
     ]);
     return {
       bestScore: best,
       bestDistance: bestDist,
+      bestDistanceSilly: bestDistSilly,
       pigeonsInjured: injured,
       soundEnabled: sound !== '0',
       selectedPigeon: pigeon,
@@ -59,7 +65,17 @@ export const Persistence = {
       leetUnlock: leet === '1',
       purchasedPigeons: purchased ? purchased.split(',').filter(Boolean) : [],
       bundleOwned: bundle === '1',
+      easyModeOwned: easy === '1',
     };
+  },
+  setEasyMode(on) {
+    AsyncStorage.setItem(KEYS.easy, on ? '1' : '0').catch(() => {});
+  },
+  setBestDistanceSilly(v) {
+    AsyncStorage.setItem(KEYS.bestDistSilly, String(v)).catch(() => {});
+  },
+  setSubmittedBestSilly(v) {
+    AsyncStorage.setItem(KEYS.submittedBestSilly, String(v)).catch(() => {});
   },
   setPurchased(list) {
     AsyncStorage.setItem(KEYS.purchased, list.join(',')).catch(() => {});
@@ -77,12 +93,13 @@ export const Persistence = {
     AsyncStorage.setItem(KEYS.submittedBest, String(v)).catch(() => {});
   },
   async loadLeaderboard() {
-    const [playerId, nickname, submittedBest] = await Promise.all([
+    const [playerId, nickname, submittedBest, submittedBestSilly] = await Promise.all([
       getString(KEYS.playerId, ''),
       getString(KEYS.nickname, ''),
       getNumber(KEYS.submittedBest, 0),
+      getNumber(KEYS.submittedBestSilly, 0),
     ]);
-    return { playerId, nickname, submittedBest };
+    return { playerId, nickname, submittedBest, submittedBestSilly };
   },
   setLeet(on) {
     AsyncStorage.setItem(KEYS.leet, on ? '1' : '0').catch(() => {});

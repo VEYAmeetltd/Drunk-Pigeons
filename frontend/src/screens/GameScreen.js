@@ -7,7 +7,8 @@ import { PigeonView, ObstacleView, ChipView, FeatherView, HecklerView } from '..
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
-import { CONFIG, fatLevelFor, FAT_LABELS, formatInt } from '../config';
+import { CONFIG, EASY_TUNING, fatLevelFor, FAT_LABELS, formatInt } from '../config';
+import { getMapForSelection, modeForSelection } from '../data/maps';
 import { randomDeathMessage } from '../data/deathMessages';
 import { pickInsult, pickReaction } from '../data/insults';
 import { generateRunId } from '../leaderboard/api';
@@ -17,12 +18,39 @@ import { FONT, COLORS } from '../ui/theme';
 
 function emptySnapshot() {
   return {
-    px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0,
+    px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0, blackout: 0,
     heckler: { x: -999, y: 0, w: 36, h: 36, active: 0, life: 0 },
     obs: Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ x: -999, active: 0 })),
     chips: Array.from({ length: CONFIG.CHIP_POOL }, () => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 })),
     feathers: Array.from({ length: CONFIG.FEATHER_POOL }, () => ({ x: -999, y: 0, rot: 0, active: 0, life: 0 })),
   };
+}
+
+// Full-screen fade-to-black for the 1000m "pigeon closes its eyes" Easter egg.
+// Polls the shared world value (no React re-render on the hot path) and never
+// blocks touch input, so the pigeon keeps flapping through the blind stretch.
+function BlackoutOverlay({ world }) {
+  const [a, setA] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      try {
+        setA(world.value.blackout || 0);
+      } catch {}
+    }, 50);
+    return () => clearInterval(id);
+  }, [world]);
+  if (a <= 0.001) return null;
+  return (
+    <View
+      style={[styles.blackout, { opacity: a }]}
+      pointerEvents="none"
+      testID="blackout-overlay"
+    >
+      <Text style={[styles.blackoutTxt, { opacity: Math.max(0, (a - 0.35) / 0.65) }]}>
+        This is what it looks like when a pigeon closes it's eyes.
+      </Text>
+    </View>
+  );
 }
 
 // Live distance readout — isolates re-renders to just this tiny component.
@@ -43,9 +71,11 @@ function DistanceHUD({ world }) {
   );
 }
 
-export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, onCrash, onExit }) {
+export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
+  const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
+  const [activeMap, setActiveMap] = useState(() => getMapForSelection(mapSelection));
 
   const [score, setScore] = useState(0);
   const [chips, setChips] = useState(0);
@@ -85,6 +115,7 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
         score: sc,
         chips: ch,
         distance: dist,
+        mode,
         runId: runIdRef.current,
         runDuration: (performance.now() - runStartRef.current) / 1000,
         reviveUsed: !!(engineRef.current && engineRef.current.usedRevive),
@@ -101,7 +132,10 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
 
   const startRun = useCallback(() => {
     const eng = engineRef.current;
-    eng.reset(width, height);
+    // RANDOM MANOR re-picks one of the 3 standard maps for every brand-new run.
+    const m = getMapForSelection(mapSelection);
+    setActiveMap(m);
+    eng.reset(width, height, mode === 'easy' ? EASY_TUNING : undefined);
     runIdRef.current = generateRunId();
     runStartRef.current = performance.now();
     setScore(0);
@@ -111,7 +145,7 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
     setShield(false);
     setObsGeom(eng.getObstacleGeom());
     world.value = eng.getSnapshot(performance.now());
-  }, [width, height]);
+  }, [width, height, mapSelection, mode]);
 
   // init engine + loop
   useEffect(() => {
@@ -211,15 +245,15 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
 
   return (
     <View style={styles.root}>
-      <Background theme={map} width={width} height={height} world={world} />
+      <Background theme={activeMap} width={width} height={height} world={world} />
 
       {/* obstacles */}
       {obsGeom.map((g, i) => (
-        <ObstacleView key={i} world={world} index={i} geom={g} theme={map} screenH={height} />
+        <ObstacleView key={i} world={world} index={i} geom={g} theme={activeMap} screenH={height} />
       ))}
 
       {/* window heckler (environmental comedy) */}
-      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={map} />
+      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} />
 
       {/* chips */}
       {Array.from({ length: CONFIG.CHIP_POOL }).map((_, i) => (
@@ -228,7 +262,7 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
 
       {/* feathers */}
       {Array.from({ length: CONFIG.FEATHER_POOL }).map((_, i) => (
-        <FeatherView key={i} world={world} index={i} color={map.feather} />
+        <FeatherView key={i} world={world} index={i} color={activeMap.feather} />
       ))}
 
       {/* pigeon */}
@@ -289,6 +323,9 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
         </View>
       )}
 
+      {/* 1000m blackout Easter egg — covers everything, never blocks flaps */}
+      <BlackoutOverlay world={world} />
+
       {over && (
         <GameOverOverlay
           message={over.message}
@@ -339,4 +376,6 @@ const styles = StyleSheet.create({
   confirmTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 28, fontWeight: '700', letterSpacing: 1 },
   confirmSub: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, marginTop: 6, textAlign: 'center' },
   confirmBtn: { width: '100%', marginTop: 12 },
+  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, zIndex: 50 },
+  blackoutTxt: { fontFamily: FONT, color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', lineHeight: 30, letterSpacing: 0.5 },
 });

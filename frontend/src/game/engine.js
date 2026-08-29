@@ -23,7 +23,13 @@ export function createEngine({ onScore, onChip, onCrash }) {
   let invincibleUntil = 0;
   let usedRevive = false;
   let flapPulse = 0;
+  // 1000m blackout Easter egg
+  let eventTriggered = false; // fired once this run
+  let blackoutStartT = 0;
+  let blackoutEndT = 0;
+  let quietUntilT = 0; // suppress obstacle/chip spawns until this time (blackout + recovery)
   const dirtyObstacles = new Set();
+  let T = CONFIG; // active tuning (standard = CONFIG; Easy Mode overrides via reset)
 
   // Window heckler (tiny angry person) — single slot, bound to an obstacle window.
   const heckler = { active: false, obsIndex: -1, side: 'bottom', wx: 0, wy: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
@@ -45,9 +51,9 @@ export function createEngine({ onScore, onChip, onCrash }) {
   }
 
   function difficulty() {
-    const speed = Math.min(CONFIG.SPEED_MAX, CONFIG.SPEED_BASE + score * CONFIG.SPEED_PER_SCORE);
-    const gap = Math.max(CONFIG.GAP_MIN, CONFIG.GAP_BASE - score * CONFIG.GAP_SHRINK_PER_SCORE);
-    const spacing = Math.max(CONFIG.SPACING_MIN, CONFIG.SPACING_BASE - score * 1.2);
+    const speed = Math.min(T.SPEED_MAX, T.SPEED_BASE + score * T.SPEED_PER_SCORE);
+    const gap = Math.max(T.GAP_MIN, T.GAP_BASE - score * T.GAP_SHRINK_PER_SCORE);
+    const spacing = Math.max(T.SPACING_MIN, T.SPACING_BASE - score * T.SPACING_SHRINK_PER_SCORE);
     return { speed, gap, spacing };
   }
 
@@ -55,9 +61,22 @@ export function createEngine({ onScore, onChip, onCrash }) {
     // if a heckler is bound to this slot, release it before reuse
     if (heckler.active && heckler.obsIndex === idx) heckler.active = false;
     const { gap } = difficulty();
-    const minTop = CONFIG.MIN_TOP;
-    const maxTop = groundY() - CONFIG.MIN_BOTTOM - gap;
-    const topH = minTop + Math.random() * Math.max(20, maxTop - minTop);
+    const minTop = T.MIN_TOP;
+    const maxTop = groundY() - T.MIN_BOTTOM - gap;
+    let topH = minTop + Math.random() * Math.max(20, maxTop - minTop);
+    // Easy Mode: clamp vertical change vs the previous building so there are never
+    // aggressive high/low transitions (gentle, forgiving flight path).
+    if (T.MAX_TOP_DELTA > 0) {
+      let prevTopH = null;
+      let maxX = -Infinity;
+      for (const o of obstacles) {
+        if (o.active && o.x > maxX) { maxX = o.x; prevTopH = o.topH; }
+      }
+      if (prevTopH != null) {
+        topH = Math.max(prevTopH - T.MAX_TOP_DELTA, Math.min(prevTopH + T.MAX_TOP_DELTA, topH));
+        topH = Math.max(minTop, Math.min(Math.max(minTop, maxTop), topH));
+      }
+    }
     const o = obstacles[idx];
     o.active = true;
     o.x = x;
@@ -218,7 +237,8 @@ export function createEngine({ onScore, onChip, onCrash }) {
     }
   }
 
-  function reset(width, height) {
+  function reset(width, height, tuning) {
+    T = tuning ? { ...CONFIG, ...tuning } : CONFIG;
     W = width;
     H = height;
     pigeon.x = W * CONFIG.PIGEON_X_RATIO;
@@ -232,6 +252,10 @@ export function createEngine({ onScore, onChip, onCrash }) {
     dead = false;
     invincibleUntil = 0;
     usedRevive = false;
+    eventTriggered = false;
+    blackoutStartT = 0;
+    blackoutEndT = 0;
+    quietUntilT = 0;
     heckler.active = false;
     heckler.id = 0;
     hecklerPending = false;
@@ -307,6 +331,19 @@ export function createEngine({ onScore, onChip, onCrash }) {
     }
     distance += speed * dt;
 
+    // 1000m "pigeon closes its eyes" blackout — fires once per run.
+    // Clears the world to open sky so the blind stretch is fair, suppresses
+    // spawns during the blackout + a short recovery buffer, then resumes.
+    if (!eventTriggered && Math.floor(distance / PPM) >= CONFIG.BLACKOUT_TRIGGER_M) {
+      eventTriggered = true;
+      blackoutStartT = now;
+      blackoutEndT = now + CONFIG.BLACKOUT_MS;
+      quietUntilT = blackoutEndT + CONFIG.BLACKOUT_RECOVERY_MS;
+      obstacles.forEach((o) => (o.active = false));
+      chips.forEach((c) => (c.active = false));
+      heckler.active = false;
+    }
+
     // move obstacles + scoring + recycle
     const w = CONFIG.OBSTACLE_WIDTH;
     for (let i = 0; i < obstacles.length; i++) {
@@ -324,8 +361,9 @@ export function createEngine({ onScore, onChip, onCrash }) {
       }
     }
     // spawn new obstacle to keep the course endless (chips are generated in placeObstacle)
+    // gated by quietUntilT so the 1000m blackout keeps an open, obstacle-free sky
     const lx = lastObstacleX();
-    if (lx < W - spacing) {
+    if (now >= quietUntilT && lx < W - spacing) {
       const free = obstacles.findIndex((o) => !o.active);
       if (free >= 0) {
         placeObstacle(free, Math.max(W + 40, lx + spacing));
@@ -401,6 +439,16 @@ export function createEngine({ onScore, onChip, onCrash }) {
     return true;
   }
 
+  // 0..1 alpha for the 1000m blackout overlay — pure function of time (fade in/hold/out).
+  function currentBlackout(now) {
+    if (!eventTriggered || now >= blackoutEndT || now < blackoutStartT) return 0;
+    const fadeIn = 450;
+    const fadeOut = 800;
+    if (now < blackoutStartT + fadeIn) return (now - blackoutStartT) / fadeIn;
+    if (now > blackoutEndT - fadeOut) return Math.max(0, (blackoutEndT - now) / fadeOut);
+    return 1;
+  }
+
   function getSnapshot(now) {
     const fat = fatLevelFor(chipCount);
     const inv = now < invincibleUntil ? 1 : 0;
@@ -413,6 +461,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
       flap: flapPulse,
       fat,
       inv,
+      blackout: currentBlackout(now),
       distM: Math.floor(distance / PPM),
       distPx: distance,
       dead: dead ? 1 : 0,
@@ -446,8 +495,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
     };
   }
 
-  function getObstacleGeom() {
-    return obstacles.map((o) => ({
+  function getObstacleGeom() {    return obstacles.map((o) => ({
       active: o.active,
       topH: o.topH,
       gap: o.gap,

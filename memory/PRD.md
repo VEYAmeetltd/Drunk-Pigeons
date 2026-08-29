@@ -67,9 +67,22 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Anti-cheat (server-authoritative, mirrors engine SPEED_MAX 380 / PPM 24 => ~15.83 m/s): rejects negative/NaN/Inf/over-cap(100000)/too-fast(distance>duration*maxMps*1.15+60)/impossible-chips(>1.2/m)/bad-id/duplicate runId(unique index=replay protection); flags plausible-but-extreme(>=40000) out of Top; in-memory rate limiter (20/60s/player).
 - Frontend: LEADERBOARD menu button + LeaderboardScreen (nickname entry+validation, list, your-rank, offline 'LEADERBOARD UNAVAILABLE' state, retry). Submission is async/fire-and-forget on real crash ONLY when distance>submittedBest and nickname set; manual restart submits nothing; revive keeps same run. Game fully playable offline. dp_playerId/dp_nickname/dp_submittedBest persisted. Backend tests: /app/backend/tests/test_leaderboard.py (24 cases).
 
+## Update 8 (2026-06) — 1000m "Pigeon Closes Its Eyes" blackout — verified (visual + engine reasoning)
+- At 1000m (once per run) the screen fades to black (fade-in 450ms, hold, fade-out 800ms) with white text "This is what it looks like when a pigeon closes it's eyes." Fires ONCE per run (eventTriggered), configurable via CONFIG.BLACKOUT_TRIGGER_M / BLACKOUT_MS (3500) / BLACKOUT_RECOVERY_MS (800).
+- Gameplay NEVER pauses: overlay is pointerEvents="none" (tap still flaps), physics + distance keep running. On trigger the world is cleared to open sky (obstacles + chips deactivated) and spawns are suppressed until quietUntilT (blackout end + recovery buffer), so the blind stretch is fair (only ground collision applies). Then obstacles resume smoothly.
+- engine.js: currentBlackout(now) is a pure time function → snapshot.blackout (0..1). GameScreen BlackoutOverlay polls the shared world value (no hot-path re-render). Also fires in Easy Mode (see Update 9). Verified visually by temporarily lowering the trigger; overlay shows and clears correctly.
+
+## Update 9 (2026-06) — Random Manor + £14.99 Easy Mode + Silly Mode leaderboard — verified 100% (iteration_9, 18/18 new + 24/24 legacy)
+- CHOOSE YOUR MANOR now has 5 tiles: 3 standard maps (unchanged difficulty/physics) + RANDOM MANOR (map-random) + EASY MODE (map-easy, premium).
+- RANDOM MANOR: each brand-new run (incl. Play Again / Restart) re-picks ONE of the 3 STANDARD maps only (getMapForSelection in data/maps.js) — Easy Mode is permanently excluded from the random pool, before/after purchase.
+- EASY MODE: premium £14.99 one-time non-consumable (product drunkpigeons.mode.easymode). Always visible; locked (🔒 + price) until purchased. Tapping opens a deliberate purchase sheet (EASY MODE / £14.99 / BUY — £14.99 / CANCEL) via the existing pluggable Billing + DEV simulator (Success/Cancel/Fail; Restore via Pigeons screen). Success unlocks + selects immediately (no restart); Cancel/Fail unlock nothing. Independent of 733T (leet) and pigeon purchases. Persisted (dp_easyOwned).
+- EASY MODE ruleset (config.js EASY_TUNING): huge gaps (GAP_BASE 430), long spacing (470), slow ramp, gentle vertical transitions (MAX_TOP_DELTA 55). Same controls/physics/collision geometry. Peaceful meadow-green identity (EASY_MAP). engine.reset(w,h,tuning) merges tuning over CONFIG. STANDARD maps untouched (fairness preserved).
+- SILLY MODE leaderboard: server stores independent bestDistance (Global) and sillyBestDistance (Silly) per player; submit() routes STRICTLY by validated `mode` field (norm_mode coerces anything but 'easy' → 'normal') so Easy runs can NEVER enter Global. classify(req, mode) uses FLAG_DISTANCE_EASY=250000 so legit long Silly runs aren't flagged. GET /top?mode=normal|easy. Frontend: LeaderboardScreen show-silly/show-global toggle (🏆 GLOBAL ↔ 🏆 SILLY MODE), shared anonymous nickname. App.handleCrash submits mode-appropriately with separate submittedBest / submittedBestSilly. Backend regression: /app/backend/tests/test_mode_leaderboard.py (18 cases) + test_leaderboard.py (24).
+- MOCKED: store billing (dev simulator) — real StoreKit/Play Billing injected via setBillingProvider() before release.
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
-- P1: Real AdMob rewarded/interstitial wired into ads.js hooks.
-- P2: Unlock conditions for locked pigeons (e.g., chips/score milestones) + cosmetic accessories per map.
-- P2: Parallax scrolling background, more obstacle art variety (bus/bin/clock-tower sprites), leaderboard.
+- P1: Real AdMob rewarded/interstitial wired into ads.js hooks; inject real StoreKit/Play Billing provider (pigeons + easymode + restore).
+- P2: Unlock conditions for locked pigeons (chips/score milestones) + cosmetic accessories per map.
+- P2: Distinct Easy Mode background art (reduce skyline density) beyond the palette swap.
 - P2: Silence RN-Web SDK51 deprecation warnings (boxShadow/textShadow, pointerEvents in style).

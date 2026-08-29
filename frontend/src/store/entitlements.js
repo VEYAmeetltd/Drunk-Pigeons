@@ -18,3 +18,10 @@ export function canUse(pigeon, ent) {
 export function allPremiumUnlocked(pigeons, ent) {
   return pigeons.filter((p) => p.premium).every((p) => canUse(p, ent));
 }
+
+// EASY MODE is its OWN independent £14.99 entitlement. Deliberately NOT tied to
+// the 733T (leet) unlock or any pigeon purchase — only a real Easy Mode purchase
+// (or a restored Easy Mode ownership) grants it.
+export function easyModeOwned(ent) {
+  return !!(ent && ent.easyMode);
+}
