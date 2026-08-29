@@ -195,3 +195,7 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 
 ## Update 25 (2026-06) — Drunkness slider label alignment fix (cosmetic)
 - DrunknessSlider labels now absolutely positioned & centre-aligned under 0%/50%/100% of the track (measured track width, left = anchor*w - LABEL_HALF). Track inset by LABEL_HALF so end labels never clip. VERIFIED by pixel measurement: label centres = track-left / midpoint / track-right, consistent at 390/480/768px. No functionality/colour/value/persistence changes.
+
+## Update 26 (2026-06) — Slider thumb/label gap + Live FX Sweep (testing agent)
+- DrunknessSlider labels marginTop 8->18 so the thumb never overlaps TIPSY at the midpoint. Verified: 22px gap (thumb bottom vs TIPSY top).
+- Testing agent (frontend, iteration_14.json) Live FX Sweep: 5/5 PASS — SOBER: drunk-screen-fx ABSENT, world crisp; ABSOLUTELY PIGEONED: breathing backdrop-blur ~1.7-2.1px + rgba(245,240,255,0.12-0.14) haze, HUD crisp, obstacles readable, world never transformed (fair); slider persists (dp_drunkLevel); menu pigeon scales; tap-to-flap responsive under max blur. Pint-boost spike INCONCLUSIVE via automation (pigeon dies ~6m before reaching a pint) — pint spawn/collect/boost/expire already proven earlier via headless engine sim.

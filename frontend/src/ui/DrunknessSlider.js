@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   track: { height: 8, borderRadius: 4, backgroundColor: COLORS.bgAlt },
   fill: { position: 'absolute', height: 8, borderRadius: 4, backgroundColor: COLORS.pink },
   thumb: { position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.yellow, borderWidth: 2, borderColor: '#fff' },
-  labels: { position: 'relative', height: 30, marginTop: 8 },
+  labels: { position: 'relative', height: 30, marginTop: 18 },
   labelBox: { position: 'absolute', top: 0, width: LABEL_W, textAlign: 'center' },
   label: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 10, letterSpacing: 0.5 },
   labelActive: { color: COLORS.teal },
