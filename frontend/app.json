@@ -8,15 +8,24 @@
     "backgroundColor": "#1b1030",
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.drunkpigeons.app",
+      "infoPlist": {
+        "NSUserTrackingUsageDescription": "This lets us show more relevant ads and keep Drunk Pigeons free."
+      }
     },
     "android": {
+      "package": "com.drunkpigeons.app",
       "adaptiveIcon": {
         "backgroundColor": "#1b1030"
       }
     },
     "web": {
       "bundler": "metro"
+    },
+    "react-native-google-mobile-ads": {
+      "android_app_id": "ca-app-pub-1908215441963534~6037769588",
+      "ios_app_id": "ca-app-pub-1908215441963534~2962732884"
     }
   }
 }

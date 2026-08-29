@@ -84,6 +84,8 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   );
   const [over, setOver] = useState(null); // {message, score, chips, isNewBest}
   const [canRevive, setCanRevive] = useState(true);
+  const [reviveBusy, setReviveBusy] = useState(false);
+  const [reviveMsg, setReviveMsg] = useState('');
   const [shield, setShield] = useState(false);
   const [started, setStarted] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -142,6 +144,8 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     setChips(0);
     setOver(null);
     setCanRevive(true);
+    setReviveBusy(false);
+    setReviveMsg('');
     setShield(false);
     setObsGeom(eng.getObstacleGeom());
     world.value = eng.getSnapshot(performance.now());
@@ -149,6 +153,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
   // init engine + loop
   useEffect(() => {
+    Ads.init();
     engineRef.current = buildEngine();
     startRun();
     lastRef.current = performance.now();
@@ -206,16 +211,28 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const doRevive = useCallback(() => {
     const eng = engineRef.current;
     if (!eng.canRevive()) return;
-    Ads.showRewardedRevive(() => {
-      eng.revive(performance.now());
-      Audio.revive();
-      setOver(null);
-      setCanRevive(false);
-      setShield(true);
-      if (shieldTimer.current) clearTimeout(shieldTimer.current);
-      shieldTimer.current = setTimeout(() => setShield(false), CONFIG.REVIVE_INVINCIBLE_MS);
-    });
-  }, []);
+    if (reviveBusy) return; // button protection — no duplicate ad requests
+    setReviveBusy(true);
+    setReviveMsg('');
+    Ads.showRewardedRevive(
+      () => {
+        // verified reward callback — grant the revive, continue the SAME run
+        eng.revive(performance.now());
+        Audio.revive();
+        setOver(null);
+        setCanRevive(false);
+        setReviveBusy(false);
+        setShield(true);
+        if (shieldTimer.current) clearTimeout(shieldTimer.current);
+        shieldTimer.current = setTimeout(() => setShield(false), CONFIG.REVIVE_INVINCIBLE_MS);
+      },
+      () => {
+        // no ad / incomplete reward — return cleanly to Game Over
+        setReviveBusy(false);
+        setReviveMsg('NO AD AVAILABLE — THE PIGEONS HAVE PROBABLY DRUNK THE SERVER.');
+      }
+    );
+  }, [reviveBusy]);
 
   const openRestartConfirm = useCallback(() => {
     const eng = engineRef.current;
@@ -336,7 +353,13 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
           bestDistance={Math.max(bestDistance, over.distance)}
           isNewBest={over.isNewBest}
           canRevive={canRevive}
-          onPlayAgain={() => {
+          reviveBusy={reviveBusy}
+          reviveMsg={reviveMsg}
+          onPlayAgain={async () => {
+            // occasional interstitial at the natural Game Over -> next-run
+            // transition (never during gameplay; skipped for Remove Ads owners).
+            await Ads.showInterstitialIfDue();
+            setReviveMsg('');
             setStarted(true);
             startRun();
           }}

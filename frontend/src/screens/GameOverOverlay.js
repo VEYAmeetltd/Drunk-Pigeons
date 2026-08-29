@@ -13,6 +13,8 @@ export default function GameOverOverlay({
   bestDistance,
   isNewBest,
   canRevive,
+  reviveBusy = false,
+  reviveMsg = '',
   onPlayAgain,
   onRevive,
   onMenu,
@@ -36,12 +38,13 @@ export default function GameOverOverlay({
         <Button testID="play-again-button" label="PLAY AGAIN" variant="primary" onPress={onPlayAgain} style={styles.btn} />
         <Button
           testID="revive-button"
-          label={canRevive ? 'REVIVE (dev)' : 'REVIVE USED'}
-          variant={canRevive ? 'teal' : 'ghost'}
-          onPress={canRevive ? onRevive : undefined}
-          style={[styles.btn, !canRevive && { opacity: 0.5 }]}
+          label={reviveBusy ? 'LOADING AD…' : canRevive ? 'REVIVE' : 'REVIVE USED'}
+          variant={canRevive && !reviveBusy ? 'teal' : 'ghost'}
+          onPress={canRevive && !reviveBusy ? onRevive : undefined}
+          style={[styles.btn, (!canRevive || reviveBusy) && { opacity: 0.5 }]}
         />
-        {canRevive && <Text style={styles.devNote}>dev revive · ad hook ready</Text>}
+        {canRevive && !reviveMsg && <Text style={styles.devNote}>Watch an ad to continue</Text>}
+        {!!reviveMsg && <Text style={styles.reviveMsg} testID="revive-unavailable">{reviveMsg}</Text>}
         <Button testID="menu-button" label="MAIN MENU" variant="ghost" onPress={onMenu} style={styles.btn} />
       </View>
     </View>
@@ -69,4 +72,5 @@ const styles = StyleSheet.create({
   rowValue: { fontFamily: FONT, fontSize: 24, fontWeight: '700' },
   btn: { width: '100%', marginTop: 10 },
   devNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, marginTop: 4 },
+  reviveMsg: { fontFamily: FONT, color: COLORS.pink, fontSize: 12, fontWeight: '700', marginTop: 6, textAlign: 'center', paddingHorizontal: 6 },
 });

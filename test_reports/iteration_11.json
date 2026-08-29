@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only validation of the newly wired AdMob architecture on the web preview. App loads cleanly with zero console/page errors after the AdMob integration (native SDK correctly isolated in admobProvider.native.js and not bundled for web). All 5 manor cards (map-day, map-night, map-dusk, map-random, map-easy) render. Verified the full Rewarded Revive flow, one-per-run gating with reset on new run, PLAY AGAIN never freezing (interstitial no-op on web), Remove Ads (£2.99) DEV purchase simulator, and that Remove Ads owners still get the optional revive. Code review of ads.js/admobConfig.js/GameScreen.js/engine.revive() confirms score/chips/distance are preserved on revive and manual restart never calls Ads.registerDeath().",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admobProvider.web.js is deliberately loud with a console.log on every rewarded/interstitial call — fine for dev preview, but consider gating behind __DEV__ before shipping so production web builds (if any) stay silent.",
+    "React Native Web deprecation warning surfaces: 'props.pointerEvents is deprecated. Use style.pointerEvents' (originating from a SafeAreaView/View usage, not the ads code). Non-blocking but worth cleaning up.",
+    "showRewardedRevive intentionally has no removeAdsOwned check — correct per spec (Remove Ads owners keep optional revive). Verified in UI: label stays 'REVIVE' after purchase.",
+    "Ads.showInterstitialIfDue swallows exceptions silently — good (never blocks next run), but log via console.warn in native so ad-load failures are observable in production telemetry."
+  ],
+  "verified_behaviours": [
+    "App boots with 0 page errors and only a benign RNW pointerEvents deprecation warning; no AdMob-related warnings/errors.",
+    "Menu renders all 5 manor cards; play/pigeons/leaderboard buttons present.",
+    "Rewarded Revive: on Game Over, revive-button label = 'REVIVE' with 'Watch an ad to continue' note. Clicking it (web fallback grants) closes game-over-overlay and continues the SAME run — distance advanced from 5m -> 25m (not reset to 0), score kept accumulating (0 -> 1), consistent with engine.revive() preserving score/chipCount/distance.",
+    "One revive per run: after using once, subsequent Game Over in same run shows revive-button label 'REVIVE USED' and is disabled — clicking does nothing (overlay stays open, no duplicate reward).",
+    "Rapid-tap protection: 5x rapid clicks on revive-button trigger only one revive (reviveBusy guard in GameScreen.doRevive + canRevive gate).",
+    "PLAY AGAIN never freezes: web interstitial is a no-op Promise.resolve(false); fresh run starts cleanly, distance-hud resets (was 25m -> new run 6m), score resets to 0.",
+    "Fresh run resets revive availability: after PLAY AGAIN and next crash, revive-button label returns to 'REVIVE'.",
+    "Remove Ads (£2.99) DEV purchase: remove-ads-button -> sim-success -> remove-ads-owned present with text 'ADS REMOVED ✓'.",
+    "Remove Ads owner still sees 'REVIVE' on Game Over; revive works identically (overlay closes, run continues, distance advanced 6m -> 20m).",
+    "Code path: GameScreen.confirmRestartNow() calls startRun() only; it never calls Ads.registerDeath(), so manual restart correctly does NOT count toward the interstitial-every-5-deaths counter.",
+    "admobConfig.js exports correct AdMob App IDs (~6037769588 android, ~2962732884 ios) and PROD_UNITS (interstitial /9785442908, rewarded /7183330294 android; interstitial /1594188197, rewarded /8023487878 ios). USE_TEST_ADS toggles on __DEV__. INTERSTITIAL_DEATH_INTERVAL=5."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "none required (anonymous)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AdMob wiring is complete and behaves correctly under the web fallback. Next agent should focus retesting only on device builds where admobProvider.native.js runs the real SDK; specifically validate real interstitial-every-5-deaths cadence, EARNED_REWARD gating in RewardedAd, and preloadInterstitial/preloadRewarded after each show. On web, only regression tests are needed if unrelated changes ship."
+}
