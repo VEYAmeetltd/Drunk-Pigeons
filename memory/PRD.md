@@ -55,6 +55,12 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Window hecklers refactored to be window-anchored dependents of a specific obstacle: only spawn on a fully on-screen building with a fitting window; person clipped inside the window (head/shoulders visible, lower body hidden); position derived from the live obstacle each frame; released on recycle/off-screen — no orphaned people or floating bubbles. Speech bubble anchored to the person.
 - No gameplay/physics/difficulty/scoring/chip-value/fatness/collision changes. (Note: no "pub +5" pickup exists in this build — referenced in brief but never implemented; left out of scope.)
 
+## Update 6 (2026-06) — Pigeon Store & Entitlements — verified 100% (iterations 6-7)
+- Store layer: src/store/products.js (configurable product IDs drunkpigeons.pigeon.<id> + .pigeons.unlockall), entitlements.js (source: free|purchased|bundle|leet|locked, canUse), billing.js (IS_DEV flag, pluggable setBillingProvider for real StoreKit/Play, DEV purchase/restore simulator, localized-price ready).
+- Classic + Business FREE. Five premium pigeons £1.99 each (still previewable while locked) + "UNLOCK ALL 5 — £7.99 (SAVE £1.96)". Non-consumable, no subscriptions, no card handling, no Stripe.
+- DEV simulator (sim-success/cancel/fail + restore) only in dev builds; success updates entitlement + persists (dp_purchasedPigeons, dp_bundleOwned) and unlocks immediately; cancel/fail unlock nothing (fail shows friendly message). Bundle unlocks all five and hides. RESTORE PURCHASES with visible confirmation (restore-msg).
+- 733T remains a SEPARATE local `leet` entitlement (not a purchase record). Premium pigeons are cosmetic-only — zero gameplay advantage. Production billing to be injected via setBillingProvider() before release (Apple/Google authoritative for paid ownership).
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks.

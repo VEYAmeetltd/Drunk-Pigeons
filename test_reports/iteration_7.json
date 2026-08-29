@@ -1,0 +1,23 @@
+{
+  "summary": "Targeted re-test of iteration_6 MEDIUM bug: RESTORE PURCHASES confirmation is now visible on the Pigeons screen via a top-level Text with data-testid='restore-msg' rendered outside the purchase sheet. Verified fix + full regression of store flows.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correct: doRestore now writes to a dedicated restoreMsg state and the <Text testID='restore-msg'> is rendered directly below the restore-purchases Pressable, outside the {sheet && ...} block. Purchase-sheet remains closed during restore.",
+    "Note: The 'sheet-error' msg state remains in place for purchase failures; the two concerns are now cleanly separated. Consider clearing restoreMsg on subsequent taps of unlock/select to prevent a stale message lingering while the user interacts with the rest of the screen (minor UX polish, non-blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100% (fix + all regression checks pass)"},
+  "test_credentials": "None.",
+  "seed_data_creation": "localStorage cleared between flows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration_7 verified at 430x920. Verified flows: (1) Fresh state -> RESTORE PURCHASES shows visible 'NOTHING TO RESTORE' below button, purchase-sheet NOT open. (2) DEV sim-success on locked pigeon (roadman) -> RESTORE shows 'RESTORED 1 PURCHASE'. (3) Persistence across reload confirmed: previously purchased pigeon remains unlocked and restore count = 1. (4) unlock-all-button + sim-success -> unlock-all-button hides and all 5 premium pigeons show as unlocked (no preview-unlock button). (5) 733T leet code entered via open-code-button -> after dismissing leet-done modal, leet-badge visible, all pigeons usable, but restore-msg correctly reports 'NOTHING TO RESTORE' (leet entitlement is separate from purchases as designed). MenuScreen button testID is 'pigeons-button' (not 'menu-pigeons').",
+  "rca of the issue": "Previous fix: PigeonsScreen.js added a dedicated `restoreMsg` state and rendered <Text testID='restore-msg' style={styles.restoreMsg}>{restoreMsg}</Text> immediately after the RESTORE PURCHASES Pressable, outside the conditional purchase-sheet overlay. Confirmed rendered and visible in DOM after tapping restore-purchases."
+}

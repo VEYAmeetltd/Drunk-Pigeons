@@ -1,0 +1,33 @@
+{
+  "summary": "Full frontend testing of the Pigeon Store & Entitlement system. Verified premium pricing, previewable-while-locked UX, purchase sheet with DEV simulator (success/cancel/fail), single-pigeon purchase isolation, bundle purchase, persistence across reload, 733T leet unlock separation from purchases, and gameplay parity with premium pigeons. All flows work correctly EXCEPT the restore-purchases confirmation message is never rendered to the user (it is only conditionally rendered inside the purchase-sheet overlay, which is closed during restore).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PigeonsScreen",
+        "issue": "RESTORE PURCHASES tap sets `msg` state ('RESTORED N PURCHASES' or 'NOTHING TO RESTORE') but the message is only rendered inside the purchase-sheet overlay (`{sheet && (... {!!msg && <Text testID='purchase-error'>...} ...)}`). Since doRestore does not open a sheet, the confirmation text is invisible to the user. Playbook explicitly requires this small confirmation to be shown.",
+        "selector": "[data-testid='restore-purchases']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "In /app/frontend/src/screens/PigeonsScreen.js, render the `msg` toast outside the `{sheet && ...}` block (or add a separate visible Text with testID e.g. 'restore-message') so the RESTORED/NOTHING TO RESTORE confirmation is visible after tapping restore-purchases."
+  ],
+  "critical_code_review_comments": [
+    "PigeonsScreen msg state is dual-purpose (purchase-sheet error + restore confirmation). Consider two separate states or move the toast rendering outside the conditional sheet block; add testID='restore-message' for future testability.",
+    "restorePurchases in App.js overwrites purchasedPigeons and bundleOwned with the restore result. In real StoreKit/Play this is fine, but with the DEV simulator's echo behaviour ensure we never wipe out existing entitlements if the platform SDK returns [] transiently.",
+    "billing.js DEV simulator is well isolated and PRODUCTS/PREMIUM_IDS are cleanly centralised — good foundation for setBillingProvider() injection."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "~92% (11/12 sub-flows fully pass; restore visible-message flow fails)"},
+  "test_credentials": "None required (no auth, no backend).",
+  "seed_data_creation": "None. localStorage cleared before each flow.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All purchase flows (individual roadman success/cancel/fail, bundle success, persistence after reload for both, 733T leet unlock keeping purchases empty and hiding unlock-all-button, gameplay with premium pigeon) verified at 430x920. Only regression: restore confirmation message is not visible in DOM after clicking restore-purchases even though state.msg is set — because the render is nested inside the purchase-sheet overlay. Note: entering 733T on menu opens a 'LEET PIGEON STATUS ACHIEVED' modal that must be dismissed via the COO! button (leet-done) before navigating to Pigeons screen; the leet-badge (testID='leet-badge') only shows after this dismissal.",
+  "rca of the issue": "PigeonsScreen.js lines 166-193: the block `{sheet && (<View testID='purchase-sheet'>... {!!msg && <Text testID='purchase-error'>{msg}</Text>} ...)}` renders the shared `msg` state only when `sheet` is truthy. doRestore() only mutates msg — it does not set sheet — so the confirmation is never mounted. Fix: extract the toast to a top-level conditional in the return (e.g. above/below <Pressable testID='restore-purchases'>) with its own testID, or open a lightweight informational sheet on restore."
+}

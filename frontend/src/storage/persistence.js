@@ -9,6 +9,8 @@ const KEYS = {
   map: 'dp_selectedMap',
   unlocked: 'dp_unlockedPigeons',
   leet: 'dp_leetUnlock',
+  purchased: 'dp_purchasedPigeons',
+  bundle: 'dp_bundleOwned',
 };
 
 async function getNumber(key, def) {
@@ -31,7 +33,7 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, injured, sound, pigeon, map, unlocked, leet] = await Promise.all([
+    const [best, bestDist, injured, sound, pigeon, map, unlocked, leet, purchased, bundle] = await Promise.all([
       getNumber(KEYS.best, 0),
       getNumber(KEYS.bestDist, 0),
       getNumber(KEYS.injured, 0),
@@ -40,6 +42,8 @@ export const Persistence = {
       getString(KEYS.map, 'day'),
       getString(KEYS.unlocked, ''),
       getString(KEYS.leet, '0'),
+      getString(KEYS.purchased, ''),
+      getString(KEYS.bundle, '0'),
     ]);
     return {
       bestScore: best,
@@ -50,7 +54,15 @@ export const Persistence = {
       selectedMap: map,
       unlockedPigeons: unlocked ? unlocked.split(',').filter(Boolean) : [],
       leetUnlock: leet === '1',
+      purchasedPigeons: purchased ? purchased.split(',').filter(Boolean) : [],
+      bundleOwned: bundle === '1',
     };
+  },
+  setPurchased(list) {
+    AsyncStorage.setItem(KEYS.purchased, list.join(',')).catch(() => {});
+  },
+  setBundle(on) {
+    AsyncStorage.setItem(KEYS.bundle, on ? '1' : '0').catch(() => {});
   },
   setLeet(on) {
     AsyncStorage.setItem(KEYS.leet, on ? '1' : '0').catch(() => {});

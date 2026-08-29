@@ -6,12 +6,72 @@ import { FONT, COLORS } from '../ui/theme';
 import PigeonSprite from '../components/PigeonSprite';
 import { PIGEONS } from '../data/pigeons';
 import { Audio } from '../audio/audio';
+import { entitlementFor, allPremiumUnlocked } from '../store/entitlements';
+import { DEFAULT_PRICES } from '../store/products';
+import { Billing } from '../store/billing';
 
-export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, leetUnlock, onSelect, onBack }) {
+export default function PigeonsScreen({
+  selectedPigeon,
+  unlockedPigeons,
+  leetUnlock,
+  purchasedPigeons = [],
+  bundleOwned = false,
+  onSelect,
+  onBuyPigeon,
+  onBuyBundle,
+  onRestore,
+  onBack,
+}) {
   const [preview, setPreview] = useState(selectedPigeon);
-  const isUnlocked = (p) => !p.locked || leetUnlock || unlockedPigeons.includes(p.id);
+  const [sheet, setSheet] = useState(null); // { kind:'pigeon'|'bundle', id, price }
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [restoreMsg, setRestoreMsg] = useState('');
+
+  const ent = { purchased: purchasedPigeons, bundleOwned, leetUnlock };
+  const ownedBundle = allPremiumUnlocked(PIGEONS, ent);
   const previewP = PIGEONS.find((p) => p.id === preview) || PIGEONS[0];
-  const previewUnlocked = isUnlocked(previewP);
+  const previewEnt = entitlementFor(previewP, ent);
+
+  const openPigeonSheet = (id) => {
+    Audio.ui();
+    setMsg('');
+    setSheet({ kind: 'pigeon', id, price: Billing.priceFor(Billing.products.pigeons[id]) || DEFAULT_PRICES.pigeon });
+  };
+  const openBundleSheet = () => {
+    Audio.ui();
+    setMsg('');
+    setSheet({ kind: 'bundle', price: Billing.priceFor(Billing.products.bundle) || DEFAULT_PRICES.bundle });
+  };
+  const closeSheet = () => {
+    setSheet(null);
+    setBusy(false);
+    setMsg('');
+  };
+
+  const runPurchase = async (devOutcome) => {
+    if (busy || !sheet) return;
+    setBusy(true);
+    setMsg('');
+    const status =
+      sheet.kind === 'bundle' ? await onBuyBundle(devOutcome) : await onBuyPigeon(sheet.id, devOutcome);
+    setBusy(false);
+    if (status === 'success') {
+      Audio.highscore();
+      closeSheet();
+    } else if (status === 'cancelled') {
+      closeSheet(); // return cleanly, unlock nothing
+    } else {
+      Audio.crash();
+      setMsg("PURCHASE COULDN'T BE COMPLETED");
+    }
+  };
+
+  const doRestore = async () => {
+    Audio.ui();
+    const n = await onRestore();
+    setRestoreMsg(n > 0 ? `RESTORED ${n} PURCHASE${n === 1 ? '' : 'S'}` : 'NOTHING TO RESTORE');
+  };
 
   return (
     <SafeAreaView style={styles.root}>
@@ -25,11 +85,11 @@ export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, leetUnl
         )}
       </View>
 
-      {/* Preview panel — always shows what a pigeon looks like, locked or not */}
+      {/* Preview panel */}
       <View style={styles.previewCard}>
         <View style={styles.previewSprite}>
-          <PigeonSprite pigeon={previewP} fatLevel={1} size={140} />
-          {!previewUnlocked && (
+          <PigeonSprite pigeon={previewP} fatLevel={1} size={130} />
+          {!previewEnt.canUse && (
             <View style={styles.previewLock} testID="preview-lock">
               <Text style={styles.lockEmoji}>LOCKED</Text>
             </View>
@@ -37,27 +97,38 @@ export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, leetUnl
         </View>
         <Text style={styles.previewName}>{previewP.name}</Text>
         <Text style={styles.previewTag}>{previewP.tagline}</Text>
-        {previewUnlocked ? (
+        {previewEnt.canUse ? (
           selectedPigeon === previewP.id ? (
             <Text style={[styles.previewState, { color: COLORS.teal }]}>SELECTED</Text>
           ) : (
-            <Button
-              testID="select-pigeon"
-              label="SELECT"
-              variant="teal"
-              small
-              onPress={() => onSelect(previewP.id)}
-              style={{ marginTop: 8 }}
-            />
+            <Button testID="select-pigeon" label="SELECT" variant="teal" small onPress={() => onSelect(previewP.id)} style={{ marginTop: 8 }} />
           )
         ) : (
-          <Text style={[styles.previewState, { color: COLORS.pink }]}>UNLOCK COMING SOON</Text>
+          <Button
+            testID="preview-unlock"
+            label={`UNLOCK — ${DEFAULT_PRICES.pigeon}`}
+            variant="primary"
+            small
+            onPress={() => openPigeonSheet(previewP.id)}
+            style={{ marginTop: 8 }}
+          />
         )}
       </View>
 
+      {/* Unlock All bundle */}
+      {!ownedBundle && (
+        <Pressable testID="unlock-all-button" onPress={openBundleSheet} style={styles.bundle}>
+          <View>
+            <Text style={styles.bundleTitle}>UNLOCK ALL 5 — {DEFAULT_PRICES.bundle}</Text>
+            <Text style={styles.bundleSave}>SAVE {DEFAULT_PRICES.bundleSave}</Text>
+          </View>
+          <Text style={styles.bundleChevron}>›</Text>
+        </Pressable>
+      )}
+
       <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
         {PIGEONS.map((p) => {
-          const unlocked = isUnlocked(p);
+          const e = entitlementFor(p, ent);
           const active = selectedPigeon === p.id;
           return (
             <Pressable
@@ -71,18 +142,59 @@ export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, leetUnl
             >
               <View style={styles.cardSprite}>
                 <PigeonSprite pigeon={p} fatLevel={0} size={70} />
-                {!unlocked && (
+                {!e.canUse && (
                   <View style={styles.cardLock}>
                     <Text style={styles.cardLockTxt}>🔒</Text>
                   </View>
                 )}
               </View>
               <Text style={styles.cardName} numberOfLines={1}>{p.name.replace(' Pigeon', '')}</Text>
-              {active && <Text style={styles.cardBadge}>✓</Text>}
+              {e.canUse ? (
+                active && <Text style={styles.cardBadge}>✓</Text>
+              ) : (
+                <Text style={styles.cardPrice} testID={`price-${p.id}`}>{DEFAULT_PRICES.pigeon}</Text>
+              )}
             </Pressable>
           );
         })}
       </ScrollView>
+
+      <Pressable testID="restore-purchases" onPress={doRestore} style={styles.restore}>
+        <Text style={styles.restoreTxt}>RESTORE PURCHASES</Text>
+      </Pressable>
+      {!!restoreMsg && (
+        <Text style={styles.restoreMsg} testID="restore-msg">{restoreMsg}</Text>
+      )}
+
+      {/* Purchase sheet (native flow placeholder + DEV simulator) */}
+      {sheet && (
+        <View style={styles.sheetOverlay} testID="purchase-sheet" onStartShouldSetResponder={() => true}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>
+              {sheet.kind === 'bundle' ? 'UNLOCK ALL 5 PIGEONS' : `UNLOCK ${(PIGEONS.find((p) => p.id === sheet.id) || {}).name || ''}`}
+            </Text>
+            <Text style={styles.sheetPrice}>{sheet.price}</Text>
+            <Text style={styles.sheetNote}>
+              {Billing.platform === 'ios' ? 'Billed via the App Store' : Billing.platform === 'android' ? 'Billed via Google Play' : 'Billed via your app store'}
+            </Text>
+            {!!msg && <Text style={styles.sheetError} testID="purchase-error">{msg}</Text>}
+
+            {Billing.isDev ? (
+              <>
+                <Text style={styles.devTag}>DEV SIMULATOR</Text>
+                <Button testID="sim-success" label={busy ? '…' : 'Simulate Success'} variant="teal" small onPress={() => runPurchase('success')} style={styles.sheetBtn} />
+                <View style={styles.simRow}>
+                  <Button testID="sim-cancel" label="Cancelled" variant="ghost" small onPress={() => runPurchase('cancelled')} style={{ flex: 1 }} />
+                  <Button testID="sim-fail" label="Failed" variant="ghost" small onPress={() => runPurchase('failed')} style={{ flex: 1 }} />
+                </View>
+              </>
+            ) : (
+              <Button testID="purchase-confirm" label="BUY" variant="primary" onPress={() => runPurchase('success')} style={styles.sheetBtn} />
+            )}
+            <Button testID="purchase-cancel" label="Close" variant="ghost" small onPress={closeSheet} style={styles.sheetBtn} />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -92,20 +204,37 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
   title: { fontFamily: FONT, color: COLORS.yellow, fontSize: 30, fontWeight: '700', letterSpacing: 2 },
   leetBadge: { width: 70, textAlign: 'right', fontFamily: FONT, color: COLORS.pink, fontSize: 16, fontWeight: '700', letterSpacing: 2 },
-  previewCard: { backgroundColor: COLORS.card, borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 10 },
-  previewSprite: { height: 150, justifyContent: 'center', alignItems: 'center' },
+  previewCard: { backgroundColor: COLORS.card, borderRadius: 20, padding: 14, alignItems: 'center', marginTop: 10 },
+  previewSprite: { height: 132, justifyContent: 'center', alignItems: 'center' },
   previewLock: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(27,16,48,0.55)', borderRadius: 16 },
   lockEmoji: { fontFamily: FONT, color: '#fff', fontWeight: '700', fontSize: 20, letterSpacing: 3 },
-  previewName: { fontFamily: FONT, color: COLORS.text, fontSize: 22, fontWeight: '700', marginTop: 6 },
-  previewTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, marginTop: 2, fontStyle: 'italic' },
+  previewName: { fontFamily: FONT, color: COLORS.text, fontSize: 22, fontWeight: '700', marginTop: 4 },
+  previewTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 13, marginTop: 2, fontStyle: 'italic' },
   previewState: { fontFamily: FONT, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginTop: 10 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingVertical: 16, justifyContent: 'center' },
+  bundle: { marginTop: 12, backgroundColor: COLORS.bgAlt, borderRadius: 16, borderWidth: 2, borderColor: COLORS.yellow, paddingVertical: 12, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bundleTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  bundleSave: { fontFamily: FONT, color: COLORS.teal, fontSize: 13, fontWeight: '700', marginTop: 2 },
+  bundleChevron: { fontFamily: FONT, color: COLORS.yellow, fontSize: 30, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: 14, justifyContent: 'center' },
   card: { width: 100, height: 120, backgroundColor: COLORS.bgAlt, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
   cardActive: { borderColor: COLORS.teal },
   cardPreview: { backgroundColor: COLORS.card },
   cardSprite: { height: 72, justifyContent: 'center' },
   cardLock: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   cardLockTxt: { fontSize: 26 },
-  cardName: { fontFamily: FONT, color: COLORS.text, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  cardName: { fontFamily: FONT, color: COLORS.text, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  cardPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 13, fontWeight: '700', marginTop: 2 },
   cardBadge: { position: 'absolute', top: 6, right: 8, color: COLORS.teal, fontWeight: '700', fontSize: 16 },
+  restore: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 14, marginBottom: 6 },
+  restoreTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 2, textDecorationLine: 'underline' },
+  restoreMsg: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', letterSpacing: 1, textAlign: 'center', marginTop: -2, marginBottom: 8 },
+  sheetOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.8)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 60 },
+  sheet: { width: '100%', maxWidth: 340, backgroundColor: COLORS.card, borderRadius: 24, padding: 22, alignItems: 'center' },
+  sheetTitle: { fontFamily: FONT, color: COLORS.text, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  sheetPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 34, fontWeight: '700', marginTop: 6 },
+  sheetNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  sheetError: { fontFamily: FONT, color: COLORS.pink, fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center' },
+  devTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, letterSpacing: 2, marginTop: 14 },
+  sheetBtn: { width: '100%', marginTop: 10 },
+  simRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
 });

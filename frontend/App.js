@@ -10,6 +10,8 @@ import { Audio } from './src/audio/audio';
 import { loadFonts, COLORS } from './src/ui/theme';
 import { getPigeon } from './src/data/pigeons';
 import { getMap } from './src/data/maps';
+import { Billing } from './src/store/billing';
+import { PRODUCTS } from './src/store/products';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -23,6 +25,8 @@ export default function App() {
     selectedMap: 'day',
     unlockedPigeons: [],
     leetUnlock: false,
+    purchasedPigeons: [],
+    bundleOwned: false,
   });
 
   useEffect(() => {
@@ -73,6 +77,50 @@ export default function App() {
     Persistence.setLeet(true);
   }, [update]);
 
+  // Purchase a single premium pigeon via the store hook (DEV simulator for now).
+  const buyPigeon = useCallback(async (id, devOutcome) => {
+    const res = await Billing.purchase(PRODUCTS.pigeons[id], devOutcome);
+    if (res.status === 'success') {
+      setState((s) => {
+        const purchasedPigeons = s.purchasedPigeons.includes(id)
+          ? s.purchasedPigeons
+          : [...s.purchasedPigeons, id];
+        Persistence.setPurchased(purchasedPigeons);
+        return { ...s, purchasedPigeons };
+      });
+    }
+    return res.status;
+  }, []);
+
+  const buyBundle = useCallback(async (devOutcome) => {
+    const res = await Billing.purchase(PRODUCTS.bundle, devOutcome);
+    if (res.status === 'success') {
+      update({ bundleOwned: true });
+      Persistence.setBundle(true);
+    }
+    return res.status;
+  }, [update]);
+
+  // Restore non-consumable purchases. In production this queries Apple/Google
+  // ownership; in DEV we simulate by restoring the locally-known owned products.
+  const restorePurchases = useCallback(async () => {
+    const owned = [
+      ...state.purchasedPigeons.map((id) => PRODUCTS.pigeons[id]),
+      ...(state.bundleOwned ? [PRODUCTS.bundle] : []),
+    ];
+    const restored = await Billing.restore(owned);
+    const ids = Object.entries(PRODUCTS.pigeons)
+      .filter(([, pid]) => restored.includes(pid))
+      .map(([id]) => id);
+    const bundle = restored.includes(PRODUCTS.bundle);
+    setState((s) => {
+      Persistence.setPurchased(ids);
+      Persistence.setBundle(bundle);
+      return { ...s, purchasedPigeons: ids, bundleOwned: bundle };
+    });
+    return restored.length;
+  }, [state.purchasedPigeons, state.bundleOwned]);
+
   const handleCrash = useCallback(({ score, distance }) => {
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
@@ -117,7 +165,12 @@ export default function App() {
             selectedPigeon={state.selectedPigeon}
             unlockedPigeons={state.unlockedPigeons}
             leetUnlock={state.leetUnlock}
+            purchasedPigeons={state.purchasedPigeons}
+            bundleOwned={state.bundleOwned}
             onSelect={handleSelectPigeon}
+            onBuyPigeon={buyPigeon}
+            onBuyBundle={buyBundle}
+            onRestore={restorePurchases}
             onBack={() => setScreen('menu')}
           />
         )}
