@@ -6,8 +6,9 @@ import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import PigeonSprite from '../components/PigeonSprite';
 import SecretCode from '../components/SecretCode';
+import ManorThumb from '../components/ManorThumb';
 import { getPigeon } from '../data/pigeons';
-import { MAPS, EASY_MAP } from '../data/maps';
+import { MAPS } from '../data/maps';
 import { Billing } from '../store/billing';
 import { Audio } from '../audio/audio';
 
@@ -123,8 +124,8 @@ export default function MainMenu({
             onPress={() => onManorPress(m.id)}
             style={[styles.mapCard, selectedMap === m.id && styles.mapCardActive]}
           >
-            <View style={[styles.mapSwatch, { backgroundColor: m.skyTop }]}>
-              <View style={[styles.mapSwatchGround, { backgroundColor: m.ground }]} />
+            <View style={styles.mapSwatch}>
+              <ManorThumb mapId={m.id} width={74} height={44} />
             </View>
             <Text style={styles.mapName} numberOfLines={1}>{m.name}</Text>
           </Pressable>
@@ -136,10 +137,8 @@ export default function MainMenu({
           onPress={() => onManorPress('random')}
           style={[styles.mapCard, selectedMap === 'random' && styles.mapCardActive]}
         >
-          <View style={styles.randomSwatch}>
-            {MAPS.map((m) => (
-              <View key={m.id} style={[styles.randomStripe, { backgroundColor: m.skyTop }]} />
-            ))}
+          <View style={styles.mapSwatch}>
+            <ManorThumb variant="random" width={74} height={44} />
             <View style={styles.randomQ}><Text style={styles.randomQTxt}>?</Text></View>
           </View>
           <Text style={styles.mapName} numberOfLines={1}>Random</Text>
@@ -151,8 +150,8 @@ export default function MainMenu({
           onPress={() => onManorPress('easy')}
           style={[styles.mapCard, selectedMap === 'easy' && styles.mapCardActive, styles.easyCard]}
         >
-          <View style={[styles.mapSwatch, { backgroundColor: EASY_MAP.skyTop }]}>
-            <View style={[styles.mapSwatchGround, { backgroundColor: EASY_MAP.ground }]} />
+          <View style={styles.mapSwatch}>
+            <ManorThumb mapId="easy" width={74} height={44} />
             {!easyModeOwned && (
               <View style={styles.easyLock} testID="easy-lock">
                 <Text style={styles.easyLockTxt}>🔒</Text>

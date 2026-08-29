@@ -92,6 +92,11 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - GameEntities.Building() draws brick/roof/door colours from the per-manor palettes (fixed OBSTACLE_WIDTH & collision rects unchanged). ChipView gains a translucent dark contrast halo (behind the crisp, collision unaffected) so gold chips stay visible on bright skies. HecklerView unchanged — window-anchoring preserved (no orphan bubbles).
 - Readability safeguards verified: obstacles stay high-contrast vs desaturated background; chips visible on all three; screen-wide tap flap unaffected; window people anchored; no new collidable scenery; 0 console/runtime errors.
 
+## Update 12 (2026-06) — "Choose your Manor" preview cards — illustrated thumbnails (visual-only, menu-only)
+- Replaced the old two-colour swatch previews with lightweight STATIC illustrated mini-scenes (new src/components/ManorThumb.js, react-native-svg, 74x44 viewBox) that reuse each map's real palette/art direction — tiny snapshots of the actual maps, not live worlds.
+- Sunny London: blue sky + clouds + red-brick terraces (chimneys/windows) + red double-decker bus + street lamp + green ground. Gritty: dark sky, grimy brick blocks with pink windows, rooftop aerial, graffiti tag accent, chain-link fence. Chippy Sunset (most colourful): multi-stop sunset gradient + glowing low sun + dark rooftops with warm glowing windows + striped chippy awning + seagull. Random: subtle 3-way vertical split of the standard manors (day/night/dusk skies + hint buildings + dusk sun) with the existing "?" overlay on top — NO Easy Mode imagery. Easy Mode: peaceful blue sky, fluffy clouds, rolling green hills, distant simple buildings (lots of open room).
+- Preserved: card size, yellow selected border, manor names, horizontal layout, tap/select behaviour, Random functionality, Easy Mode lock + £14.99 purchase behaviour. Gameplay maps NOT modified. Verified via screenshot; 0 lint errors.
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks; inject real StoreKit/Play Billing provider (pigeons + easymode + restore).
