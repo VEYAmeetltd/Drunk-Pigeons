@@ -25,8 +25,13 @@ export function createEngine({ onScore, onChip, onCrash }) {
   let flapPulse = 0;
   const dirtyObstacles = new Set();
 
+  // Window heckler (tiny angry person) — single slot, at most one on screen.
+  const heckler = { active: false, x: 0, y: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
+  let hecklerTimer = 4;
+  let hecklerPending = false;
+
   for (let i = 0; i < CONFIG.OBSTACLE_POOL; i++) {
-    obstacles.push({ active: false, x: 0, topH: 0, gap: CONFIG.GAP_BASE, kind: 0, passed: false });
+    obstacles.push({ active: false, x: 0, topH: 0, gap: CONFIG.GAP_BASE, kind: 0, seed: 0, passed: false });
   }
   for (let i = 0; i < CONFIG.CHIP_POOL; i++) {
     chips.push({ active: false, x: 0, y: 0, eaten: false, anim: 0 });
@@ -57,6 +62,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
     o.topH = topH;
     o.gap = gap;
     o.kind = Math.floor(Math.random() * 4);
+    o.seed = Math.floor(Math.random() * 1000000);
     o.passed = false;
     dirtyObstacles.add(idx);
   }
@@ -65,6 +71,36 @@ export function createEngine({ onScore, onChip, onCrash }) {
     let max = -Infinity;
     for (const o of obstacles) if (o.active && o.x > max) max = o.x;
     return max;
+  }
+
+  // Attach a tiny angry heckler to a window on an on-screen building.
+  function trySpawnHeckler() {
+    if (heckler.active) return;
+    const w = CONFIG.OBSTACLE_WIDTH;
+    const cands = obstacles.filter((o) => o.active && o.x > W * 0.5 && o.x < W - 10);
+    if (cands.length === 0) return;
+    const o = cands[Math.floor(Math.random() * cands.length)];
+    const gY = groundY();
+    const bottomTop = o.topH + o.gap;
+    const topTall = o.topH >= 90;
+    const bottomTall = gY - bottomTop >= 90;
+    let y;
+    if (bottomTall && (!topTall || Math.random() < 0.6)) {
+      y = bottomTop + 34 + Math.random() * Math.max(10, gY - bottomTop - 74);
+    } else if (topTall) {
+      y = 40 + Math.random() * Math.max(10, o.topH - 74);
+    } else {
+      return;
+    }
+    y = Math.max(150, Math.min(gY - 60, y));
+    heckler.active = true;
+    heckler.x = o.x + w * 0.5;
+    heckler.y = y;
+    heckler.life = 1.5 + Math.random() * 0.5;
+    heckler.insultR = Math.random();
+    heckler.reactionR = Math.random();
+    heckler.id += 1;
+    hecklerPending = true;
   }
 
   function spawnChip(x, y) {
@@ -111,6 +147,10 @@ export function createEngine({ onScore, onChip, onCrash }) {
     dead = false;
     invincibleUntil = 0;
     usedRevive = false;
+    heckler.active = false;
+    heckler.id = 0;
+    hecklerPending = false;
+    hecklerTimer = 3.5 + Math.random() * 3;
     obstacles.forEach((o) => (o.active = false));
     chips.forEach((c) => (c.active = false));
     feathers.forEach((f) => (f.active = false));
@@ -251,6 +291,18 @@ export function createEngine({ onScore, onChip, onCrash }) {
       explodeFeathers(pigeon.x, pigeon.y);
       if (onCrash) onCrash({ score, chips: chipCount, distance: Math.floor(distance / PPM) });
     }
+
+    // window heckler: move with the world, expire, and occasionally spawn
+    if (heckler.active) {
+      heckler.x -= speed * dt;
+      heckler.life -= dt;
+      if (heckler.life <= 0 || heckler.x < -80) heckler.active = false;
+    }
+    hecklerTimer -= dt;
+    if (hecklerTimer <= 0) {
+      hecklerTimer = 3.5 + Math.random() * 4.5;
+      trySpawnHeckler();
+    }
   }
 
   // Revive: reposition to safe spot, grant temporary invincibility, keep score/chips.
@@ -285,7 +337,14 @@ export function createEngine({ onScore, onChip, onCrash }) {
       fat,
       inv,
       distM: Math.floor(distance / PPM),
+      distPx: distance,
       dead: dead ? 1 : 0,
+      heckler: {
+        x: heckler.x,
+        y: heckler.y,
+        active: heckler.active ? 1 : 0,
+        life: Math.max(0, heckler.life),
+      },
       obs: obstacles.map((o) => ({ x: o.x, active: o.active ? 1 : 0 })),
       chips: chips.map((c) => ({
         x: c.x,
@@ -310,7 +369,14 @@ export function createEngine({ onScore, onChip, onCrash }) {
       topH: o.topH,
       gap: o.gap,
       kind: o.kind,
+      seed: o.seed,
     }));
+  }
+
+  function consumeHeckler() {
+    if (!hecklerPending) return null;
+    hecklerPending = false;
+    return { id: heckler.id, insultR: heckler.insultR, reactionR: heckler.reactionR };
   }
 
   function consumeDirty() {
@@ -328,6 +394,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
     getSnapshot,
     getObstacleGeom,
     consumeDirty,
+    consumeHeckler,
     get score() {
       return score;
     },

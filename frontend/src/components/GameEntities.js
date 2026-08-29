@@ -1,10 +1,33 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
 import PigeonSprite from './PigeonSprite';
 import { CONFIG, pigeonSizeFor } from '../config';
+import { FONT } from '../ui/theme';
 
 const OW = CONFIG.OBSTACLE_WIDTH;
+
+function shade(hex, f) {
+  const h = (hex || '#888888').replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((n >> 16) & 255) * f);
+  const g = clamp(((n >> 8) & 255) * f);
+  const b = clamp((n & 255) * f);
+  return `rgb(${r},${g},${b})`;
+}
+
+function rngFrom(seed) {
+  let a = (seed || 1) >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /* ---------------- Pigeon ---------------- */
 export function PigeonView({ world, pigeon, fatLevel }) {
@@ -53,83 +76,161 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
   const bottomH = Math.max(0, groundY - bottomY);
   return (
     <Animated.View style={[styles.abs, { left: 0, top: 0, width: OW }, style]} pointerEvents="none">
-      <Building height={topH} theme={theme} kind={geom.kind} flip />
+      <Building height={topH} theme={theme} seed={geom.seed} flip />
       <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }}>
-        <Building height={bottomH} theme={theme} kind={geom.kind} />
+        <Building height={bottomH} theme={theme} seed={geom.seed} ground />
       </View>
     </Animated.View>
   );
 }
 
-function Building({ height, theme, kind, flip }) {
+// Procedurally varied cartoon building. Collision is unchanged (fixed OW column);
+// everything here is decorative and never intercepts touches.
+function Building({ height, theme, seed, flip, ground }) {
+  const cfg = useMemo(() => {
+    const r = rngFrom((seed || 1) + (flip ? 7777 : 13));
+    const bodyF = 0.82 + r() * 0.36;
+    const body = shade(theme.obstacle, bodyF);
+    const border = shade(theme.obstacle, bodyF * 0.68);
+    const type = Math.floor(r() * 5); // 0 residential 1 rundown 2 commercial 3 pub 4 office
+    const cols = type === 2 || type === 3 ? 1 : r() > 0.35 ? 2 : 1;
+    const roof = Math.floor(r() * 3); // 0 flat bar, 1 parapet, 2 pitched
+    const chimneys = type === 0 || type === 1 ? Math.floor(r() * 3) : 0;
+    const antenna = r() > 0.6;
+    const drainpipe = r() > 0.45 ? (r() > 0.5 ? 'left' : 'right') : null;
+    const balcony = type === 0 && r() > 0.55;
+    const front = ground ? (type === 3 ? 'pub' : type === 2 ? 'shop' : 'door') : null;
+    const litSeed = r();
+    return { body, border, type, cols, roof, chimneys, antenna, drainpipe, balcony, front, litSeed };
+  }, [seed, flip, ground, theme]);
+
   const rows = useMemo(() => {
-    const n = Math.max(0, Math.floor((height - 26) / 34));
+    const usable = height - 30 - (ground ? 20 : 0);
+    const n = Math.max(0, Math.floor(usable / 30));
     return Array.from({ length: n });
-  }, [height]);
+  }, [height, ground]);
+
   if (height <= 0) return null;
+  const edgeStyle = flip ? { bottom: -3 } : { top: -3 };
+  const accent = theme.accent;
+
   return (
-    <View
-      style={[
-        obStyles.col,
-        { height, backgroundColor: theme.obstacle, borderColor: theme.obstacleDark },
-      ]}
-    >
-      {/* cap on the "gap facing" edge */}
-      <View
-        style={[
-          obStyles.cap,
-          flip ? { bottom: -4 } : { top: -4 },
-          { backgroundColor: theme.obstacleDark },
-        ]}
-      />
-      <Cap kind={kind} theme={theme} flip={flip} />
-      <View style={obStyles.windows}>
+    <View style={[obStyles.col, { height, backgroundColor: cfg.body, borderColor: cfg.border }]}>
+      {/* roof / parapet on the gap-facing edge */}
+      <Roof roof={cfg.roof} flip={flip} color={cfg.border} />
+      <View style={[obStyles.edgeDeco, edgeStyle]} pointerEvents="none">
+        {Array.from({ length: cfg.chimneys }).map((_, i) => (
+          <View
+            key={i}
+            style={{
+              position: 'absolute',
+              left: 12 + i * 22,
+              [flip ? 'top' : 'bottom']: 2,
+              width: 12,
+              height: 16,
+              backgroundColor: cfg.border,
+              borderRadius: 2,
+            }}
+          />
+        ))}
+        {cfg.antenna && (
+          <View
+            style={{
+              position: 'absolute',
+              right: 14,
+              [flip ? 'top' : 'bottom']: 2,
+              width: 2,
+              height: 20,
+              backgroundColor: cfg.border,
+            }}
+          />
+        )}
+      </View>
+
+      {/* drainpipe */}
+      {cfg.drainpipe && (
+        <View
+          style={{
+            position: 'absolute',
+            [cfg.drainpipe]: 4,
+            top: 8,
+            bottom: 8,
+            width: 3,
+            backgroundColor: cfg.border,
+            opacity: 0.8,
+          }}
+        />
+      )}
+
+      {/* windows */}
+      <View style={[obStyles.windows, ground && { justifyContent: 'flex-start' }]}>
         {rows.map((_, i) => (
-          <View key={i} style={obStyles.winRow}>
-            <View style={[obStyles.win, { backgroundColor: theme.window }]} />
-            <View style={[obStyles.win, { backgroundColor: theme.window }]} />
+          <View key={i} style={[obStyles.winRow, { gap: cfg.cols === 2 ? 8 : 0 }]}>
+            {Array.from({ length: cfg.cols }).map((_, c) => {
+              const lit = ((i * 3 + c * 7 + Math.floor(cfg.litSeed * 100)) % 5) < 2;
+              return (
+                <View
+                  key={c}
+                  style={[
+                    obStyles.win,
+                    cfg.cols === 1 && { width: 26 },
+                    { backgroundColor: lit ? theme.window : cfg.border, borderColor: cfg.border },
+                    cfg.balcony && i === 0 && { borderBottomWidth: 3, borderBottomColor: accent },
+                  ]}
+                />
+              );
+            })}
           </View>
         ))}
       </View>
+
+      {/* street-level shop / pub / door on the ground building */}
+      {cfg.front && (
+        <View style={obStyles.front} pointerEvents="none">
+          {cfg.front !== 'door' && (
+            <View style={[obStyles.sign, { backgroundColor: accent }]}>
+              <View style={obStyles.signDot} />
+              <View style={obStyles.signDot} />
+              <View style={obStyles.signDot} />
+            </View>
+          )}
+          <View style={[obStyles.door, { backgroundColor: shade(theme.obstacle, 0.5) }]} />
+        </View>
+      )}
     </View>
   );
 }
 
-// Themed accent that distinguishes obstacle kinds.
-function Cap({ kind, theme, flip }) {
-  const edge = flip ? { bottom: 2 } : { top: 2 };
-  if (kind === 0) {
-    // chimney
+function Roof({ roof, flip, color }) {
+  if (roof === 2) {
+    // pitched triangle pointing away from the building body (toward the gap)
+    const tri = flip
+      ? { borderTopWidth: 13, borderTopColor: color, borderLeftColor: 'transparent', borderRightColor: 'transparent' }
+      : { borderBottomWidth: 13, borderBottomColor: color, borderLeftColor: 'transparent', borderRightColor: 'transparent' };
     return (
-      <View style={[obStyles.accent, edge, { left: 10 }]}>
-        <View style={{ width: 14, height: 18, backgroundColor: theme.obstacleDark, borderRadius: 2 }} />
+      <View
+        style={[
+          obStyles.roofWrap,
+          flip ? { bottom: -12 } : { top: -12 },
+          { width: 0, height: 0, borderLeftWidth: OW / 2, borderRightWidth: OW / 2, alignSelf: 'center' },
+          tri,
+        ]}
+        pointerEvents="none"
+      />
+    );
+  }
+  if (roof === 1) {
+    // parapet: bar with two notches
+    return (
+      <View style={[obStyles.roofBar, flip ? { bottom: -4 } : { top: -4 }, { backgroundColor: color }]} pointerEvents="none">
+        <View style={[obStyles.notch, { backgroundColor: color }]} />
+        <View style={[obStyles.notch, { backgroundColor: color }]} />
+        <View style={[obStyles.notch, { backgroundColor: color }]} />
       </View>
     );
   }
-  if (kind === 1) {
-    // hanging pub sign
-    return (
-      <View style={[obStyles.accent, edge, { alignSelf: 'center' }]}>
-        <View style={{ width: 30, height: 20, backgroundColor: theme.accent, borderRadius: 4 }} />
-      </View>
-    );
-  }
-  if (kind === 2) {
-    // scaffolding poles
-    return (
-      <View style={[obStyles.accent, edge, { flexDirection: 'row', gap: 6, alignSelf: 'center' }]}>
-        <View style={{ width: 4, height: 22, backgroundColor: theme.accent }} />
-        <View style={{ width: 4, height: 22, backgroundColor: theme.accent }} />
-        <View style={{ width: 4, height: 22, backgroundColor: theme.accent }} />
-      </View>
-    );
-  }
-  // clock face
-  return (
-    <View style={[obStyles.accent, edge, { alignSelf: 'center' }]}>
-      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', borderWidth: 3, borderColor: theme.obstacleDark }} />
-    </View>
-  );
+  // flat cap
+  return <View style={[obStyles.cap, flip ? { bottom: -4 } : { top: -4 }, { backgroundColor: color }]} pointerEvents="none" />;
 }
 
 /* ---------------- Chip (a British chip / fry) ---------------- */
@@ -176,8 +277,104 @@ export function FeatherView({ world, index, color }) {
   );
 }
 
+/* ---------------- Window heckler (tiny angry person + speech bubble) ---------------- */
+export function HecklerView({ world, text, reaction, theme }) {
+  const style = useAnimatedStyle(() => {
+    const h = world.value.heckler;
+    if (!h || !h.active) return { opacity: 0, transform: [{ translateX: -999 }] };
+    const op = h.life > 0.35 ? 1 : Math.max(0, h.life / 0.35);
+    return { opacity: op, transform: [{ translateX: h.x - 20 }, { translateY: h.y - 20 }] };
+  });
+  return (
+    <Animated.View style={[styles.abs, { width: 40, height: 40 }, style]} pointerEvents="none" testID="heckler">
+      <View style={hkStyles.bubble}>
+        <Text style={hkStyles.bubbleTxt} numberOfLines={2} testID="heckler-insult">{text}</Text>
+        <View style={hkStyles.bubbleTail} />
+      </View>
+      <WindowPerson reaction={reaction} theme={theme} />
+    </Animated.View>
+  );
+}
+
+function WindowPerson({ reaction, theme }) {
+  const frame = theme.obstacleDark;
+  const glass = theme.window;
+  const skin = '#f3c9a0';
+  const cloth = theme.accent;
+  return (
+    <Svg width={40} height={40} viewBox="0 0 40 40">
+      <SvgRect x="1" y="1" width="38" height="38" rx="4" fill={glass} stroke={frame} strokeWidth="3" />
+      <SvgRect x="12" y="24" width="16" height="15" rx="4" fill={cloth} />
+      <Circle cx="20" cy="18" r="7" fill={skin} />
+      <Circle cx="17" cy="17" r="1.3" fill="#20232b" />
+      <Circle cx="23" cy="17" r="1.3" fill="#20232b" />
+      {reaction === 'horrified' ? (
+        <Circle cx="20" cy="21.5" r="2.2" fill="#20232b" />
+      ) : (
+        <Path d="M17 21 Q20 19.5 23 21" stroke="#20232b" strokeWidth="1.6" fill="none" />
+      )}
+      <Line x1="15" y1="14.5" x2="18.5" y2="15.6" stroke="#20232b" strokeWidth="1.4" />
+      <Line x1="25" y1="14.5" x2="21.5" y2="15.6" stroke="#20232b" strokeWidth="1.4" />
+      {reaction === 'fist' && (
+        <G>
+          <Line x1="26" y1="29" x2="33" y2="20" stroke={skin} strokeWidth="3" />
+          <Circle cx="34" cy="18" r="3.6" fill={skin} />
+        </G>
+      )}
+      {reaction === 'wave' && (
+        <G>
+          <Line x1="26" y1="29" x2="32" y2="17" stroke={skin} strokeWidth="3" />
+          <Circle cx="33" cy="15" r="3" fill={skin} />
+        </G>
+      )}
+      {reaction === 'point' && (
+        <G>
+          <Line x1="14" y1="29" x2="3" y2="24" stroke={skin} strokeWidth="3" />
+          <Circle cx="2.5" cy="24" r="2.6" fill={skin} />
+        </G>
+      )}
+      {reaction === 'mug' && <SvgRect x="27" y="27" width="7" height="8" rx="1.5" fill="#ffffff" stroke={frame} strokeWidth="1.5" />}
+      {reaction === 'newspaper' && <SvgRect x="24" y="27" width="12" height="9" rx="1" fill="#ffffff" stroke={frame} strokeWidth="1" />}
+      {reaction === 'confused' && (
+        <G>
+          <Line x1="26" y1="28" x2="26" y2="14" stroke={skin} strokeWidth="3" />
+          <Circle cx="26" cy="12" r="2.6" fill={skin} />
+        </G>
+      )}
+    </Svg>
+  );
+}
+
 const styles = StyleSheet.create({
   abs: { position: 'absolute', left: 0, top: 0 },
+});
+
+const hkStyles = StyleSheet.create({
+  bubble: {
+    position: 'absolute',
+    bottom: 44,
+    left: -58,
+    width: 156,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: '#20232b',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+  },
+  bubbleTxt: { fontFamily: FONT, color: '#20232b', fontWeight: '700', fontSize: 12, textAlign: 'center' },
+  bubbleTail: {
+    position: 'absolute',
+    bottom: -9,
+    left: 70,
+    width: 14,
+    height: 14,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 3,
+    borderBottomWidth: 3,
+    borderColor: '#20232b',
+    transform: [{ rotate: '45deg' }],
+  },
 });
 
 const obStyles = StyleSheet.create({
@@ -189,10 +386,17 @@ const obStyles = StyleSheet.create({
     alignItems: 'center',
   },
   cap: { position: 'absolute', left: 0, width: OW, height: 10, borderRadius: 4 },
-  accent: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  windows: { marginTop: 14, gap: 12, alignItems: 'center' },
-  winRow: { flexDirection: 'row', gap: 8 },
-  win: { width: 14, height: 16, borderRadius: 2, opacity: 0.9 },
+  roofBar: { position: 'absolute', left: 0, width: OW, height: 9, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
+  notch: { width: 8, height: 6, marginTop: -4 },
+  roofWrap: { position: 'absolute' },
+  edgeDeco: { position: 'absolute', left: 0, width: OW, height: 22 },
+  windows: { marginTop: 16, gap: 10, alignItems: 'center' },
+  winRow: { flexDirection: 'row' },
+  win: { width: 14, height: 15, borderRadius: 2, borderWidth: 1, opacity: 0.95 },
+  front: { position: 'absolute', bottom: 4, left: 0, right: 0, alignItems: 'center' },
+  sign: { width: OW - 18, height: 12, borderRadius: 3, marginBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  signDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.5)' },
+  door: { width: 20, height: 18, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
 });
 
 const chipStyles = StyleSheet.create({

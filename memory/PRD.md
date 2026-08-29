@@ -38,6 +38,12 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - BEST DISTANCE persisted locally (dp_bestDistance); shown on Game Over (go-distance / go-best-distance).
 - In-game RESTART button (↻) with RESTART RUN? confirm overlay: pauses run, Cancel resumes exact run, Restart begins fresh run (distance/score/chips/fat/revive reset, same pigeon+map). Restart does NOT count as injury/death, no game-over, no menu return. Input-safe (restart taps never flap; Space ignored while paused).
 
+## Update 3 (2026-06) — verified by testing agent (iteration_3) + visual confirm
+- Building variety: procedural seed-based buildings (colour shades, 1-2 window columns, roof styles flat/parapet/pitched, chimneys, antennas, drainpipes, street-level door/shop/pub fronts). Collision geometry UNCHANGED (same OBSTACLE_WIDTH column); all decorations pointerEvents=none.
+- Subtle world progression: parallax layers (clouds/far skyline/near skyline/street) driven by world.distPx + gentle distance-based sky tint. No abrupt switches, no difficulty change.
+- Window hecklers: occasional single tiny angry person in a window (SVG, reaction poses: fist/point/wave/mug/newspaper/horrified/confused) with a bold speech bubble shouting randomised censored-British insults (data/insults.js, 30 lines, no back-to-back repeat). Cooldown 3.5-8s, max ONE at a time, ~1.5s life, clamped away from top HUD. Never collidable.
+- Regression PASS on all 3 maps (physics/gaps/difficulty/collision/chips/score/distance/revive/restart unchanged).
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks.

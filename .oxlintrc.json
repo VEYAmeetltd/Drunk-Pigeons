@@ -1,3 +1,11 @@
 {
-  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/.expo/**", "**/web-build/**"]
+  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/.expo/**", "**/web-build/**"],
+  "globals": {
+    "define": "readonly",
+    "module": "writable",
+    "require": "readonly",
+    "exports": "writable",
+    "process": "readonly",
+    "__DEV__": "readonly"
+  }
 }

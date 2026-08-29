@@ -3,19 +3,21 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import { useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, FeatherView } from '../components/GameEntities';
+import { PigeonView, ObstacleView, ChipView, FeatherView, HecklerView } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
 import { CONFIG, fatLevelFor, FAT_LABELS, formatInt } from '../config';
 import { randomDeathMessage } from '../data/deathMessages';
+import { pickInsult, pickReaction } from '../data/insults';
 import { Audio } from '../audio/audio';
 import { Ads } from '../ads/ads';
 import { FONT, COLORS } from '../ui/theme';
 
 function emptySnapshot() {
   return {
-    px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0,
+    px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0,
+    heckler: { x: -999, y: 0, active: 0, life: 0 },
     obs: Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ x: -999, active: 0 })),
     chips: Array.from({ length: CONFIG.CHIP_POOL }, () => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 })),
     feathers: Array.from({ length: CONFIG.FEATHER_POOL }, () => ({ x: -999, y: 0, rot: 0, active: 0, life: 0 })),
@@ -54,6 +56,7 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
   const [shield, setShield] = useState(false);
   const [started, setStarted] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [heckler, setHeckler] = useState({ id: 0, text: '', reaction: 'fist' });
 
   const engineRef = useRef(null);
   const rafRef = useRef(0);
@@ -74,7 +77,7 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
     setOver({ message: randomDeathMessage(), score: sc, chips: ch, distance: dist, isNewBest });
     Ads.registerDeath();
-    onCrash && onCrash({ score: sc, chips: ch, distance: dist });
+    if (onCrash) onCrash({ score: sc, chips: ch, distance: dist });
   };
 
   const buildEngine = useCallback(() => {
@@ -117,6 +120,8 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
       world.value = eng.getSnapshot(now);
       const dirty = eng.consumeDirty();
       if (dirty) setObsGeom(eng.getObstacleGeom());
+      const hk = eng.consumeHeckler();
+      if (hk) setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -193,12 +198,15 @@ export default function GameScreen({ pigeon, map, bestScore, bestDistance = 0, o
 
   return (
     <View style={styles.root}>
-      <Background theme={map} width={width} height={height} />
+      <Background theme={map} width={width} height={height} world={world} />
 
       {/* obstacles */}
       {obsGeom.map((g, i) => (
         <ObstacleView key={i} world={world} index={i} geom={g} theme={map} screenH={height} />
       ))}
+
+      {/* window heckler (environmental comedy) */}
+      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={map} />
 
       {/* chips */}
       {Array.from({ length: CONFIG.CHIP_POOL }).map((_, i) => (
