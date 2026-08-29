@@ -120,6 +120,15 @@ def sanitize_nickname(raw: str):
     return name
 
 
+def normalize_nickname(name):
+    """Case- and space-insensitive canonical form used for global uniqueness.
+    'FatPigeon', 'fat pigeon' and 'FATPIGEON' all collapse to 'fatpigeon'."""
+    if not isinstance(name, str):
+        return None
+    n = re.sub(r"[^a-z0-9]", "", name.lower())
+    return n or None
+
+
 def valid_id(v: str) -> bool:
     return isinstance(v, str) and bool(re.fullmatch(r"[A-Za-z0-9_\-]{8,64}", v))
 
@@ -152,6 +161,39 @@ async def _startup():
     # The persistent `players` collection (rankings) is never TTL'd.
     await db.runs.create_index("createdAt", expireAfterSeconds=7 * 24 * 3600)      # 7 days
     await db.flagged.create_index("createdAt", expireAfterSeconds=30 * 24 * 3600)  # 30 days
+    # Global case-insensitive username uniqueness. Backfill + de-duplicate any
+    # legacy collisions BEFORE creating the unique index so it cannot fail.
+    await _migrate_unique_nicknames()
+
+
+async def _migrate_unique_nicknames():
+    seen = set()
+    # Oldest first so the earliest owner of a name keeps it; later dupes get suffixed.
+    cursor = db.players.find({"nickname": {"$exists": True, "$ne": None}}).sort("updatedAt", 1)
+    async for p in cursor:
+        nick = p.get("nickname")
+        norm = normalize_nickname(nick) if nick else None
+        if not norm:
+            # No usable normalized form -> leave field unset so the sparse index skips it.
+            if p.get("normalized_nickname") is not None:
+                await db.players.update_one({"_id": p["_id"]}, {"$unset": {"normalized_nickname": ""}})
+            continue
+        if norm in seen:
+            new_nick, new_norm = nick, norm
+            while new_norm in seen:
+                suffix = os.urandom(2).hex()
+                new_nick = (nick[: NICK_MAX - 5] + "-" + suffix)[:NICK_MAX]
+                new_norm = normalize_nickname(new_nick)
+            seen.add(new_norm)
+            await db.players.update_one(
+                {"_id": p["_id"]},
+                {"$set": {"nickname": new_nick, "normalized_nickname": new_norm}},
+            )
+        else:
+            seen.add(norm)
+            if p.get("normalized_nickname") != norm:
+                await db.players.update_one({"_id": p["_id"]}, {"$set": {"normalized_nickname": norm}})
+    await db.players.create_index("normalized_nickname", unique=True, sparse=True)
 
 
 @app.get("/api/health")
@@ -168,12 +210,20 @@ async def register(req: RegisterReq, request: Request):
     name = sanitize_nickname(req.nickname)
     if not name:
         return {"ok": False, "error": "bad-name"}
-    await db.players.update_one(
-        {"playerId": req.playerId},
-        {"$set": {"nickname": name, "updatedAt": datetime.now(timezone.utc).isoformat()},
-         "$setOnInsert": {"bestDistance": 0, "status": "accepted"}},
-        upsert=True,
-    )
+    norm = normalize_nickname(name)
+    if not norm:
+        return {"ok": False, "error": "bad-name"}
+    try:
+        await db.players.update_one(
+            {"playerId": req.playerId},
+            {"$set": {"nickname": name, "normalized_nickname": norm,
+                      "updatedAt": datetime.now(timezone.utc).isoformat()},
+             "$setOnInsert": {"bestDistance": 0, "status": "accepted"}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        # Another player already holds this (normalized) name. Never leak who.
+        return {"ok": False, "error": "USERNAME_TAKEN"}
     return {"ok": True, "playerId": req.playerId, "nickname": name}
 
 
@@ -235,15 +285,30 @@ async def submit(req: SubmitReq, request: Request):
     status, reason = classify(req, mode)
     d = float(req.reportedDistance)
 
-    # ensure player exists (nickname may come with submit for first-timers)
+    # ensure player exists (nickname may come with submit for first-timers).
+    # Enforce global case-insensitive uniqueness: if the normalized name is already
+    # held by a DIFFERENT player, silently drop it so the score still records
+    # (/register is the canonical place to surface USERNAME_TAKEN to the user).
     name = sanitize_nickname(req.nickname) if req.nickname else None
+    norm = normalize_nickname(name) if name else None
+    if norm:
+        clash = await db.players.find_one(
+            {"normalized_nickname": norm, "playerId": {"$ne": req.playerId}}, {"_id": 1}
+        )
+        if clash:
+            name = None
+            norm = None
     player = await db.players.find_one({"playerId": req.playerId})
     if not player and name:
-        await db.players.insert_one(
-            {"playerId": req.playerId, "nickname": name, "bestDistance": 0,
-             "sillyBestDistance": 0, "status": "accepted",
-             "updatedAt": datetime.now(timezone.utc).isoformat()}
-        )
+        try:
+            await db.players.insert_one(
+                {"playerId": req.playerId, "nickname": name, "normalized_nickname": norm,
+                 "bestDistance": 0, "sillyBestDistance": 0, "status": "accepted",
+                 "updatedAt": datetime.now(timezone.utc).isoformat()}
+            )
+        except DuplicateKeyError:
+            name = None
+            norm = None
 
     if status != "accepted":
         # record attempt but never let it reach the visible leaderboard
@@ -261,14 +326,29 @@ async def submit(req: SubmitReq, request: Request):
     set_fields = {"updatedAt": datetime.now(timezone.utc).isoformat()}
     if name:
         set_fields["nickname"] = name
-    await db.players.update_one(
-        {"playerId": req.playerId},
-        [{"$set": {
-            **set_fields,
-            field: {"$max": [{"$ifNull": ["$" + field, 0]}, d]},
-        }}],
-        upsert=True,
-    )
+        set_fields["normalized_nickname"] = norm
+    try:
+        await db.players.update_one(
+            {"playerId": req.playerId},
+            [{"$set": {
+                **set_fields,
+                field: {"$max": [{"$ifNull": ["$" + field, 0]}, d]},
+            }}],
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        # Rare race: name got claimed between the check above and this write.
+        # Drop the name and record the score anyway — never lose a legit run.
+        set_fields.pop("nickname", None)
+        set_fields.pop("normalized_nickname", None)
+        await db.players.update_one(
+            {"playerId": req.playerId},
+            [{"$set": {
+                **set_fields,
+                field: {"$max": [{"$ifNull": ["$" + field, 0]}, d]},
+            }}],
+            upsert=True,
+        )
     cur = await db.players.find_one({"playerId": req.playerId})
     best = cur.get(field, 0)
     rank = await db.players.count_documents({field: {"$gt": best}}) + 1

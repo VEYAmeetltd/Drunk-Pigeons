@@ -10,6 +10,7 @@ Covers:
 - rate limiting sanity (a small burst should NOT trip 240/min IP limit)
 """
 import os
+import re
 import uuid
 import time
 import pytest
@@ -35,6 +36,11 @@ def new_runid():
     return uuid.uuid4().hex
 
 
+def uniq(base):
+    # Usernames are enforced globally unique, so tests must not reuse a name.
+    return (re.sub(r"[^A-Za-z0-9]", "", base)[:6] + uuid.uuid4().hex[:8])
+
+
 @pytest.fixture(scope="module")
 def s():
     return requests.Session()
@@ -50,13 +56,14 @@ def test_health(s):
 # ---------- Normal flow ----------
 def test_register_ok(s):
     pid = new_pid()
+    name = uniq("Bob")
     r = s.post(f"{API}/leaderboard/register",
-               json={"playerId": pid, "nickname": "TEST_Bob"}, timeout=15)
+               json={"playerId": pid, "nickname": name}, timeout=15)
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
     assert body["playerId"] == pid
-    assert body["nickname"] == "TEST_Bob"
+    assert body["nickname"] == name
 
 
 def test_submit_accepted_and_top(s):
@@ -227,7 +234,7 @@ def test_normal_burst_not_ip_ratelimited(s):
     errors = []
     for _ in range(10):
         r = s.post(f"{API}/leaderboard/register",
-                   json={"playerId": new_pid(), "nickname": "TEST_Burst"},
+                   json={"playerId": new_pid(), "nickname": uniq("Burst")},
                    timeout=15).json()
         if not r.get("ok"):
             errors.append(r)
@@ -250,3 +257,45 @@ def test_per_player_ratelimit_hit(s):
             hit = True
             break
     assert hit, "Expected per-playerId rate limit to trigger within 25 requests"
+
+
+
+# ---------- Global case-insensitive username uniqueness ----------
+def test_username_uniqueness_case_insensitive(s):
+    name = uniq("Uniq")
+    p1, p2 = new_pid(), new_pid()
+    # First owner claims it
+    r1 = s.post(f"{API}/leaderboard/register",
+                json={"playerId": p1, "nickname": name}, timeout=15).json()
+    assert r1["ok"] is True
+
+    # A different player trying an UPPER/space variant is refused (no ID leak)
+    variant = " " + name.upper() + " "
+    r2 = s.post(f"{API}/leaderboard/register",
+                json={"playerId": p2, "nickname": variant}, timeout=15).json()
+    assert r2["ok"] is False and r2["error"] == "USERNAME_TAKEN"
+    assert "playerId" not in r2
+
+    # The original owner can safely re-save their own name
+    r3 = s.post(f"{API}/leaderboard/register",
+                json={"playerId": p1, "nickname": name}, timeout=15).json()
+    assert r3["ok"] is True and r3["nickname"] == name
+
+
+def test_submit_with_taken_name_still_records_score(s):
+    name = uniq("Taken")
+    owner, other = new_pid(), new_pid()
+    s.post(f"{API}/leaderboard/register",
+           json={"playerId": owner, "nickname": name}, timeout=15)
+    # Another player submits a run using the taken name -> score records, name dropped
+    r = s.post(f"{API}/leaderboard/submit", json={
+        "playerId": other, "runId": new_runid(), "nickname": name,
+        "reportedDistance": 250.0, "runDuration": 40.0, "chipCount": 5,
+        "mode": "normal",
+    }, timeout=15).json()
+    assert r["ok"] is True and r["status"] == "accepted"
+    # The other player must not appear under the taken name
+    top = s.get(f"{API}/leaderboard/top",
+                params={"playerId": other, "mode": "normal", "limit": 100}, timeout=15).json()
+    assert top["you"] is not None
+    assert top["you"]["nickname"] != name

@@ -27,6 +27,11 @@ def new_rid():
     return "r" + uuid.uuid4().hex
 
 
+def uniq(base):
+    # Globally-unique nickname (usernames are now enforced unique per player).
+    return (re.sub(r"[^A-Za-z0-9]", "", base)[:6] + uuid.uuid4().hex[:8])
+
+
 @pytest.fixture
 def s():
     ses = requests.Session()
@@ -45,9 +50,10 @@ def test_health(s):
 class TestRegister:
     def test_clean_name(self, s):
         pid = new_pid()
-        r = s.post(f"{API}/register", json={"playerId": pid, "nickname": "CleanPigeon"})
+        name = uniq("Clean")
+        r = s.post(f"{API}/register", json={"playerId": pid, "nickname": name})
         j = r.json()
-        assert j.get("ok") is True and j.get("nickname") == "CleanPigeon"
+        assert j.get("ok") is True and j.get("nickname") == name
 
     @pytest.mark.parametrize("bad", [
         "",                    # empty
@@ -77,8 +83,9 @@ class TestRegister:
 
 # ---------- submit accept/reject ----------
 class TestSubmit:
-    def _register(self, s, name="ArcadePigeon"):
+    def _register(self, s, name=None):
         pid = new_pid()
+        name = name or uniq("Arcade")
         r = s.post(f"{API}/register", json={"playerId": pid, "nickname": name})
         assert r.json().get("ok")
         return pid
@@ -148,7 +155,7 @@ class TestSubmit:
 # ---------- best-only-goes-up ----------
 def test_best_only_increases(s):
     pid = new_pid()
-    s.post(f"{API}/register", json={"playerId": pid, "nickname": "BestPigeon"})
+    s.post(f"{API}/register", json={"playerId": pid, "nickname": uniq("Best")})
     # accept 3000
     j1 = s.post(f"{API}/submit", json={
         "playerId": pid, "runId": new_rid(),
@@ -192,7 +199,7 @@ def test_top_sorted_and_you_fallback(s):
 def test_you_fallback_when_outside_top(s):
     # Create a low-scoring player and confirm you.rank is populated & inTop reflects presence
     pid = new_pid()
-    s.post(f"{API}/register", json={"playerId": pid, "nickname": "LowScorer"})
+    s.post(f"{API}/register", json={"playerId": pid, "nickname": uniq("Low")})
     s.post(f"{API}/submit", json={
         "playerId": pid, "runId": new_rid(),
         "reportedDistance": 1, "runDuration": 5,
@@ -210,7 +217,7 @@ def test_you_fallback_when_outside_top(s):
 # ---------- rate limit ----------
 def test_rate_limited(s):
     pid = new_pid()
-    s.post(f"{API}/register", json={"playerId": pid, "nickname": "SpamPigeon"})
+    s.post(f"{API}/register", json={"playerId": pid, "nickname": uniq("Spam")})
     saw_rl = False
     for _ in range(30):
         j = s.post(f"{API}/submit", json={

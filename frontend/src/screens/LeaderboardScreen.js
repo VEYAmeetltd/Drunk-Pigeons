@@ -93,6 +93,8 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       load();
     } else if (res && res.offline) {
       setErr('LEADERBOARD UNAVAILABLE');
+    } else if (res && res.error === 'USERNAME_TAKEN') {
+      setErr('That pigeon name is already taken.');
     } else {
       setErr('TRY ANOTHER NAME, PIGEON.');
     }

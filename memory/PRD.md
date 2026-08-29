@@ -138,3 +138,11 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - P2: Unlock conditions for locked pigeons (chips/score milestones) + cosmetic accessories per map.
 - P2: Distinct Easy Mode background art (reduce skyline density) beyond the palette swap.
 - P2: Silence RN-Web SDK51 deprecation warnings (boxShadow/textShadow, pointerEvents in style).
+
+## Update 18 (2026-06) — Leaderboard username uniqueness hardening — verified (backend 63 tests pass + UI screenshot)
+- Global, case- AND space-insensitive unique usernames. New `normalize_nickname()` collapses a name to lowercase alphanumerics ("FatPigeon" = "fat pigeon" = "FATPIGEON" -> "fatpigeon").
+- Backend (server.py): `_startup` now runs `_migrate_unique_nicknames()` which backfills `normalized_nickname` on existing players (oldest updatedAt keeps the name), de-duplicates legacy collisions by appending a short hex suffix to the nickname, then creates a SPARSE UNIQUE index on `normalized_nickname` (sparse so players without a name don't collide on null).
+- `/register` computes normalized_nickname, upserts by playerId, catches pymongo DuplicateKeyError and returns `{ok:false, error:"USERNAME_TAKEN"}` — never leaks the other player's id. Re-saving your OWN name always succeeds.
+- `/submit` name path: pre-checks whether the normalized name is held by a DIFFERENT player; if so it silently drops the name (score still records, player shows as default "Pigeon"). Wrapped in try/except DuplicateKeyError as a race fallback so a legit run is never lost.
+- Frontend (LeaderboardScreen.js): USERNAME_TAKEN branch shows exact message "That pigeon name is already taken." (pink), input keeps its value, session/state preserved for retry. api.js already bubbled the error payload through.
+- Tests: added test_username_uniqueness_case_insensitive + test_submit_with_taken_name_still_records_score; updated legacy tests to use unique nicknames (uniq() helper) since names are now globally unique. Full backend suite 63 passed. UI verified via screenshot (typed a taken name -> message rendered, retry preserved).
