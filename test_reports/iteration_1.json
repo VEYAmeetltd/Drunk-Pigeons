@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only smoke + integration test of DRUNK PIGEONS Expo Web app at mobile viewport 430x900. All major flows verified: Main Menu (title, best/injured stats, 3 map cards, sound toggle, PLAY/PIGEONS buttons), Gameplay (score-hud, chip-hud, flap-area, keyboard Space flap, obstacle scoring, chip collection, TAP TO FLAP hint), Game Over overlay (SPLAT, death-message, go-score/go-best/go-chips, NEW BEST badge), Revive flow (SHIELD ACTIVE banner ~2s, REVIVE USED after one use, resets on Play Again), MAIN MENU navigation with updated best/injured, AsyncStorage persistence across full page reload (best, injured, sound), Pigeons screen (all 7 cards present, business selectable via select-pigeon, roadman/king/gym/tourist/fancy show preview-lock, BACK button works). No backend to test.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All", "issues": [
+        "React Native Web deprecation warnings in console: 'shadow*' style props deprecated (use boxShadow), 'textShadow*' props deprecated (use textShadow), and 'props.pointerEvents' deprecated on GameScreen (use style.pointerEvents). Non-blocking but cluttering console."
+      ]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional cleanup) Migrate deprecated RN styles to boxShadow/textShadow strings and move pointerEvents into style prop on GameScreen SafeAreaView/inner Views to silence RN-Web SDK 51 deprecations."
+  ],
+  "critical_code_review_comments": [
+    "engine.js:198 spawn condition `lx < W - spacing` combined with `Math.max(W+40, lx+spacing)` correctly clamps spawn to always be off-screen right; observed no impossible configurations across multiple runs. Good.",
+    "GameScreen.js flap-area Pressable is rendered after entities but BEFORE the HUD SafeAreaView with pointerEvents='box-none'. HUD works, flap-area receives taps correctly.",
+    "Revive path (engine.js:255-271) clears obstacles within [px-40, px+W*0.55] before repositioning. Verified in tests: post-revive pigeon does not instantly re-die during 2s invincibility window.",
+    "Persistence layer uses AsyncStorage via localStorage on web; verified all five keys persist across full reload.",
+    "Minor: engine.js does not clamp `chipCount` fat-level lookup boundaries against negative dt but dt is clamped to 1/30 in GameScreen — OK.",
+    "Test IDs match spec exactly (map-day/night/dusk, pigeon-card-<id>, preview-lock, shield-banner, etc.). react-native-web testID → data-testid mapping works."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A", "frontend": "100%" },
+  "test_credentials": "None required",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Automated flap testing pitfall: pressing Space / clicking flap-area faster than ~250ms pins the pigeon to the ceiling (y=12) and causes it to hit the first obstacle's top pipe before scoring — this is correct physics, not a bug. Use ~350–400ms flap interval to reliably score. Verified best-scoring run at 400ms produced score=1, chip=1, NEW BEST! Persistence keys: dp_bestScore, dp_pigeonsInjured, dp_soundEnabled, dp_selectedPigeon, dp_selectedMap. Map IDs are 'day', 'night', 'dusk' (display names Sunny London / Gritty Backstreet / Chippy Sunset). GameOverOverlay covers the whole screen and intercepts pointer events, so any post-crash actions must go through play-again/revive/menu-button testIDs, not exit-button.",
+  "rca of the issue": "No bugs found. All requested features verified functional."
+}
