@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, FeatherView, HecklerView } from '../components/GameEntities';
+import { PigeonView, ObstacleView, ChipView, JabView, FeatherView, HecklerView } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -19,6 +19,8 @@ import { FONT, COLORS } from '../ui/theme';
 function emptySnapshot() {
   return {
     px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0, blackout: 0,
+    jab: { x: -999, y: 0, active: 0, anim: 0 },
+    pop: 0,
     heckler: { x: -999, y: 0, w: 36, h: 36, active: 0, life: 0 },
     obs: Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ x: -999, active: 0 })),
     chips: Array.from({ length: CONFIG.CHIP_POOL }, () => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 })),
@@ -71,6 +73,27 @@ function DistanceHUD({ world }) {
   );
 }
 
+// Comic "POP!" that floats up from the pigeon when a Skinny Jab deflates it.
+function PopText({ world }) {
+  const style = useAnimatedStyle(() => {
+    const w = world.value;
+    const pop = w.pop || 0;
+    const dtp = pop ? w.t - pop : 99999;
+    if (!pop || dtp < 0 || dtp > 1100) return { opacity: 0, transform: [{ translateX: -999 }] };
+    const p = dtp / 1100;
+    const s = 0.5 + Math.min(1, p * 5) * 0.7;
+    return {
+      opacity: 1 - p,
+      transform: [{ translateX: w.px - 50 }, { translateY: w.py - 74 - p * 46 }, { scale: s }],
+    };
+  });
+  return (
+    <Animated.View style={[styles.pop, style]} pointerEvents="none" testID="skinny-jab-pop">
+      <Text style={styles.popTxt}>POP!</Text>
+    </Animated.View>
+  );
+}
+
 export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
@@ -106,6 +129,9 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     setChips(c);
     Audio.chip();
   };
+  cbRef.current.onSkinnyJab = () => {
+    Audio.pop();
+  };
   cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
     Audio.crash();
     const isNewBest = sc > bestScore || dist > bestDistance;
@@ -129,6 +155,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       onScore: (s) => cbRef.current.onScore(s),
       onChip: (c) => cbRef.current.onChip(c),
       onCrash: (info) => cbRef.current.onCrash(info),
+      onSkinnyJab: () => cbRef.current.onSkinnyJab(),
     });
   }, []);
 
@@ -277,6 +304,10 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
         <ChipView key={i} world={world} index={i} />
       ))}
 
+      {/* Skinny Jab rare pickup */}
+      <JabView world={world} />
+      <PopText world={world} />
+
       {/* feathers */}
       {Array.from({ length: CONFIG.FEATHER_POOL }).map((_, i) => (
         <FeatherView key={i} world={world} index={i} color={activeMap.feather} />
@@ -401,4 +432,6 @@ const styles = StyleSheet.create({
   confirmBtn: { width: '100%', marginTop: 12 },
   blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, zIndex: 50 },
   blackoutTxt: { fontFamily: FONT, color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', lineHeight: 30, letterSpacing: 0.5 },
+  pop: { position: 'absolute', left: 0, top: 0, width: 100, alignItems: 'center', zIndex: 40 },
+  popTxt: { fontFamily: FONT, color: '#fff', fontSize: 34, fontWeight: '700', letterSpacing: 1, textShadowColor: '#ff3b8d', textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
 });

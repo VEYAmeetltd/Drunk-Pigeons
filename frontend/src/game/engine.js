@@ -5,7 +5,7 @@ const OW = CONFIG.OBSTACLE_WIDTH;
 
 // Pure(ish) game simulation. No rendering. Mutates internal state each step.
 // Rendering layer reads getSnapshot(). Collision/scoring use plain JS state.
-export function createEngine({ onScore, onChip, onCrash }) {
+export function createEngine({ onScore, onChip, onCrash, onSkinnyJab }) {
   let W = 400;
   let H = 800;
 
@@ -17,6 +17,13 @@ export function createEngine({ onScore, onChip, onCrash }) {
   let scrollSpeed = CONFIG.SPEED_BASE;
   let score = 0;
   let chipCount = 0;
+  // fatness driver — separate from total chipCount so a Skinny Jab can reset the
+  // pigeon's current size without erasing lifetime chip stats/score.
+  let fatChips = 0;
+  let skinnyJabCount = 0;
+  let popT = 0; // timestamp of the last Skinny Jab collection (drives the POP! effect)
+  let jabChance = CONFIG.SKINNY_JAB_CHANCE; // dev-overridable
+  const jab = { active: false, x: 0, y: 0, anim: 0 };
   let distance = 0;
   let running = false;
   let dead = false;
@@ -171,6 +178,40 @@ export function createEngine({ onScore, onChip, onCrash }) {
     if (isChipPosSafe(x, y)) spawnChip(x, y);
   }
 
+  // Validate the FULL Skinny Jab sprite bounds (+padding) — same principle as chips.
+  function isJabPosSafe(x, y) {
+    const r = CONFIG.SKINNY_JAB_SIZE * 0.5;
+    const pad = 14;
+    if (y - r - pad < 6) return false;
+    if (y + r + pad > groundY()) return false;
+    for (const o of obstacles) {
+      if (!o.active) continue;
+      if (x + r < o.x - pad || x - r > o.x + OW + pad) continue;
+      if (y - r - pad < o.topH) return false;
+      if (y + r + pad > o.topH + o.gap) return false;
+    }
+    return true;
+  }
+
+  // Rare roll on each obstacle spawn: only when sufficiently fat, only one at a
+  // time, and only into a fully validated safe position (else skip the spawn).
+  function maybeSpawnSkinnyJab(B) {
+    if (jab.active) return;
+    if (fatChips < CONFIG.SKINNY_JAB_MIN_FAT) return;
+    if (Math.random() >= jabChance) return;
+    const cx = B.x + OW / 2;
+    const cy = B.topH + B.gap / 2;
+    for (const oy of [0, -20, 20, -40, 40]) {
+      if (isJabPosSafe(cx, cy + oy)) {
+        jab.active = true;
+        jab.x = cx;
+        jab.y = cy + oy;
+        jab.anim = 0;
+        return;
+      }
+    }
+  }
+
   // Generate validated chips for a newly placed obstacle: a couple inside its gap
   // corridor, plus a short trail in the OPEN sky between it and the previous obstacle.
   function generateChipsForObstacle(idx) {
@@ -216,6 +257,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
         }
       }
     }
+    maybeSpawnSkinnyJab(B);
   }
 
   function explodeFeathers(x, y, feather) {
@@ -247,6 +289,10 @@ export function createEngine({ onScore, onChip, onCrash }) {
     scrollSpeed = CONFIG.SPEED_BASE;
     score = 0;
     chipCount = 0;
+    fatChips = 0;
+    skinnyJabCount = 0;
+    popT = 0;
+    jab.active = false;
     distance = 0;
     running = true;
     dead = false;
@@ -280,7 +326,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
 
   function collides(now) {
     if (now < invincibleUntil) return false;
-    const r = pigeonRadiusFor(fatLevelFor(chipCount));
+    const r = pigeonRadiusFor(fatLevelFor(fatChips));
     const py = pigeon.y;
     // ground
     if (py + r >= groundY()) return true;
@@ -371,7 +417,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
     }
 
     // move chips + collection
-    const rr = pigeonRadiusFor(fatLevelFor(chipCount));
+    const rr = pigeonRadiusFor(fatLevelFor(fatChips));
     for (const c of chips) {
       if (!c.active) continue;
       if (c.eaten) {
@@ -391,7 +437,29 @@ export function createEngine({ onScore, onChip, onCrash }) {
         c.eaten = true;
         c.anim = 0;
         chipCount += 1;
+        fatChips += 1;
         if (onChip) onChip(chipCount);
+      }
+    }
+
+    // Skinny Jab: rare pickup movement + collection (fatness reset only)
+    if (jab.active) {
+      jab.anim += dt;
+      jab.x -= speed * dt;
+      if (jab.x < -40) {
+        jab.active = false;
+      } else {
+        const jdx = jab.x - pigeon.x;
+        const jdy = jab.y - pigeon.y;
+        const jpick = rr + CONFIG.SKINNY_JAB_SIZE * 0.5;
+        if (jdx * jdx + jdy * jdy < jpick * jpick) {
+          jab.active = false;
+          fatChips = 0; // instant deflation to original size (total chips untouched)
+          skinnyJabCount += 1;
+          popT = now;
+          explodeFeathers(pigeon.x, pigeon.y - 8);
+          if (onSkinnyJab) onSkinnyJab();
+        }
       }
     }
 
@@ -400,7 +468,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
       dead = true;
       running = false;
       explodeFeathers(pigeon.x, pigeon.y);
-      if (onCrash) onCrash({ score, chips: chipCount, distance: Math.floor(distance / PPM) });
+      if (onCrash) onCrash({ score, chips: chipCount, distance: Math.floor(distance / PPM), skinnyJabCount });
     }
 
     // window heckler: bound to its building; expire on life, or when the building
@@ -450,7 +518,7 @@ export function createEngine({ onScore, onChip, onCrash }) {
   }
 
   function getSnapshot(now) {
-    const fat = fatLevelFor(chipCount);
+    const fat = fatLevelFor(fatChips);
     const inv = now < invincibleUntil ? 1 : 0;
     const tilt = Math.max(-28, Math.min(70, pigeon.vy * 0.06));
     return {
@@ -492,6 +560,8 @@ export function createEngine({ onScore, onChip, onCrash }) {
         active: f.active ? 1 : 0,
         life: Math.max(0, f.life),
       })),
+      jab: { x: jab.x, y: jab.y, active: jab.active ? 1 : 0, anim: jab.anim },
+      pop: popT,
     };
   }
 
@@ -531,6 +601,12 @@ export function createEngine({ onScore, onChip, onCrash }) {
     },
     get chipCount() {
       return chipCount;
+    },
+    get skinnyJabCount() {
+      return skinnyJabCount;
+    },
+    setSkinnyJabChance(c) {
+      if (Number.isFinite(c) && c >= 0 && c <= 1) jabChance = c;
     },
     get distanceMeters() {
       return Math.floor(distance / PPM);

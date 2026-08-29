@@ -94,6 +94,11 @@ export const Audio = {
   revive() {
     tone({ freq: 300, slideTo: 900, type: 'triangle', dur: 0.3, gain: 0.22 });
   },
+  pop() {
+    // short, punchy comedic deflation
+    tone({ freq: 900, slideTo: 180, type: 'square', dur: 0.14, gain: 0.28 });
+    noise({ dur: 0.1, gain: 0.22 });
+  },
   leet() {
     [392, 523, 659, 784, 1047].forEach((f, i) =>
       tone({ freq: f, type: 'triangle', dur: 0.14, gain: 0.2, delay: i * 0.09 })

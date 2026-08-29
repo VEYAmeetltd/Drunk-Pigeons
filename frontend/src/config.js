@@ -52,6 +52,11 @@ export const CONFIG = {
   BLACKOUT_TRIGGER_M: 1000, // distance (m) that fires the event, once per run
   BLACKOUT_MS: 3500,        // how long the eyes stay closed
   BLACKOUT_RECOVERY_MS: 800, // extra open-sky buffer after fade-out before obstacles resume
+
+  // SKINNY JAB — extremely rare fictional syringe pickup that resets current fatness
+  SKINNY_JAB_CHANCE: 0.005, // ~0.5% per eligible obstacle spawn opportunity
+  SKINNY_JAB_MIN_FAT: 10, // only rolls once the pigeon carries >=10 chips of fatness
+  SKINNY_JAB_SIZE: 34,
 };
 
 // Integer with thousands separators (no decimals). Safe on web + native (no Intl needed).

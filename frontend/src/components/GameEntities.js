@@ -290,6 +290,54 @@ export function ChipView({ world, index }) {
   );
 }
 
+/* ---------------- Skinny Jab (rare fatness-reset pickup) ---------------- */
+export function JabView({ world }) {
+  const S = CONFIG.SKINNY_JAB_SIZE;
+  const style = useAnimatedStyle(() => {
+    const j = world.value.jab;
+    if (!j || !j.active) return { opacity: 0, transform: [{ translateX: -999 }] };
+    const t = world.value.t || 0;
+    const bob = Math.sin(t / 280) * 3;
+    const rot = Math.sin(t / 420) * 14 - 20;
+    return {
+      opacity: 1,
+      transform: [{ translateX: j.x - S / 2 }, { translateY: j.y - S / 2 + bob }, { rotate: `${rot}deg` }],
+    };
+  });
+  const sparkle = useAnimatedStyle(() => {
+    const t = world.value.t || 0;
+    return { opacity: 0.4 + 0.6 * Math.abs(Math.sin(t / 180)) };
+  });
+  return (
+    <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
+      <Svg width={S} height={S} viewBox="0 0 40 40">
+        {/* glow halo so the rare pickup pops */}
+        <Circle cx="20" cy="20" r="18" fill="rgba(80,220,200,0.18)" />
+        {/* syringe barrel (diagonal), generic & cartoonish */}
+        <G>
+          <Line x1="9" y1="31" x2="27" y2="13" stroke="#dff6f1" strokeWidth="9" strokeLinecap="round" />
+          <Line x1="9" y1="31" x2="27" y2="13" stroke="#9fe6db" strokeWidth="5" strokeLinecap="round" />
+          {/* teal fluid */}
+          <Line x1="12" y1="28" x2="22" y2="18" stroke="#2fd6b6" strokeWidth="4.4" strokeLinecap="round" />
+          {/* plunger flange + rod */}
+          <Line x1="5.5" y1="27" x2="12" y2="34" stroke="#cfeee9" strokeWidth="3.4" strokeLinecap="round" />
+          <Line x1="3" y1="33" x2="9.5" y2="39.5" stroke="#8fd8cc" strokeWidth="3" strokeLinecap="round" />
+          {/* needle */}
+          <Line x1="27" y1="13" x2="35" y2="5" stroke="#b7c4c2" strokeWidth="2" strokeLinecap="round" />
+          <Line x1="24" y1="16" x2="30" y2="10" stroke="#eef7f5" strokeWidth="5.2" strokeLinecap="round" />
+        </G>
+      </Svg>
+      {/* rare-item sparkle */}
+      <Animated.View style={[jabStyles.sparkle, sparkle]} pointerEvents="none" />
+    </Animated.View>
+  );
+}
+
+const jabStyles = StyleSheet.create({
+  sparkle: { position: 'absolute', top: 3, right: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' },
+});
+
+
 /* ---------------- Feather ---------------- */
 export function FeatherView({ world, index, color }) {
   const style = useAnimatedStyle(() => {
