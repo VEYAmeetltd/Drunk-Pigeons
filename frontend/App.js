@@ -22,6 +22,7 @@ export default function App() {
     selectedPigeon: 'classic',
     selectedMap: 'day',
     unlockedPigeons: [],
+    leetUnlock: false,
   });
 
   useEffect(() => {
@@ -67,6 +68,11 @@ export default function App() {
     Audio.ui();
   }, [update]);
 
+  const handleLeetUnlock = useCallback(() => {
+    update({ leetUnlock: true });
+    Persistence.setLeet(true);
+  }, [update]);
+
   const handleCrash = useCallback(({ score, distance }) => {
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
@@ -98,16 +104,19 @@ export default function App() {
             soundEnabled={state.soundEnabled}
             selectedPigeon={state.selectedPigeon}
             selectedMap={state.selectedMap}
+            leetUnlock={state.leetUnlock}
             onPlay={() => setScreen('game')}
             onPigeons={() => setScreen('pigeons')}
             onSelectMap={handleSelectMap}
             onToggleSound={handleToggleSound}
+            onLeetUnlock={handleLeetUnlock}
           />
         )}
         {screen === 'pigeons' && (
           <PigeonsScreen
             selectedPigeon={state.selectedPigeon}
             unlockedPigeons={state.unlockedPigeons}
+            leetUnlock={state.leetUnlock}
             onSelect={handleSelectPigeon}
             onBack={() => setScreen('menu')}
           />

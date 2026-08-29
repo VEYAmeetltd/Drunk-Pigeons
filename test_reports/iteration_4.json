@@ -1,0 +1,31 @@
+{
+  "summary": "UPDATE 4 (secret 733T code Easter egg) fully verified on mobile viewport 430x920 via Playwright against public preview URL. All 9 required scenarios PASS: (1) Fresh state - CODE label shown, roadman/king/gym/tourist/fancy show 'UNLOCK COMING SOON' with no select-pigeon button; classic/business selectable. No leet-badge. (2) Overlay opens on tap of open-code-button and CANCEL closes with no state change. (3) Three wrong codes ('abcd','1234','zzzz') each returned distinct cheeky lines ('ABSOLUTE NONSENSE.', 'THE PIGEONS KNOW.', 'INCORRECT, HUMAN.') — all members of the WRONG[] pool — with no celebration and label remains 'CODE'. (4) Lowercase '733t' correctly triggered celebration (leet-achieved 'LEET PIGEON STATUS ACHIEVED' + leet-unlocked 'ALL PIGEONS UNLOCKED' + Confetti/Audio.leet), COO! (leet-done) closed it; menu label flipped to '1337'. (5) Pigeons screen after unlock: leet-badge '1337' visible in header; every pigeon (roadman/king/gym/tourist/fancy/business/classic) shows select-pigeon button — no 'UNLOCK COMING SOON', no lock overlay — and all are selectable. (6) Persistence: full page reload keeps label '1337', localStorage key dp_leetUnlock='1', pigeon screen still shows leet-badge and fancy remains unlocked. (7) PLAY still starts a normal run (flap-area rendered) — Easter-egg overlay does not interfere with gameplay entry. Case-insensitivity confirmed via lowercase submit (code.trim().toUpperCase()==='733T'). No JS errors during the whole flow (only harmless RN-web deprecation warnings for shadow*/textShadow*/pointerEvents style props).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MainMenu top bar", "issues": ["'CODE' label uses very dim colour rgba(199,184,230,0.5) at 12px — this is intentional (Easter egg should be subtle) per spec, so acceptable, but note contrast is low on the bg. Not a bug."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_4.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SecretCode.js:28 correct case-insensitive check via code.trim().toUpperCase()==='733T'. Verified with lowercase '733t' successfully triggering celebrate view.",
+    "SecretCode.js:34 wrong-code path picks uniformly from WRONG[7]. All observed messages were members of the pool. Spec did not require anti-repeat, so acceptable.",
+    "SecretCode.js:39-44 close() resets code/error/celebrate state — good hygiene so re-opening starts clean.",
+    "MainMenu.js:48 label toggle based on leetUnlock prop works; testID 'open-code-button' preserved after unlock (still queryable) — spec compliant.",
+    "PigeonsScreen.js:12 isUnlocked additive override (!p.locked || leetUnlock || unlockedPigeons.includes(p.id)) — original PIGEONS.locked flags untouched, architecture preserved. Verified: fresh session still shows locked pigeons before code entry.",
+    "App.js:71-74 handleLeetUnlock updates state AND persists via Persistence.setLeet(true). loadAll() consumes dp_leetUnlock === '1' → boolean, verified on reload.",
+    "persistence.js:11,42,55 dp_leetUnlock key correctly wired; setLeet is fire-and-forget with catch — consistent with other setters.",
+    "Non-blocking: TextInput has autoCapitalize='characters' so typed lowercase visually appears uppercase, but underlying value from onChangeText is what react-native-web reports; validation upper-cases explicitly, so both display and logic are safe."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% (7/7 scenarios PASS)"},
+  "test_credentials": "None (no auth).",
+  "seed_data_creation": "localStorage cleared before fresh-state assertions; dp_leetUnlock='1' created by 733t submission and verified persistent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "UPDATE 4 fully green. When testing again, clear localStorage (or use a fresh context) to observe the pre-unlock locked state. TextInput data-testid='code-input' works with page.fill(); autoCapitalize does not block programmatic values. Overlay uses onStartShouldSetResponder — force=True on clicks is fine as shown.",
+  "rca of the issue": "N/A — no bug found."
+}

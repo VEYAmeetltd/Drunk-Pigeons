@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import PigeonSprite from '../components/PigeonSprite';
+import SecretCode from '../components/SecretCode';
 import { getPigeon } from '../data/pigeons';
 import { MAPS } from '../data/maps';
 import { Audio } from '../audio/audio';
@@ -15,12 +16,15 @@ export default function MainMenu({
   soundEnabled,
   selectedPigeon,
   selectedMap,
+  leetUnlock,
   onPlay,
   onPigeons,
   onSelectMap,
   onToggleSound,
+  onLeetUnlock,
 }) {
   const pigeon = getPigeon(selectedPigeon);
+  const [showCode, setShowCode] = useState(false);
   const bob = useSharedValue(0);
   React.useEffect(() => {
     bob.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
@@ -32,6 +36,17 @@ export default function MainMenu({
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.top}>
+        <Pressable
+          testID="open-code-button"
+          onPress={() => {
+            Audio.unlock();
+            Audio.ui();
+            setShowCode(true);
+          }}
+          style={styles.codeMark}
+        >
+          <Text style={styles.codeTxt}>{leetUnlock ? '1337' : 'CODE'}</Text>
+        </Pressable>
         <Pressable testID="sound-toggle" onPress={onToggleSound} style={styles.sound}>
           <Text style={styles.soundTxt}>{soundEnabled ? 'SOUND: ON' : 'SOUND: OFF'}</Text>
         </Pressable>
@@ -76,6 +91,8 @@ export default function MainMenu({
         <Button testID="play-button" label="PLAY" variant="primary" onPress={onPlay} style={{ flex: 1 }} />
         <Button testID="pigeons-button" label="PIGEONS" variant="pink" onPress={onPigeons} style={{ flex: 1 }} />
       </View>
+
+      <SecretCode visible={showCode} onClose={() => setShowCode(false)} onUnlock={onLeetUnlock} />
     </SafeAreaView>
   );
 }
@@ -91,7 +108,9 @@ function Stat({ label, value, color, testID }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24, alignItems: 'center' },
-  top: { width: '100%', flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 8 },
+  top: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
+  codeMark: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
+  codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
   sound: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, backgroundColor: COLORS.bgAlt },
   soundTxt: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
   titleWrap: { marginTop: 6, alignItems: 'center' },

@@ -8,6 +8,7 @@ const KEYS = {
   pigeon: 'dp_selectedPigeon',
   map: 'dp_selectedMap',
   unlocked: 'dp_unlockedPigeons',
+  leet: 'dp_leetUnlock',
 };
 
 async function getNumber(key, def) {
@@ -30,7 +31,7 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, injured, sound, pigeon, map, unlocked] = await Promise.all([
+    const [best, bestDist, injured, sound, pigeon, map, unlocked, leet] = await Promise.all([
       getNumber(KEYS.best, 0),
       getNumber(KEYS.bestDist, 0),
       getNumber(KEYS.injured, 0),
@@ -38,6 +39,7 @@ export const Persistence = {
       getString(KEYS.pigeon, 'classic'),
       getString(KEYS.map, 'day'),
       getString(KEYS.unlocked, ''),
+      getString(KEYS.leet, '0'),
     ]);
     return {
       bestScore: best,
@@ -47,7 +49,11 @@ export const Persistence = {
       selectedPigeon: pigeon,
       selectedMap: map,
       unlockedPigeons: unlocked ? unlocked.split(',').filter(Boolean) : [],
+      leetUnlock: leet === '1',
     };
+  },
+  setLeet(on) {
+    AsyncStorage.setItem(KEYS.leet, on ? '1' : '0').catch(() => {});
   },
   setBest(v) {
     AsyncStorage.setItem(KEYS.best, String(v)).catch(() => {});

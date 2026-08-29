@@ -44,6 +44,11 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Window hecklers: occasional single tiny angry person in a window (SVG, reaction poses: fist/point/wave/mug/newspaper/horrified/confused) with a bold speech bubble shouting randomised censored-British insults (data/insults.js, 30 lines, no back-to-back repeat). Cooldown 3.5-8s, max ONE at a time, ~1.5s life, clamped away from top HUD. Never collidable.
 - Regression PASS on all 3 maps (physics/gaps/difficulty/collision/chips/score/distance/revive/restart unchanged).
 
+## Update 4 (2026-06) — verified 100% by testing agent (iteration_4)
+- Secret 733T Easter egg on main menu: subtle "CODE" entry (top-left) opens ENTER CODE overlay (code-input/code-submit/code-cancel). Case-insensitive (733T/733t).
+- Wrong code → random cheeky response (code-error), unlocks nothing. Correct → confetti + Audio.leet(), "LEET PIGEON STATUS ACHIEVED" / "ALL PIGEONS UNLOCKED".
+- Persistent `leetUnlock` flag (dp_leetUnlock) as an ADDITIVE override — unlocks all currently-locked pigeons, normal PIGEONS.locked architecture untouched. Subtle "1337" badge on Pigeons screen + menu label flips CODE→1337. Persists across reload. No gameplay changes.
+
 ## Backlog / next
 - P1: Native build packaging (EAS) + expo-av sound files to replace web synth on device.
 - P1: Real AdMob rewarded/interstitial wired into ads.js hooks.

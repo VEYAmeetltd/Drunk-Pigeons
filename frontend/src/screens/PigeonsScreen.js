@@ -7,9 +7,9 @@ import PigeonSprite from '../components/PigeonSprite';
 import { PIGEONS } from '../data/pigeons';
 import { Audio } from '../audio/audio';
 
-export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, onSelect, onBack }) {
+export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, leetUnlock, onSelect, onBack }) {
   const [preview, setPreview] = useState(selectedPigeon);
-  const isUnlocked = (p) => !p.locked || unlockedPigeons.includes(p.id);
+  const isUnlocked = (p) => !p.locked || leetUnlock || unlockedPigeons.includes(p.id);
   const previewP = PIGEONS.find((p) => p.id === preview) || PIGEONS[0];
   const previewUnlocked = isUnlocked(previewP);
 
@@ -18,7 +18,11 @@ export default function PigeonsScreen({ selectedPigeon, unlockedPigeons, onSelec
       <View style={styles.header}>
         <Button testID="pigeons-back" label="BACK" variant="ghost" small onPress={onBack} />
         <Text style={styles.title}>PIGEONS</Text>
-        <View style={{ width: 70 }} />
+        {leetUnlock ? (
+          <Text style={styles.leetBadge} testID="leet-badge">1337</Text>
+        ) : (
+          <View style={{ width: 70 }} />
+        )}
       </View>
 
       {/* Preview panel — always shows what a pigeon looks like, locked or not */}
@@ -87,6 +91,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
   title: { fontFamily: FONT, color: COLORS.yellow, fontSize: 30, fontWeight: '700', letterSpacing: 2 },
+  leetBadge: { width: 70, textAlign: 'right', fontFamily: FONT, color: COLORS.pink, fontSize: 16, fontWeight: '700', letterSpacing: 2 },
   previewCard: { backgroundColor: COLORS.card, borderRadius: 20, padding: 16, alignItems: 'center', marginTop: 10 },
   previewSprite: { height: 150, justifyContent: 'center', alignItems: 'center' },
   previewLock: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(27,16,48,0.55)', borderRadius: 16 },

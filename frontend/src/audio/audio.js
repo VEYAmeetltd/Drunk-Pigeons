@@ -94,4 +94,12 @@ export const Audio = {
   revive() {
     tone({ freq: 300, slideTo: 900, type: 'triangle', dur: 0.3, gain: 0.22 });
   },
+  leet() {
+    [392, 523, 659, 784, 1047].forEach((f, i) =>
+      tone({ freq: f, type: 'triangle', dur: 0.14, gain: 0.2, delay: i * 0.09 })
+    );
+    // cheeky pigeon coo to finish
+    tone({ freq: 520, slideTo: 300, type: 'sine', dur: 0.26, gain: 0.18, delay: 0.5 });
+    tone({ freq: 480, slideTo: 280, type: 'sine', dur: 0.26, gain: 0.16, delay: 0.72 });
+  },
 };
