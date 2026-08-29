@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
-import PigeonSprite from './PigeonSprite';
+import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
 import { FONT } from '../ui/theme';
 
@@ -30,14 +30,16 @@ function rngFrom(seed) {
 }
 
 /* ---------------- Pigeon ---------------- */
+// The outer Animated.View owns ONLY the gameplay/physics-driven presentation:
+// world position, velocity tilt, flap squash and death/invincible opacity.
+// The drunk personality (sway, wobble, bob, hiccups, HIC!, bubbles, wing flail
+// and the 360° barrel roll) lives INSIDE, in DrunkPigeon, so it can never touch
+// physics — collision/hitbox use world.px/py + size only, not this visual transform.
 export function PigeonView({ world, pigeon, fatLevel }) {
   const size = pigeonSizeFor(fatLevel);
   const style = useAnimatedStyle(() => {
     const w = world.value;
     const t = w.t || 0;
-    const wobble = Math.sin(t / 170) * (3 + fatLevel) + Math.sin(t / 91) * 1.5;
-    const bob = Math.sin(t / 150) * 2;
-    const rot = w.tilt + wobble;
     const squashY = 1 - w.flap * 0.16;
     const squashX = 1 + w.flap * 0.12;
     let opacity = 1;
@@ -47,8 +49,8 @@ export function PigeonView({ world, pigeon, fatLevel }) {
       opacity,
       transform: [
         { translateX: w.px - size / 2 },
-        { translateY: w.py - size / 2 + bob },
-        { rotate: `${rot}deg` },
+        { translateY: w.py - size / 2 },
+        { rotate: `${w.tilt}deg` },
         { scaleX: squashX },
         { scaleY: squashY },
       ],
@@ -56,7 +58,7 @@ export function PigeonView({ world, pigeon, fatLevel }) {
   });
   return (
     <Animated.View style={[styles.abs, { width: size, height: size }, style]} pointerEvents="none">
-      <PigeonSprite pigeon={pigeon} fatLevel={fatLevel} size={size} />
+      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes testID="game-pigeon" />
     </Animated.View>
   );
 }

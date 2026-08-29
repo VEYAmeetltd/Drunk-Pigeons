@@ -2,7 +2,8 @@ import React from 'react';
 import Svg, { Ellipse, Circle, Path, Polygon, Rect, G, Line } from 'react-native-svg';
 
 // Pure vector cartoon pigeon. Cosmetic only. Widens with fatLevel.
-export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66 }) {
+// `droopy` gives permanent half-lidded drunk eyes; `blink` briefly shuts them.
+export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66, droopy = false, blink = false }) {
   const p = pigeon;
   const grow = fatLevel; // 0..6
   const rx = 30 + grow * 4.2;
@@ -11,6 +12,8 @@ export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66 }) {
   const cy = 58;
   const bellyRx = rx * 0.72;
   const bellyRy = ry * 0.78;
+  const eyeCx = cx + rx * 0.78 + 6;
+  const eyeCy = cy - ry * 0.7 - 3;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 120 110">
@@ -43,7 +46,27 @@ export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66 }) {
       />
       {/* eye */}
       <Circle cx={cx + rx * 0.78 + 5} cy={cy - ry * 0.7 - 3} r={4.4} fill="#fff" />
-      <Circle cx={cx + rx * 0.78 + 6} cy={cy - ry * 0.7 - 3} r={2.6} fill={p.eye} />
+      <Circle cx={eyeCx} cy={eyeCy + (droopy ? 1.4 : 0)} r={2.6} fill={p.eye} />
+      {/* drunk half-lidded / blinking eyelid (same colour as head so it reads as a lid) */}
+      {(droopy || blink) && (
+        <>
+          <Circle
+            cx={eyeCx - 1}
+            cy={eyeCy - (blink ? 0 : 3.1)}
+            r={blink ? 6.2 : 5.6}
+            fill={p.body}
+          />
+          <Line
+            x1={eyeCx - 7}
+            y1={eyeCy + (blink ? 0.5 : -1.6)}
+            x2={eyeCx + 5}
+            y2={eyeCy + (blink ? 0.5 : -1.6)}
+            stroke={p.wing}
+            strokeWidth={1.6}
+            strokeLinecap="round"
+          />
+        </>
+      )}
       {/* feet */}
       <Line x1={cx - 6} y1={cy + ry} x2={cx - 6} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />
       <Line x1={cx + 8} y1={cy + ry} x2={cx + 8} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />

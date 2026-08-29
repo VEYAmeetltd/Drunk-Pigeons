@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
-import PigeonSprite from '../components/PigeonSprite';
+import DrunkPigeon from '../components/DrunkPigeon';
 import { PIGEONS } from '../data/pigeons';
 import { Audio } from '../audio/audio';
 import { entitlementFor, allPremiumUnlocked } from '../store/entitlements';
@@ -98,7 +98,7 @@ export default function PigeonsScreen({
       {/* Preview panel */}
       <View style={styles.previewCard}>
         <View style={styles.previewSprite}>
-          <PigeonSprite pigeon={previewP} fatLevel={1} size={130} />
+          <DrunkPigeon pigeon={previewP} fatLevel={1} size={130} intensity="full" eyes testID={`preview-pigeon-${previewP.id}`} />
           {!previewEnt.canUse && (
             <View style={styles.previewLock} testID="preview-lock">
               <Text style={styles.lockEmoji}>LOCKED</Text>
@@ -151,7 +151,7 @@ export default function PigeonsScreen({
               style={[styles.card, active && styles.cardActive, preview === p.id && styles.cardPreview]}
             >
               <View style={styles.cardSprite}>
-                <PigeonSprite pigeon={p} fatLevel={0} size={70} />
+                <DrunkPigeon pigeon={p} fatLevel={0} size={70} intensity="calm" eyes={false} testID={`grid-pigeon-${p.id}`} />
                 {!e.canUse && (
                   <View style={styles.cardLock}>
                     <Text style={styles.cardLockTxt}>🔒</Text>

@@ -4,7 +4,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Eas
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
-import PigeonSprite from '../components/PigeonSprite';
+import DrunkPigeon from '../components/DrunkPigeon';
 import SecretCode from '../components/SecretCode';
 import ManorThumb from '../components/ManorThumb';
 import { getPigeon } from '../data/pigeons';
@@ -107,7 +107,7 @@ export default function MainMenu({
       </View>
 
       <Animated.View style={[styles.hero, pigeonStyle]}>
-        <PigeonSprite pigeon={pigeon} fatLevel={2} size={150} />
+        <DrunkPigeon pigeon={pigeon} fatLevel={2} size={150} intensity="full" eyes testID="menu-pigeon" />
       </Animated.View>
 
       <View style={styles.stats}>
