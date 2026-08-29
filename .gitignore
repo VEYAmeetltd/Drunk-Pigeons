@@ -4,3 +4,10 @@ node_modules/
 **/.expo/
 **/web-build/
 **/coverage/
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
