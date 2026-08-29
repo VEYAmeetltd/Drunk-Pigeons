@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView } from '../components/GameEntities';
+import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -94,7 +94,7 @@ function PopText({ world }) {
   );
 }
 
-export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, onCrash, onExit }) {
+export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
@@ -327,6 +327,9 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
       {/* pigeon */}
       <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} />
+
+      {/* Drunk soft-focus over the WORLD only (never moves it) — below the HUD */}
+      <DrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />
 
       {/* flap input layer (below HUD buttons) */}
       <Pressable

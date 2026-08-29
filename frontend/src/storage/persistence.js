@@ -55,7 +55,7 @@ export const Persistence = {
       getString(KEYS.bundle, '0'),
       getString(KEYS.easy, '0'),
       getString(KEYS.removeAds, '0'),
-      getString(KEYS.drunk, '1'),
+      getString(KEYS.drunk, '0.5'),
     ]);
     return {
       bestScore: best,
@@ -71,7 +71,7 @@ export const Persistence = {
       bundleOwned: bundle === '1',
       easyModeOwned: easy === '1',
       removeAdsOwned: removeAds === '1',
-      drunkLevel: [0, 1, 2].includes(Number(drunk)) ? Number(drunk) : 1,
+      drunkLevel: (() => { const n = parseFloat(drunk); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5; })(),
     };
   },
   setDrunk(level) {

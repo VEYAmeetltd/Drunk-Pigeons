@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import React, { useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
 import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
@@ -376,6 +376,30 @@ export function PintView({ world }) {
       <Animated.View style={[jabStyles.sparkle, { backgroundColor: '#fffdf3' }, foam]} pointerEvents="none" />
     </Animated.View>
   );
+}
+
+/* -------- Drunk screen soft-focus (gameplay world only; HUD stays crisp) --------
+   Fair by design: this NEVER moves the world (no camera tilt/translate) so on-screen
+   obstacle positions always match their hitboxes. It only breathes a soft-focus haze
+   + (web) a light backdrop blur, scaling with the Drunkness level (0..~1.4 with Pub
+   boost). Rendered BELOW the HUD so distance/chips/buttons remain sharp. */
+export function DrunkScreenFX({ level = 0 }) {
+  const lv = Math.max(0, Math.min(1.4, level));
+  const focus = useSharedValue(0);
+  useEffect(() => {
+    focus.value = withRepeat(withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.sin) }), -1, true);
+    return () => cancelAnimation(focus);
+  }, []);
+  const style = useAnimatedStyle(() => {
+    if (lv <= 0.02) return { opacity: 0 };
+    // irregular breathing: two sines so it never feels like a clean loop
+    const breathe = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(focus.value * Math.PI * 2 + Math.sin(focus.value * 7)));
+    const opacity = Math.min(0.2, lv * (0.05 + breathe * 0.09));
+    const blurPx = Platform.OS === 'web' ? lv * (0.7 + breathe * 1.4) : 0; // max ~ 2.9px @ boosted
+    const web = Platform.OS === 'web' ? { backdropFilter: `blur(${blurPx}px)`, WebkitBackdropFilter: `blur(${blurPx}px)` } : {};
+    return { opacity: 1, ...web, backgroundColor: `rgba(245,240,255,${opacity})` };
+  });
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID="drunk-screen-fx" />;
 }
 
 

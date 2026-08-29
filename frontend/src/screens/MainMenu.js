@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import DrunkPigeon from '../components/DrunkPigeon';
+import DrunknessSlider from '../ui/DrunknessSlider';
 import SecretCode from '../components/SecretCode';
 import ManorThumb from '../components/ManorThumb';
 import { getPigeon } from '../data/pigeons';
@@ -30,8 +31,9 @@ export default function MainMenu({
   onLeetUnlock,
   onLeaderboard,
   drunkStrength = 1,
-  drunkLabel = 'NORMAL',
-  onCycleDrunk,
+  drunkLevel = 0.5,
+  onSetDrunk,
+  onCommitDrunk,
 }) {
   const pigeon = getPigeon(selectedPigeon);
   const [showCode, setShowCode] = useState(false);
@@ -101,9 +103,6 @@ export default function MainMenu({
         <Pressable testID="sound-toggle" onPress={onToggleSound} style={styles.sound}>
           <Text style={styles.soundTxt}>{soundEnabled ? 'SOUND: ON' : 'SOUND: OFF'}</Text>
         </Pressable>
-        <Pressable testID="wobble-toggle" onPress={onCycleDrunk} style={styles.sound}>
-          <Text style={styles.soundTxt}>{`WOBBLE: ${drunkLabel}`}</Text>
-        </Pressable>
       </View>
 
       <View style={styles.titleWrap}>
@@ -120,6 +119,8 @@ export default function MainMenu({
         <Stat label="BEST SCORE" value={bestScore} color={COLORS.yellow} testID="menu-best-score" />
         <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
       </View>
+
+      <DrunknessSlider value={drunkLevel} onChange={onSetDrunk} onCommit={onCommitDrunk} />
 
       <Text style={styles.mapLabel}>CHOOSE YOUR MANOR</Text>
       <View style={styles.maps}>

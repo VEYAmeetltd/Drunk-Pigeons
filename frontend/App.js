@@ -16,9 +16,8 @@ import { Billing } from './src/store/billing';
 import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
 import { Ads } from './src/ads/ads';
 
-// Wobble-strength setting → drunk animation amplitude multiplier.
-const DRUNK_MULT = [0.55, 1, 1.7];
-const DRUNK_LABELS = ['CHILL', 'NORMAL', 'EXTRA'];
+// Drunkness slider (0=SOBER, 0.5=TIPSY, 1=ABSOLUTELY PIGEONED) → amplitude multiplier.
+const drunkStrengthFor = (level) => 0.2 + Math.max(0, Math.min(1, level)) * 1.5;
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -108,13 +107,12 @@ export default function App() {
     });
   }, []);
 
-  const handleCycleDrunk = useCallback(() => {
-    setState((s) => {
-      const drunkLevel = (s.drunkLevel + 1) % 3;
-      Persistence.setDrunk(drunkLevel);
-      Audio.ui();
-      return { ...s, drunkLevel };
-    });
+  const handleSetDrunk = useCallback((level) => {
+    const v = Math.max(0, Math.min(1, level));
+    setState((s) => ({ ...s, drunkLevel: v }));
+  }, []);
+  const handleCommitDrunk = useCallback(() => {
+    setState((s) => { Persistence.setDrunk(s.drunkLevel); return s; });
   }, []);
 
   const handleSelectMap = useCallback((id) => {
@@ -272,7 +270,7 @@ export default function App() {
 
   if (!ready) return <View style={styles.boot} />;
 
-  const drunkStrength = DRUNK_MULT[state.drunkLevel] ?? 1;
+  const drunkStrength = drunkStrengthFor(state.drunkLevel);
 
   return (
     <SafeAreaProvider>
@@ -290,8 +288,9 @@ export default function App() {
             easyPrice={Billing.priceFor(PRODUCTS.mode.easy) || DEFAULT_PRICES.easyMode}
             isDev={Billing.isDev}
             drunkStrength={drunkStrength}
-            drunkLabel={DRUNK_LABELS[state.drunkLevel]}
-            onCycleDrunk={handleCycleDrunk}
+            drunkLevel={state.drunkLevel}
+            onSetDrunk={handleSetDrunk}
+            onCommitDrunk={handleCommitDrunk}
             onPlay={() => setScreen('game')}
             onPigeons={() => setScreen('pigeons')}
             onSelectMap={handleSelectMap}
@@ -335,6 +334,7 @@ export default function App() {
             bestScore={state.bestScore}
             bestDistance={modeForSelection(state.selectedMap) === 'easy' ? state.bestDistanceSilly : state.bestDistance}
             drunkStrength={drunkStrength}
+            drunkLevel={state.drunkLevel}
             onCrash={handleCrash}
             onExit={() => setScreen('menu')}
           />

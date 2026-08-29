@@ -367,6 +367,8 @@ export default function DrunkPigeon({
     if (!active) return undefined;
     let stopped = false;
     const fs = Math.min(fatF, 1.7);
+    // higher Drunkness => events fire more often (SOBER sparse, PIGEONED frequent)
+    const gapMul = Math.max(0.5, 1.4 - Math.min(strength, 1.7) * 0.55);
 
     const doFlail = () => {
       flail.value = withSequence(withTiming(1, { duration: 540, easing: Easing.linear }), withTiming(0, { duration: 0 }));
@@ -390,7 +392,7 @@ export default function DrunkPigeon({
     const runEvent = (kind) => {
       if (kind === 'sig') {
         const now = Date.now();
-        const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boost ? 0.6 : 1);
+        const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boost ? 0.6 : 1) * gapMul;
         if (now - lastSig.current < cd) { spawnBubbles(2); return 700; }
         lastSig.current = now;
         return runSignature(fs);
@@ -418,16 +420,16 @@ export default function DrunkPigeon({
       const [lo, hi] = prof.cadence;
       // Keep personality lively so it is unmistakable even in short runs.
       const gapBase = diag ? rand(400, 800) : calm ? rand(lo * 0.9, hi * 0.9) : rand(lo * 0.5, hi * 0.5);
-      const gap = gapBase * (boost ? 0.55 : 1);
+      const gap = gapBase * (boost ? 0.55 : 1) * gapMul;
       pushTimer(tick, dur + gap);
     };
     pushTimer(tick, diag ? 400 : 650);
-    const amb = setInterval(() => spawnBubbles(1), diag ? 700 : calm ? 2600 : 1600);
+    const amb = setInterval(() => spawnBubbles(1), (diag ? 700 : calm ? 2600 : 1600) * gapMul);
     return () => {
       stopped = true;
       clearInterval(amb);
     };
-  }, [active, calm, diag, boost, fatLevel, pigeon && pigeon.id]);
+  }, [active, calm, diag, boost, fatLevel, strength, pigeon && pigeon.id]);
 
   // occasional blink (larger sprites only)
   useEffect(() => {
