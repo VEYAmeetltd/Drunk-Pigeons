@@ -36,6 +36,10 @@ export default function MainMenu({
   onCommitDrunk,
 }) {
   const pigeon = getPigeon(selectedPigeon);
+  const { width } = useWindowDimensions();
+  // Responsive menu pigeon size: slightly smaller than before (was 150) so BEST | PIGEON | INJURED
+  // fits on one row across common widths; scales down on narrow phones before anything clips.
+  const heroSize = Math.round(Math.max(88, Math.min(110, width * 0.28)));
   const [showCode, setShowCode] = useState(false);
   const [easySheet, setEasySheet] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -117,12 +121,11 @@ export default function MainMenu({
         <Text style={styles.subtitle}>flap responsibly.</Text>
       </View>
 
-      <Animated.View style={[styles.hero, pigeonStyle]}>
-        <DrunkPigeon pigeon={pigeon} fatLevel={2} size={150} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
-      </Animated.View>
-
-      <View style={styles.stats}>
+      <View style={styles.heroRow}>
         <Stat label="BEST SCORE" value={bestScore} color={COLORS.yellow} testID="menu-best-score" />
+        <Animated.View style={[styles.hero, pigeonStyle]}>
+          <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
+        </Animated.View>
         <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
       </View>
 
@@ -236,13 +239,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24, alignItems: 'center' },
   safe: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { flex: 1 },
-  scrollContent: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 28, flexGrow: 1 },
+  scrollContent: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 4, paddingBottom: 28, flexGrow: 1 },
   top: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 6, paddingTop: 8 },
   codeMark: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
   sound: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   soundTxt: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
-  titleWrap: { marginTop: 6, alignItems: 'center' },
+  titleWrap: { marginTop: 2, alignItems: 'center' },
   title: {
     fontFamily: FONT, color: COLORS.yellow, fontSize: 52, fontWeight: '700',
     textAlign: 'center', lineHeight: 50, letterSpacing: 2,
@@ -252,12 +255,13 @@ const styles = StyleSheet.create({
     fontSize: 52, fontWeight: '700', textAlign: 'center', lineHeight: 50, letterSpacing: 2, opacity: 0.5,
   },
   subtitle: { fontFamily: FONT, color: COLORS.teal, fontSize: 16, marginTop: 4, fontWeight: '600' },
-  hero: { marginVertical: 6 },
+  hero: { marginHorizontal: 4 },
+  heroRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 3, gap: 8 },
   stats: { flexDirection: 'row', gap: 14, marginTop: 2 },
-  stat: { backgroundColor: COLORS.card, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 18, alignItems: 'center', minWidth: 130 },
-  statLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontWeight: '600', letterSpacing: 1 },
-  statValue: { fontFamily: FONT, fontSize: 30, fontWeight: '700' },
-  mapLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 2, marginTop: 16, fontWeight: '600' },
+  stat: { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 7, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, maxWidth: 132 },
+  statLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textAlign: 'center' },
+  statValue: { fontFamily: FONT, fontSize: 26, fontWeight: '700', marginTop: 2 },
+  mapLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 2, marginTop: 8, fontWeight: '600' },
   maps: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' },
   mapCard: { backgroundColor: COLORS.card, borderRadius: 14, padding: 8, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', width: 96 },
   mapCardActive: { borderColor: COLORS.yellow },

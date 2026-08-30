@@ -245,3 +245,9 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
   - Added web-only viewport-fit=cover (App.js) so notched mobile browsers expose env(safe-area-inset-*) to react-native-safe-area-context (native already applies real insets).
 - Retest: Batch 1 & Batch 2 both PASS (12/12 criteria per viewport); regressions on smallest & largest of both platforms PASS.
 - LIMITATION: Expo Web headless preview reports 0 safe-area insets (no physical notch/cutout), so Dynamic Island / camera-cutout / gesture-nav overlap can't be visually confirmed in-preview; native iOS/Android apply real insets via SafeAreaView (+ viewport-fit=cover for mobile web). One on-device smoke recommended to fully close the safe-area loop.
+
+## Update 33 (2026-06) — Main Menu compact one-row stats layout
+- Reworked MainMenu top block into a single balanced row: BEST SCORE | selected PIGEON | PIGEONS INJURED (was pigeon-on-its-own-row + stats-row below). Stats are compact flex cells (flex:1, maxWidth 132, wrap), vertically centred with the pigeon; wording/colours/values unchanged.
+- Selected menu pigeon is now responsive & slightly smaller: heroSize = round(clamp(88, width*0.28, 110)) (was fixed 150) — stays the clear visual focus, shrinks on narrow widths before anything clips. Does NOT touch in-game pigeon size/hitbox/gameplay.
+- Trimmed vertical spacing (scrollContent paddingTop 8→4, titleWrap marginTop 6→2, heroRow marginVertical 3, stat paddingVertical 7, mapLabel marginTop 16→8) to recover space. ScrollView retained as fallback for very short screens / large accessibility text.
+- Result (self-verified, no overlap on any width): FITS WITHOUT SCROLLING on iPhone 13/14 390x844, iPhone 15 393x852, iPhone Pro Max 430x932, Galaxy S22 360x800, Galaxy S24 384x854, Galaxy Ultra 412x915 (leaderboard button bottom ~790–799px, so any phone ≥~800px tall fits). STILL NEEDS SCROLL (expected, very short): iPhone SE 375x667 and Galaxy S8 360x740.
