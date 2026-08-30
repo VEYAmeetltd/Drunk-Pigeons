@@ -21,6 +21,20 @@ const drunkStrengthFor = (level) => 0.2 + Math.max(0, Math.min(1, level)) * 1.5;
 
 export default function App() {
   const [ready, setReady] = useState(false);
+
+  // Web: enable viewport-fit=cover so notched mobile browsers expose
+  // env(safe-area-inset-*) to react-native-safe-area-context (native handles insets already).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+  }, []);
+
   const [screen, setScreen] = useState('menu'); // menu | game | pigeons
   const [state, setState] = useState({
     bestScore: 0,

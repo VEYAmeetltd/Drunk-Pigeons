@@ -235,3 +235,13 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
   - ALT hook "WHY IS THIS SO ADDICTIVE?": drunk_pigeons_HOOK_addictive_music.mp4 / _nomusic.mp4
 - Temporary filming hooks (engine.devForcePint, get fatChips, window.__DP_FILM in GameScreen) were added for the shoot and REMOVED after; window.__DP_FILM is undefined in the running app; production rarity untouched. Net code change reduces to the already-committed pint boost fix. Both lint arms run clean.
 - NOTE: max in-game fatness is ~1.6x base (real product); ad leans on drunk wobble + "SPLAT! Peak pigeon behaviour" game-over + captions for comedy rather than faking a giant sprite.
+
+## Update 32 (2026-06) — Responsive device audit (iPhone + Samsung) + fixes
+- Ran batched device-matrix testing (testing_agent). Batch 1 = iPhone (SE 375x667, 13/14 390x844, 15/16 & Pro 393x852, 15 Pro Max 430x932). Batch 2 = Samsung/Android (S8/S10e 360x740, S22/A 360x800, S24 384x854, S Ultra 412x915, Z Flip unfolded 373x819). Full interactive journeys (menu, gameplay SOBER/PIGEONED, game-over + revive collapse, Pigeons store, Leaderboard nickname, Easy Mode purchase).
+- Problems found & FIXED (reusable constraints, no device-specific hacks):
+  - MainMenu overflowed on small screens (PLAY/PIGEONS/LEADERBOARD + Easy Mode card off-screen on 375x667 & 360x640) — wrapped content in a ScrollView inside SafeAreaView (overlays kept full-screen as siblings). Verified reachable on smallest iPhone & Samsung.
+  - Easy Mode selected border was blue not yellow — fixed style order to [mapCard, easyCard, selected && mapCardActive]; now rgb(255,210,63) identical to standard manors (verified).
+  - Sub-44px tap targets — sound-toggle / open-code-button (MainMenu) and restore-purchases (Pigeons) bumped to minHeight 44.
+  - Added web-only viewport-fit=cover (App.js) so notched mobile browsers expose env(safe-area-inset-*) to react-native-safe-area-context (native already applies real insets).
+- Retest: Batch 1 & Batch 2 both PASS (12/12 criteria per viewport); regressions on smallest & largest of both platforms PASS.
+- LIMITATION: Expo Web headless preview reports 0 safe-area insets (no physical notch/cutout), so Dynamic Island / camera-cutout / gesture-nav overlap can't be visually confirmed in-preview; native iOS/Android apply real insets via SafeAreaView (+ viewport-fit=cover for mobile web). One on-device smoke recommended to fully close the safe-area loop.

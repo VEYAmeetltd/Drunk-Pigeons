@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
@@ -87,7 +87,13 @@ export default function MainMenu({
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
       <View style={styles.top}>
         <Pressable
           testID="open-code-button"
@@ -155,7 +161,7 @@ export default function MainMenu({
         <Pressable
           testID="map-easy"
           onPress={() => onManorPress('easy')}
-          style={[styles.mapCard, selectedMap === 'easy' && styles.mapCardActive, styles.easyCard]}
+          style={[styles.mapCard, styles.easyCard, selectedMap === 'easy' && styles.mapCardActive]}
         >
           <View style={styles.mapSwatch}>
             <ManorThumb mapId="easy" width={74} height={44} />
@@ -181,6 +187,7 @@ export default function MainMenu({
         onPress={onLeaderboard}
         style={{ width: '100%', marginTop: 12, marginBottom: 10 }}
       />
+      </ScrollView>
 
       <SecretCode visible={showCode} onClose={() => setShowCode(false)} onUnlock={onLeetUnlock} />
 
@@ -227,10 +234,13 @@ function Stat({ label, value, color, testID }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 24, alignItems: 'center' },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  scroll: { flex: 1 },
+  scrollContent: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 28, flexGrow: 1 },
   top: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 6, paddingTop: 8 },
-  codeMark: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
+  codeMark: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
-  sound: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, backgroundColor: COLORS.bgAlt },
+  sound: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   soundTxt: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
   titleWrap: { marginTop: 6, alignItems: 'center' },
   title: {

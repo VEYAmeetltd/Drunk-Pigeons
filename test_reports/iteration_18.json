@@ -1,0 +1,27 @@
+{
+  "summary": "Batch-2 responsive audit on Samsung/Android viewports (360x740 S8/S10e, 360x800 S22/A, 384x854 S24, 412x915 S Ultra, 373x819 Z Flip) PLUS regression re-verification of Batch-1 fixes. Executed the full INTERACTIVE journey: MainMenu scroll reachability, Easy Mode purchase via easy-sim-success, gameplay entry + flap + crash, SPLAT card fit on smallest 360x740, revive-then-crash collapse, Pigeons store scroll (all 7), Leaderboard nickname save with on-screen keyboard consideration. ALL REGRESSIONS PASS: (a) Easy Mode selected border is now rgb(255,210,63) — identical to map-dusk (verified via computed borderTopColor); (b) sound-toggle=100x44, open-code-button=72x44, restore-purchases=187x44 across every Samsung viewport. SPLAT card fully fits on 360x740 (last button MAIN MENU y+h=689.5/740). Revive collapse clean — revive-button gone after use, no blank gap (PLAY AGAIN y=516 → MAIN MENU y=584, 12px gap only). MainMenu ScrollView delivers PLAY/PIGEONS/LEADERBOARD reachable on the smallest 360x740 (PLAY y=564+58=622, LEADERBOARD y=644+58=702, all fits in 740). No horizontal clipping on any Samsung width. Batch 2 = PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Easy Mode purchase sheet", "issues": ["Sheet exposes easy-sim-success / easy-sim-fail / easy-sim-cancel / easy-buy-cancel and easy-sheet-price, but does NOT render an easy-buy-confirm control in dev/simulator mode (spec-listed testid is absent). This is expected in the dev purchase simulator (sim buttons replace the real StoreKit confirm). Not a defect for web preview — flag for spec alignment or add easy-buy-confirm alias on the sim-success path."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: align spec vs code — easy-buy-confirm testid is absent when the dev purchase simulator is active (easy-sim-success serves as confirm). Either add easy-buy-confirm as an alias on the sim-success button or update the spec.",
+    "Non-blocking: Expo Web preview reports 0 safe-area insets; native Android will apply real insets via SafeAreaView. HUD/menu positions on web look correct (no camera cutout / gesture-nav bar overlap in headless preview). Needs one on-device Android smoke to fully close the safe-area verification loop."
+  ],
+  "critical_code_review_comments": [
+    "Batch-1 fixes are live and working on all Samsung sizes: MainMenu ScrollView, unified yellow selected border (verified rgb(255,210,63) on map-easy = map-dusk), 44px tap targets on sound-toggle/open-code-button/restore-purchases, viewport-fit=cover meta tag applied.",
+    "GameOver overlay height budget is well within 740px on the smallest tested viewport — no clipping."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "Samsung 360x740 / 360x800 / 384x854 / 412x915 / 373x819: 12/12 criteria PASS. Regressions PASS: Easy Mode yellow border ✓, 44px tap targets ✓, SPLAT fits on smallest ✓, revive collapse ✓."},
+  "seed_data_creation": "None persistent. Easy Mode dev-simulated purchase via easy-sim-success (in-memory).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Batches 1 (iPhone) and 2 (Samsung/Android) both PASS. All previously flagged issues from iteration_17 are resolved. Key working testids: play-button, pigeons-button, leaderboard-button, map-easy/day/dusk/night/random, drunkness-slider, drunkness-thumb, sound-toggle, open-code-button, easy-purchase-sheet, easy-sheet-price, easy-sim-success/fail/cancel, easy-buy-cancel, flap-area, restart-button, exit-button, distance-hud, chip-hud, game-over-overlay, go-distance/go-best-distance/go-score/go-best/go-chips, play-again-button, revive-button (only present on first crash), menu-button, grid-pigeon-<id>, unlock-all-button, restore-purchases, pigeons-back, show-silly, nickname-input, nickname-save, leaderboard-back. Note: easy-buy-confirm testid is NOT rendered when the dev purchase simulator is active — easy-sim-success is the confirm affordance in that flow.",
+  "rca of the issue": "No new issues. Batch-1 fixes verified in Batch-2 environment: (1) Easy Mode selected border — MainMenu.js now composes style as [mapCard, easyCard, selectedMap==='easy' && mapCardActive]; computed borderTopColor=rgb(255,210,63) matches map-dusk. (2) Tap targets — sound-toggle/open-code-button minHeight:44 in MainMenu.js, restore-purchases minHeight:44 in PigeonsScreen.js — all measured >=44 across 5 Samsung viewports."
+}

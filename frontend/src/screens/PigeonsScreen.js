@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   cardName: { fontFamily: FONT, color: COLORS.text, fontSize: 12, fontWeight: '600', marginTop: 2 },
   cardPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 13, fontWeight: '700', marginTop: 2 },
   cardBadge: { position: 'absolute', top: 6, right: 8, color: COLORS.teal, fontWeight: '700', fontSize: 16 },
-  restore: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 14, marginBottom: 6 },
+  restore: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginBottom: 6, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   restoreTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 2, textDecorationLine: 'underline' },
   restoreMsg: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', letterSpacing: 1, textAlign: 'center', marginTop: -2, marginBottom: 8 },
   removeAdsRow: { alignSelf: 'center', alignItems: 'center', backgroundColor: COLORS.bgAlt, borderRadius: 14, paddingVertical: 9, paddingHorizontal: 22, marginBottom: 12 },
