@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import MainMenu from './src/screens/MainMenu';
@@ -10,6 +10,7 @@ import { Persistence } from './src/storage/persistence';
 import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboard/api';
 import { Audio } from './src/audio/audio';
 import { loadFonts, COLORS } from './src/ui/theme';
+import { RotateOverlay } from './src/ui/RotateOverlay';
 import { getPigeon } from './src/data/pigeons';
 import { modeForSelection } from './src/data/maps';
 import { Billing } from './src/store/billing';
@@ -36,6 +37,12 @@ export default function App() {
   }, []);
 
   const [screen, setScreen] = useState('menu'); // menu | game | pigeons
+
+  // Phone-landscape guard: show a "rotate to portrait" overlay only on phone-sized
+  // landscape (short side < 500). Leaves desktop/tablet alone. Native is already
+  // portrait-locked via app.json; this covers mobile web.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const phoneLandscape = winW > winH && Math.min(winW, winH) < 500;
   const [state, setState] = useState({
     bestScore: 0,
     bestDistance: 0,
@@ -354,6 +361,7 @@ export default function App() {
           />
         )}
       </View>
+      <RotateOverlay visible={phoneLandscape} />
     </SafeAreaProvider>
   );
 }
