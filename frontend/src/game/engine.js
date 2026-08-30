@@ -604,7 +604,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       })),
       jab: { x: jab.x, y: jab.y, active: jab.active ? 1 : 0, anim: jab.anim },
       pint: { x: pint.x, y: pint.y, active: pint.active ? 1 : 0, anim: pint.anim },
-      boost: now < pintT + CONFIG.PINT_BOOST_MS ? 1 : 0,
+      boost: pintT > 0 && now < pintT + CONFIG.PINT_BOOST_MS ? 1 : 0,
       pop: popT,
     };
   }

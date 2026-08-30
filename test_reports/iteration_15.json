@@ -1,0 +1,30 @@
+{
+  "summary": "Full pre-release regression sweep for DRUNK PIGEONS (Expo Web) at viewport 480x860. Backend: full pytest suite 65/65 PASS. Frontend: all core gameplay + drunk system + slider persistence + leaderboard + purchase (Remove Ads simulated flow) + ads-revive flows verified. Skinny Jab and Pub Pint remain unverifiable via automation (automated player dies well before jab/pint spawn) — flagged as inconclusive per task allowance, NOT as failures.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_leaderboard.py",
+    "/app/backend/tests/test_leaderboard_hardening.py",
+    "/app/backend/tests/test_mode_leaderboard.py",
+    "/app/test_reports/pytest/iteration_15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Non-blocking: server.py returns HTTP 200 with {ok:false,error:...} for client validation failures (bad-name, bad-id, rate-limited, duplicate-run). Semantically these are 4xx cases; existing convention preserved but worth improving.",
+    "Non-blocking: CORS is allow_origins=['*'] — acceptable for anonymous leaderboard, worth pinning to prod origin.",
+    "Non-blocking (RN Web quirk): Button component uses Pressable with disabled prop — HTML disabled attr is NOT reflected on the DOM element in RN Web. Functionally onPress is blocked and opacity is 0.45, so it works, but Playwright's is_disabled() will return False. Consider adding aria-disabled for testability.",
+    "Console deprecation warnings on RN Web: 'shadow*', 'textShadow*', and 'props.pointerEvents' are deprecated. Not blocking; consider migrating to style.pointerEvents / boxShadow / textShadow."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (65/65)", "frontend": "8/8 acceptance items verified; 2 items (Skinny Jab, Pub Pint) inconclusive-not-reachable via automation (documented in task)"},
+  "test_credentials": "None. Anonymous playerIds generated via UUID hex.",
+  "seed_data_creation": "Playwright test registered a taken-name nickname via /api/leaderboard/register (e.g. Taken9222 with playerId 'p'+'a'*31) to prove uniqueness UX. Also registered a fresh TestPg#### nickname. Backend pytest suite creates TEST_ prefixed leaderboard entries (inert).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Green-light achieved. Backend: 65/65 pytest pass (test_leaderboard.py + test_leaderboard_hardening.py + test_mode_leaderboard.py). Frontend verified: PLAY starts game, tap-to-flap works, collision triggers SPLAT (game-over-overlay), revive-button appears once and grants exactly one revive (no second revive offered on next death — canRevive gating works). Slider (data-testid drunkness-slider/thumb) moves from x=82 (SOBER) to x=376 (PIGEONED) on a 432px track; persists across reload via dp_drunkLevel. drunk-screen-fx element present at PIGEONED, absent at SOBER (confirmed in iter_14). Leaderboard: nickname-input debounced availability check shows nickname-available tick for free names, nickname-unavailable cross + hint 'That pigeon name is already taken.' for taken names; nickname-warning permanent-name notice always shown; save button uses RN Pressable disabled prop (opacity 0.45) but no HTML disabled attr — functional block works. Global/Silly tabs toggle title (🏆 GLOBAL / 🏆 SILLY MODE) and show silly-note. Pigeons/Store: Remove Ads sim-success grants entitlement (remove-ads-owned row appears with 'ADS REMOVED ✓'). Restore Purchases returns 'NOTHING TO RESTORE' without crash. Purchase sheet cancel path also observed on Remove Ads flow. Skinny Jab & Pub Pint remain unreachable via automation clicks — need dev-seed or manual verification.",
+  "rca of the issue": "N/A — no regressions found."
+}
