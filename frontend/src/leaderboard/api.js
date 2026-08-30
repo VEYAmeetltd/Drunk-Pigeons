@@ -10,7 +10,9 @@ export function generatePlayerId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return 'p' + crypto.randomUUID().replace(/-/g, '');
     }
-  } catch {}
+  } catch {
+    // crypto unavailable in this runtime — fall through to the timestamp-based id below
+  }
   return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
 }
 

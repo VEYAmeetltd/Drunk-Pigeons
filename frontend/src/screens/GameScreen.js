@@ -37,7 +37,9 @@ function BlackoutOverlay({ world }) {
     const id = setInterval(() => {
       try {
         setA(world.value.blackout || 0);
-      } catch {}
+      } catch (e) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameScreen] blackout HUD read failed', e);
+      }
     }, 50);
     return () => clearInterval(id);
   }, [world]);
@@ -62,7 +64,9 @@ function DistanceHUD({ world }) {
     const id = setInterval(() => {
       try {
         setM(world.value.distM || 0);
-      } catch {}
+      } catch (e) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameScreen] distance HUD read failed', e);
+      }
     }, 60);
     return () => clearInterval(id);
   }, [world]);
