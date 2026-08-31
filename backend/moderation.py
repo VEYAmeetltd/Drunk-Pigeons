@@ -68,8 +68,9 @@ def _base(s: str) -> str:
     # strip combining marks (accents) -> base letters
     s = "".join(c for c in unicodedata.normalize("NFD", s)
                 if unicodedata.category(c) != "Mn")
+    s = s.lower()
     s = "".join(_CONFUSABLE.get(c, c) for c in s)
-    return s.lower()
+    return s
 
 
 def _collapse(s: str) -> str:
@@ -156,9 +157,16 @@ PROFANITY_SUBSTR = ["fuck", "shit", "cunt", "faggot", "whore", "bitch",
 # Religious respect.
 # Standalone reserved words that are rejected on their own (per policy): Jesus / God.
 RELIGIOUS_RESERVED = {"jesus", "god"}
+# Prophet-name transliteration variants: rejected ONLY when the whole name is one
+# of them (standalone). Matched on a fully de-duplicated ("squeezed") letter form
+# so leet/repeats/homoglyph/separator variants collapse to the same shape.
+# Squeezed targets: muhamad, mohamed, mohamad, muhamed  ->  ^m[ou]h[ao]m[ae]d$
+MUHAMMAD_STANDALONE_RE = re.compile(r"^m[ou]h[ao]m[ae]d$")
 # Broader set used only for the "reserved word + insult" combination check
 # (these are legitimate personal names on their own, so never standalone-rejected).
-RELIGIOUS_NAMES = {"jesus", "god", "allah", "christ", "muhammad", "mohammed", "prophet"}
+RELIGIOUS_NAMES = {"jesus", "god", "allah", "christ", "prophet",
+                   "muhammad", "muhammed", "mohammed", "mohamed", "mohammad",
+                   "muhamad", "mohamad", "muhamed"}
 RELIGIOUS_INSULT = ("shit", "sucks", "sux", "fuck", "fuk", "hate", "dead",
                     "fake", "gay", "isnt", "isnot", "notking", "notreal",
                     "stupid", "dumb", "loser", "crap", "damn", "kill", "die",
@@ -211,6 +219,9 @@ def moderation_reason(name: str):
         for word in RELIGIOUS_RESERVED:
             if _standalone(lf, word):
                 return "religious-standalone"
+        # standalone prophet-name variants (squeeze all repeats first)
+        if MUHAMMAD_STANDALONE_RE.match(re.sub(r"(.)\1+", r"\1", lf)):
+            return "religious-standalone"
         for word in RELIGIOUS_NAMES:
             if word in lf:
                 if any(a in lf for a in RELIGIOUS_AFFIRM):

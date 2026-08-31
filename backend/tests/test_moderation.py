@@ -30,6 +30,13 @@ ABUSE = [
     "fuckyou", "shithead", "cuntface",
     # zero-width / invisible bypass of a slur
     "nig\u200bger", "ni\u200dgga",
+    # standalone prophet-name variants (all spellings)
+    "Muhammad", "Muhammed", "Mohammed", "Mohamed", "Mohammad", "Muhamad",
+    "Mohamad", "Muhamed",
+    # obfuscated standalone prophet-name variants
+    "M0hamed", "m u h a m m a d", "mo.ha.mmed", "Muhammmmad", "МОНАММΕD",
+    # insulting combinations involving Muhammad
+    "MohamedIsShit", "MuhammadSucks", "fuckmohammed", "mohammedisgay",
 ]
 
 # --- Names that MUST be allowed (clean regression set) ---
@@ -42,10 +49,13 @@ CLEAN = [
     "Sussex", "Middlesex", "Kingsman", "Kingston", "Shiitake", "Signal",
     "Morning", "Kingfisher", "Special", "Dragon", "Compass",
     # legitimate + multicultural personal names
-    "Mohammed", "Muhammad", "Fatima", "Aisha", "Ravi", "Priya", "Wei",
+    "Fatima", "Aisha", "Ravi", "Priya", "Wei",
     "Chen", "Kwame", "Nadia", "Sokolov", "Bjorn", "Zoe", "Jose", "Andre",
     "OConnor", "DeSouza", "MacLeod", "Gonzalez", "Nguyen", "Yamamoto",
     "Isabella", "Isadora", "Gordon", "Godfrey",
+    # compound / longer names containing a prophet-name sequence must NOT be blocked
+    "MuhammadAli", "MohamedSalah", "Muhammadu", "Ahmad", "Hammad", "Mohan",
+    "AbdulMuhammad", "MoSalah",
     # short names with numbers (legit)
     "Kev1n", "T0mmy", "P1geon", "L33t", "Player7", "Ace99", "M8y", "Bo55",
     # game-flavoured legit names
