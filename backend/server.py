@@ -391,6 +391,17 @@ async def submit(req: SubmitReq, request: Request):
             "bestDistance": best, "rank": rank}
 
 
+@app.get("/api/leaderboard/me")
+async def me(playerId: str | None = None):
+    # Authoritative registered nickname for this player (regardless of score).
+    # Lets the client reconcile a locally-cached name that was removed server-side
+    # (e.g. a moderation takedown / reset) so the name-entry flow reopens.
+    if not (playerId and valid_id(playerId)):
+        return {"ok": True, "nickname": None}
+    doc = await db.players.find_one({"playerId": playerId}, {"_id": 0, "nickname": 1})
+    return {"ok": True, "nickname": (doc.get("nickname") if doc else None) or None}
+
+
 @app.get("/api/leaderboard/top")
 async def top(playerId: str | None = None, mode: str = "normal", limit: int = 100):
     limit = max(1, min(100, limit))

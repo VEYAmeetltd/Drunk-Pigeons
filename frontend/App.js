@@ -105,6 +105,19 @@ export default function App() {
         submittedBestSilly: lb.submittedBestSilly,
       };
       setNickname(lb.nickname);
+
+      // Reconcile a locally-cached name with the server (authoritative). If the
+      // name was removed server-side (moderation takedown / reset), clear it
+      // locally so the name-entry flow reopens. Never wipe on network failure.
+      if (lb.nickname) {
+        LeaderboardAPI.me(pid).then((res) => {
+          if (res && res.ok && !res.nickname) {
+            lbRef.current.nickname = '';
+            Persistence.setNickname('');
+            setNickname('');
+          }
+        });
+      }
     });
   }, []);
 

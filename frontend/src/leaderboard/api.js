@@ -41,6 +41,18 @@ async function post(path, body, timeout = 6000) {
 export const LeaderboardAPI = {
   register: (playerId, nickname) => post('/register', { playerId, nickname }),
   submit: (payload) => post('/submit', payload),
+  async me(playerId) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const res = await fetch(`${API}/me?playerId=${encodeURIComponent(playerId)}`, { signal: ctrl.signal });
+      return await res.json();
+    } catch {
+      return { ok: false, offline: true };
+    } finally {
+      clearTimeout(t);
+    }
+  },
   async check(nickname, playerId) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);

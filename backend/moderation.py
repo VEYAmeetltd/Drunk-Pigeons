@@ -102,6 +102,10 @@ HIGH_RISK = [
     r"n+i+g{2,}(a+|e+r+|a+h+|u+h+|a+z+|r+|r+a+)?",
     # 'nigsa' style (n1g5a): single g but the s makes it distinctive
     r"(?<![a-z])n+i+g+s+a+(?![a-z])",
+    # single-g phonetic spellings ending in an 'a'/'uh' sound (niga, neega, nigah,
+    # niguh, n33ga). Boundary-anchored on BOTH sides so country/name words are safe:
+    # 'Niger'/'Nigeria'/'Nigel' end in 'e', and 'Nigatu' has a trailing letter.
+    _B.format(r"n+[ie]+g+(a+h?|u+h+)"),
     _B.format(r"f+a+g+(o+t+|g+o+t+|s+)?"),                    # f-slur family
     _B.format(r"k+i+k+e+s?"),                                 # antisemitic
     _B.format(r"c+h+i+n+k+s?"),                               # anti-Asian
