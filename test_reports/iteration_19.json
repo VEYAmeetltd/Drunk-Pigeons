@@ -1,0 +1,24 @@
+{
+  "summary": "Focused regression on Leaderboard moderation/rejection flow (backend counter semantics + frontend escalating messages + wrapping). Backend: 5/5 pytest cases pass. Frontend: verified exact copy for attempts 1-11 on 390x844, plus clean wrapping on 360x740 Samsung small and 430x932 iPhone Pro Max. Ordinal logic correct (4th, 8th, 9th, 11th confirmed; 11-13 fall-through and 21st/22nd/23rd verified by code review of ordinal() line 56-61).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_moderation_flow.py",
+    "/app/test_reports/pytest/iteration_19.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "moderation reset semantics correct: db.mod_attempts.delete_one on successful register (server.py:259).",
+    "submit() correctly nulls a banned nickname (server.py:326-327) so score records but the banned name never appears on /top.",
+    "USERNAME_TAKEN and bad-name paths bypass the $inc counter — verified by test_username_taken_does_not_increment and test_bad_name_does_not_increment.",
+    "ordinal(n) correctly handles the 11-13 special-case (returns Nth), and 21/22/23 -> 21st/22nd/23rd (LeaderboardScreen.js:56-61).",
+    "SAVE NAME button is enabled when avail === 'blocked', allowing repeat submissions to bump the counter as intended (LeaderboardScreen.js:127,205)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None (each test uses a fresh random playerId to isolate the counter).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_moderation_flow.py covers counter increment 1..25, USERNAME_TAKEN non-increment, bad-name non-increment, successful-register reset, and submit-bypass drop. Frontend flow verified end-to-end at 360x740, 390x844, 430x932. Banned samples used: fuckpigeon, shitpigeon, cuntpigeon. Allowed pattern: GoodBird<hex>.",
+  "rca of the issue": "N/A — no issues found. All behaviour matches spec."
+}

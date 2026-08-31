@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from moderation import is_allowed as moderation_ok, DATASET_VERSION as MOD_VERSION
@@ -229,7 +230,15 @@ async def register(req: RegisterReq, request: Request):
     if not norm:
         return {"ok": False, "error": "bad-name"}
     if not moderation_ok(name):
-        return {"ok": False, "error": "MODERATION"}
+        # Count CONSECUTIVE content-moderation rejections for this player (atomic).
+        # Not incremented by length/taken/other errors. Reset on a successful register.
+        doc = await db.mod_attempts.find_one_and_update(
+            {"playerId": req.playerId},
+            {"$inc": {"count": 1}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return {"ok": False, "error": "MODERATION", "attempt": int(doc.get("count", 1))}
     # Names are permanent: once a player has set one, they cannot switch to a
     # DIFFERENT name (re-saving the same identity, e.g. capitalisation, is fine).
     existing = await db.players.find_one({"playerId": req.playerId}, {"_id": 0, "normalized_nickname": 1})
@@ -246,6 +255,8 @@ async def register(req: RegisterReq, request: Request):
     except DuplicateKeyError:
         # Another player already holds this (normalized) name. Never leak who.
         return {"ok": False, "error": "USERNAME_TAKEN"}
+    # allowed nickname registered -> reset the prohibited-name attempt counter
+    await db.mod_attempts.delete_one({"playerId": req.playerId})
     return {"ok": True, "playerId": req.playerId, "nickname": name}
 
 

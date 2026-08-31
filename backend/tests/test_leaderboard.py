@@ -85,6 +85,27 @@ class TestRegister:
             r = s.post(f"{API}/register", json={"playerId": pid, "nickname": nick})
             assert r.json().get("ok") is False, nick
 
+    def test_moderation_counter_sequence(self, s):
+        pid = new_pid()
+        for i in range(1, 6):
+            r = s.post(f"{API}/register", json={"playerId": pid, "nickname": "God"}).json()
+            assert r.get("error") == "MODERATION" and r.get("attempt") == i, r
+        ok = s.post(f"{API}/register", json={"playerId": pid, "nickname": f"TipsyTom{pid[-5:]}"}).json()
+        assert ok.get("ok") is True, ok
+        r = s.post(f"{API}/register", json={"playerId": pid, "nickname": "God"}).json()
+        assert r.get("attempt") == 1, r
+
+    def test_moderation_counter_ignores_other_errors(self, s):
+        holder = new_pid()
+        name = f"UniqueName{holder[-5:]}"
+        assert s.post(f"{API}/register", json={"playerId": holder, "nickname": name}).json().get("ok")
+        pid = new_pid()
+        taken = s.post(f"{API}/register", json={"playerId": pid, "nickname": name}).json()
+        assert taken.get("ok") is False and "attempt" not in taken, taken
+        r = s.post(f"{API}/register", json={"playerId": pid, "nickname": "God"}).json()
+        assert r.get("attempt") == 1, r
+
+
     def test_moderation_not_bypassable_via_submit(self, s):
         # calling /submit directly must not attach a blocked nickname
         pid = new_pid()

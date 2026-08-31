@@ -53,6 +53,23 @@ function SillyPodium({ entries }) {
   );
 }
 
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  const suf = { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th';
+  return `${n}${suf}`;
+}
+
+// Escalating DRUNK PIGEONS message for consecutive prohibited-name attempts.
+function moderationMessage(attempt) {
+  const n = Number(attempt) || 1;
+  if (n === 1) return "Username not allowed... Thought you were smart, didn't you? ;)";
+  if (n === 2) return "Seriously? 3rd time's a charm?";
+  if (n === 3) return "Third time wasn't the charm either.";
+  if (n === 10) return "Still trying, huh? I could do this all day... maybe?";
+  return `Must be really pigeoned if you thought you would get it on the ${ordinal(n)} try.`;
+}
+
 export default function LeaderboardScreen({ playerId, nickname, onSetNickname, onBack }) {
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
@@ -107,7 +124,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   useEffect(() => () => { if (checkTimer.current) clearTimeout(checkTimer.current); }, []);
 
   const submitName = async () => {
-    if (avail !== 'free') return;
+    if (avail !== 'free' && avail !== 'blocked') return;
     setErr('');
     setSaving(true);
     const res = await onSetNickname(name);
@@ -123,7 +140,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
     } else if (res && res.error === 'NAME_LOCKED') {
       setErr('Your pigeon name is already locked in.');
     } else if (res && res.error === 'MODERATION') {
-      setErr("This nickname isn't allowed. Please choose another.");
+      setErr(moderationMessage(res.attempt));
       setAvail('blocked');
     } else {
       setErr('TRY ANOTHER NAME, PIGEON.');
@@ -175,7 +192,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
           </View>
           {avail === 'free' && <Text style={styles.hintOk} testID="nickname-hint">Nice — that name is free.</Text>}
           {avail === 'taken' && <Text style={styles.hintBad} testID="nickname-hint">That pigeon name is already taken.</Text>}
-          {avail === 'blocked' && <Text style={styles.hintBad} testID="nickname-hint">This nickname isn't allowed. Please choose another.</Text>}
+          {avail === 'blocked' && !err && <Text style={styles.hintBad} testID="nickname-hint">This nickname isn't allowed. Please choose another.</Text>}
           {avail === 'invalid' && <Text style={styles.hintBad} testID="nickname-hint">That name won't fly, pigeon.</Text>}
           {avail === 'offline' && <Text style={styles.hintDim} testID="nickname-hint">Can't check right now — try again.</Text>}
           <Text style={styles.warnNote} testID="nickname-warning">⚠ Choose carefully — this cannot be changed.</Text>
@@ -185,7 +202,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
             label={saving ? '…' : 'SAVE NAME'}
             variant="primary"
             small
-            disabled={avail !== 'free' || saving}
+            disabled={(avail !== 'free' && avail !== 'blocked') || saving}
             onPress={submitName}
             style={{ marginTop: 10 }}
           />
