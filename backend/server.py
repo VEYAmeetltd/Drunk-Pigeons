@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 
+from moderation import is_allowed as moderation_ok, DATASET_VERSION as MOD_VERSION
+
 load_dotenv(Path(__file__).parent / ".env")
 
 MONGO_URL = os.environ.get("MONGO_URL")
@@ -52,10 +54,6 @@ MODE_FIELD = {"normal": "bestDistance", "easy": "sillyBestDistance"}
 def norm_mode(m):
     return "easy" if m == "easy" else "normal"
 
-BADWORDS = [
-    "fuck", "shit", "cunt", "nigg", "faggot", "rape", "nazi", "paki", "retard",
-    "bitch", "whore", "slut", "kkk", "hitler", "porn", "sex", "dick", "penis",
-]
 
 # ---- lightweight in-memory rate limiter (per playerId) ----
 _rl = defaultdict(lambda: deque())
@@ -113,9 +111,6 @@ def sanitize_nickname(raw: str):
     if not re.fullmatch(r"[A-Za-z0-9 _\-\.!]+", name):
         return None
     if len(re.findall(r"[_\-\.!]", name)) > 4:
-        return None
-    low = re.sub(r"[^a-z]", "", name.lower())
-    if any(b in low for b in BADWORDS):
         return None
     return name
 
@@ -198,7 +193,7 @@ async def _migrate_unique_nicknames():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "moderation": MOD_VERSION}
 
 
 @app.get("/api/leaderboard/check")
@@ -212,6 +207,8 @@ async def check_name(nickname: str = "", playerId: str | None = None):
     norm = normalize_nickname(name)
     if not norm:
         return {"ok": True, "available": False, "reason": "invalid"}
+    if not moderation_ok(name):
+        return {"ok": True, "available": False, "reason": "moderation"}
     pid = playerId if (playerId and valid_id(playerId)) else None
     holder = await db.players.find_one({"normalized_nickname": norm}, {"_id": 0, "playerId": 1})
     if holder and holder.get("playerId") != pid:
@@ -231,6 +228,8 @@ async def register(req: RegisterReq, request: Request):
     norm = normalize_nickname(name)
     if not norm:
         return {"ok": False, "error": "bad-name"}
+    if not moderation_ok(name):
+        return {"ok": False, "error": "MODERATION"}
     # Names are permanent: once a player has set one, they cannot switch to a
     # DIFFERENT name (re-saving the same identity, e.g. capitalisation, is fine).
     existing = await db.players.find_one({"playerId": req.playerId}, {"_id": 0, "normalized_nickname": 1})
@@ -313,6 +312,8 @@ async def submit(req: SubmitReq, request: Request):
     # held by a DIFFERENT player, silently drop it so the score still records
     # (/register is the canonical place to surface USERNAME_TAKEN to the user).
     name = sanitize_nickname(req.nickname) if req.nickname else None
+    if name and not moderation_ok(name):
+        name = None  # moderation cannot be bypassed via direct submit
     norm = normalize_nickname(name) if name else None
     if norm:
         clash = await db.players.find_one(

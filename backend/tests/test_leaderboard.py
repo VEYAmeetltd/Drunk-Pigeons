@@ -74,7 +74,28 @@ class TestRegister:
     def test_profanity_rejected(self, s):
         pid = new_pid()
         r = s.post(f"{API}/register", json={"playerId": pid, "nickname": "fuckPigeon"})
-        assert r.json() == {"ok": False, "error": "bad-name"}
+        body = r.json()
+        # moderation now returns a distinct stable generic code (never leaks the term)
+        assert body["ok"] is False and body["error"] in ("bad-name", "MODERATION")
+
+    def test_slur_evasion_rejected(self, s):
+        # leetspeak / separated racist slur must be rejected server-side
+        for nick in ("n1g5a", "n.i.g.g.a", "JesusIsShit", "God"):
+            pid = new_pid()
+            r = s.post(f"{API}/register", json={"playerId": pid, "nickname": nick})
+            assert r.json().get("ok") is False, nick
+
+    def test_moderation_not_bypassable_via_submit(self, s):
+        # calling /submit directly must not attach a blocked nickname
+        pid = new_pid()
+        s.post(f"{API}/submit", json={
+            "playerId": pid, "nickname": "n1g5a", "distance": 12.0,
+            "chips": 3, "runId": new_pid(), "mode": "normal",
+        })
+        r = s.get(f"{API}/leaderboard", params={"mode": "normal"})
+        rows = r.json().get("entries", r.json()) if isinstance(r.json(), dict) else r.json()
+        names = [str(x.get("nickname", "")) for x in rows] if isinstance(rows, list) else []
+        assert not any("nig" in n.lower() for n in names)
 
     def test_bad_playerid(self, s):
         r = s.post(f"{API}/register", json={"playerId": "short", "nickname": "Bob"})

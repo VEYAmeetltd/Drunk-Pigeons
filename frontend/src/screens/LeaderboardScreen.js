@@ -100,7 +100,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       if (seq !== checkSeq.current) return; // ignore out-of-order responses
       if (!res || (!res.ok && res.offline)) { setAvail('offline'); return; }
       if (res.available) setAvail('free');
-      else setAvail(res.reason === 'invalid' ? 'invalid' : 'taken');
+      else setAvail(res.reason === 'invalid' ? 'invalid' : res.reason === 'moderation' ? 'blocked' : 'taken');
     }, 450);
   }, [playerId]);
 
@@ -122,6 +122,9 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
       setAvail('taken');
     } else if (res && res.error === 'NAME_LOCKED') {
       setErr('Your pigeon name is already locked in.');
+    } else if (res && res.error === 'MODERATION') {
+      setErr("This nickname isn't allowed. Please choose another.");
+      setAvail('blocked');
     } else {
       setErr('TRY ANOTHER NAME, PIGEON.');
     }
@@ -165,13 +168,14 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
             <View style={styles.statusBox} testID="nickname-status">
               {avail === 'checking' && <ActivityIndicator size="small" color={COLORS.textDim} testID="nickname-checking" />}
               {avail === 'free' && <Text style={styles.tick} testID="nickname-available">✓</Text>}
-              {(avail === 'taken' || avail === 'invalid' || avail === 'offline') && (
+              {(avail === 'taken' || avail === 'invalid' || avail === 'offline' || avail === 'blocked') && (
                 <Text style={styles.cross} testID="nickname-unavailable">✕</Text>
               )}
             </View>
           </View>
           {avail === 'free' && <Text style={styles.hintOk} testID="nickname-hint">Nice — that name is free.</Text>}
           {avail === 'taken' && <Text style={styles.hintBad} testID="nickname-hint">That pigeon name is already taken.</Text>}
+          {avail === 'blocked' && <Text style={styles.hintBad} testID="nickname-hint">This nickname isn't allowed. Please choose another.</Text>}
           {avail === 'invalid' && <Text style={styles.hintBad} testID="nickname-hint">That name won't fly, pigeon.</Text>}
           {avail === 'offline' && <Text style={styles.hintDim} testID="nickname-hint">Can't check right now — try again.</Text>}
           <Text style={styles.warnNote} testID="nickname-warning">⚠ Choose carefully — this cannot be changed.</Text>
