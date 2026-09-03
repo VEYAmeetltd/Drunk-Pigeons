@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Background from '../components/Background';
 import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
@@ -98,6 +98,22 @@ function PopText({ world }) {
   );
 }
 
+// READY-state "TAP TO FLAP" prompt with a subtle pulse. Never intercepts touches
+// (pointerEvents none) — the full-screen flap layer beneath handles the tap.
+function ReadyHint() {
+  const p = useSharedValue(1);
+  useEffect(() => {
+    p.value = withRepeat(withTiming(1.08, { duration: 620, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, [p]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: p.value }], opacity: 0.9 + (p.value - 1) }));
+  return (
+    <View style={styles.hint} pointerEvents="none" testID="tap-to-flap-hint">
+      <Animated.Text style={[styles.hintTxt, style]}>TAP TO FLAP</Animated.Text>
+      <Text style={styles.hintSub}>keep the drunk pigeon airborne</Text>
+    </View>
+  );
+}
+
 export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
@@ -131,6 +147,12 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const pausedRef = useRef(false);
   const runIdRef = useRef('');
   const runStartRef = useRef(0);
+  // Authoritative READY->RUNNING flag read synchronously by the tap handler
+  // (refs avoid stale closures / waiting on React render before the first flap).
+  const startedRef = useRef(false);
+  // DEV-only input instrumentation (never rendered in production).
+  const inputStatsRef = useRef({ raw: 0, accepted: 0, flaps: 0, ignored: 0, lastReason: '' });
+  const [devStats, setDevStats] = useState(null);
 
   // keep latest callbacks
   cbRef.current.onScore = (s) => setScore(s);
@@ -186,7 +208,11 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     setActiveMap(m);
     eng.reset(width, height, mode === 'easy' ? EASY_TUNING : undefined);
     runIdRef.current = generateRunId();
-    runStartRef.current = performance.now();
+    // Anti-cheat run timing starts on the FIRST gameplay tap (READY->RUNNING),
+    // not when PLAY was pressed. Seeded here only to avoid a stale value.
+    runStartRef.current = 0;
+    startedRef.current = false;
+    setStarted(false);
     setScore(0);
     setChips(0);
     setFatChipsCur(0);
@@ -247,15 +273,39 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Single authoritative gameplay tap handler. Fires on touch-DOWN (onPressIn).
+  // Reads refs so it always sees the live game state; the first tap in READY both
+  // starts the run (and its official timing) AND applies exactly one flap.
   const doFlap = useCallback(() => {
-    if (pausedRef.current) return;
+    const st = inputStatsRef.current;
+    st.raw += 1;
     Audio.unlock();
-    if (!started) setStarted(true);
     const eng = engineRef.current;
-    if (!eng || eng.dead) return;
+    if (!eng || eng.dead) {
+      st.ignored += 1;
+      st.lastReason = 'dead/no-engine';
+      if (typeof __DEV__ !== 'undefined' && __DEV__) setDevStats({ ...st, state: 'GAME_OVER' });
+      return;
+    }
+    if (pausedRef.current) {
+      st.ignored += 1;
+      st.lastReason = 'paused';
+      if (typeof __DEV__ !== 'undefined' && __DEV__) setDevStats({ ...st, state: 'PAUSED' });
+      return;
+    }
+    if (!startedRef.current) {
+      // READY -> RUNNING on the first valid tap.
+      startedRef.current = true;
+      runStartRef.current = performance.now();
+      eng.start();
+      setStarted(true);
+    }
+    st.accepted += 1;
     eng.flap();
+    st.flaps += 1;
     Audio.flap();
-  }, [started]);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) setDevStats({ ...st, state: 'RUNNING' });
+  }, []);
 
   const doRevive = useCallback(() => {
     const eng = engineRef.current;
@@ -303,7 +353,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     setConfirmRestart(false);
     pausedRef.current = false;
     lastRef.current = performance.now();
-    setStarted(true);
     startRun();
   }, [startRun]);
 
@@ -346,11 +395,16 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       {/* "SKINNY AGAIN!" toast on jab pickup — above the blur so it stays crisp */}
       {skinnyKey > 0 && <SkinnyToast key={skinnyKey} />}
 
-      {/* flap input layer (below HUD buttons) */}
-      <Pressable
+      {/* flap input layer (below HUD buttons). Single authoritative handler on the
+          gesture-responder touch-DOWN event so a valid tap is captured immediately
+          (not on release) and never depends on React render timing. */}
+      <View
         testID="flap-area"
         style={StyleSheet.absoluteFill}
-        onPressIn={doFlap}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => false}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={doFlap}
       />
 
       {/* HUD */}
@@ -383,10 +437,14 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
         </View>
       )}
 
-      {!started && !over && (
-        <View style={styles.hint} pointerEvents="none">
-          <Text style={styles.hintTxt}>TAP TO FLAP</Text>
-          <Text style={styles.hintSub}>keep the drunk pigeon airborne</Text>
+      {!started && !over && <ReadyHint />}
+
+      {typeof __DEV__ !== 'undefined' && __DEV__ && devStats && (
+        <View style={styles.devStats} pointerEvents="none" testID="dev-input-stats">
+          <Text style={styles.devStatsTxt}>
+            state:{devStats.state} raw:{devStats.raw} acc:{devStats.accepted} flap:{devStats.flaps} ign:{devStats.ignored}
+            {devStats.lastReason ? ` (${devStats.lastReason})` : ''} match:{String(devStats.accepted === devStats.flaps)}
+          </Text>
         </View>
       )}
 
@@ -421,7 +479,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
             // transition (never during gameplay; skipped for Remove Ads owners).
             await Ads.showInterstitialIfDue();
             setReviveMsg('');
-            setStarted(true);
             startRun();
           }}
           onRevive={doRevive}
@@ -455,6 +512,8 @@ const styles = StyleSheet.create({
   hint: { position: 'absolute', top: '46%', left: 0, right: 0, alignItems: 'center' },
   hintTxt: { fontFamily: FONT, color: '#fff', fontSize: 34, fontWeight: '700', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
   hintSub: { fontFamily: FONT, color: '#fff', fontSize: 15, marginTop: 4, opacity: 0.9 },
+  devStats: { position: 'absolute', bottom: 4, left: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, zIndex: 60 },
+  devStatsTxt: { fontFamily: FONT, color: '#7CFFB2', fontSize: 10, fontWeight: '700' },
   confirmOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.78)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   confirmCard: { width: '100%', maxWidth: 340, backgroundColor: COLORS.card, borderRadius: 24, padding: 24, alignItems: 'center' },
   confirmTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 28, fontWeight: '700', letterSpacing: 1 },

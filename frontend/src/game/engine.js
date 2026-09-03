@@ -318,7 +318,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     pint.active = false;
     pintT = 0;
     distance = 0;
-    running = true;
+    running = false;
     dead = false;
     invincibleUntil = 0;
     usedRevive = false;
@@ -346,6 +346,14 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     if (!running || dead) return;
     pigeon.vy = CONFIG.FLAP_VELOCITY;
     flapPulse = 1;
+  }
+
+  // Begin the run from the READY (paused) state. Idempotent: only the first call
+  // transitions READY -> RUNNING. Physics/obstacles/scoring start on the next step.
+  function start() {
+    if (running || dead) return false;
+    running = true;
+    return true;
   }
 
   function collides(now) {
@@ -635,6 +643,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     reset,
     step,
     flap,
+    start,
     revive,
     getSnapshot,
     getObstacleGeom,
