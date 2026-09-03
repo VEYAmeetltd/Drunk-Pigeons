@@ -144,6 +144,12 @@ class DeleteReq(BaseModel):
     playerId: str
 
 
+class ReportReq(BaseModel):
+    reporterId: str
+    nickname: str
+    reason: str | None = None
+
+
 class SubmitReq(BaseModel):
     playerId: str
     runId: str
@@ -429,6 +435,31 @@ async def get_acceptance(playerId: str | None = None):
         return {"ok": True, "acceptedVersion": None}
     doc = await db.acceptances.find_one({"playerId": playerId}, {"_id": 0, "acceptedVersion": 1})
     return {"ok": True, "acceptedVersion": (doc.get("acceptedVersion") if doc else None)}
+
+
+@app.post("/api/leaderboard/report")
+async def report_nickname(req: ReportReq):
+    # Player-submitted report of an offensive leaderboard nickname (Online Safety /
+    # complaints flow). Stored anonymously for review; deduped per reporter+name so a
+    # repeat tap doesn't spam. No personal data beyond the anonymous reporter key.
+    if not valid_id(req.reporterId):
+        return {"ok": False, "error": "bad-id"}
+    nick = (req.nickname or "").strip()
+    if not nick or len(nick) > 32:
+        return {"ok": False, "error": "bad-nickname"}
+    reason = (req.reason or "")[:280]
+    await db.reports.update_one(
+        {"reporterId": req.reporterId, "normalized": normalize_nickname(nick)},
+        {"$set": {
+            "reporterId": req.reporterId,
+            "nickname": nick,
+            "normalized": normalize_nickname(nick),
+            "reason": reason,
+            "reportedAt": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
 
 
 @app.post("/api/leaderboard/delete")

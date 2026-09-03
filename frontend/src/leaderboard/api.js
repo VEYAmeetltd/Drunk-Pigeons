@@ -44,6 +44,7 @@ export const LeaderboardAPI = {
   recordAcceptance: (playerId, acceptedVersion, documents) =>
     post('/accept', { playerId, acceptedVersion, documents }),
   deleteLeaderboardData: (playerId) => post('/delete', { playerId }),
+  reportNickname: (reporterId, nickname, reason) => post('/report', { reporterId, nickname, reason }),
   async getAcceptance(playerId) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);

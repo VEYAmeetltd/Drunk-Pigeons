@@ -20,6 +20,7 @@ const KEYS = {
   submittedBestSilly: 'dp_submittedBestSilly',
   drunk: 'dp_drunkLevel',
   rulesAccepted: 'dp_rulesAccepted',
+  hiddenNames: 'dp_hiddenNames',
 };
 
 async function getNumber(key, def) {
@@ -107,6 +108,18 @@ export const Persistence = {
   },
   getRulesAccepted() {
     return getString(KEYS.rulesAccepted, '');
+  },
+  async getHiddenNames() {
+    const raw = await getString(KEYS.hiddenNames, '');
+    return raw ? raw.split(',').filter(Boolean) : [];
+  },
+  async addHiddenName(normalized) {
+    const list = await this.getHiddenNames();
+    if (!list.includes(normalized)) {
+      list.push(normalized);
+      AsyncStorage.setItem(KEYS.hiddenNames, list.join(',')).catch(() => {});
+    }
+    return list;
   },
   setSubmittedBest(v) {
     AsyncStorage.setItem(KEYS.submittedBest, String(v)).catch(() => {});

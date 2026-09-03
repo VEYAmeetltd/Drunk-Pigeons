@@ -64,3 +64,14 @@ def test_leaderboard_delete_removes_record_and_frees_nickname():
 def test_leaderboard_delete_rejects_bad_id():
     r = requests.post(f"{API}/delete", json={"playerId": "bad id!"}, timeout=10).json()
     assert r["ok"] is False
+
+
+def test_report_nickname_ok_and_validation():
+    pid = new_pid()
+    r = requests.post(f"{API}/report", json={"reporterId": pid, "nickname": "RudeBird99", "reason": "offensive"}, timeout=10).json()
+    assert r["ok"] is True
+    # dedupe: same reporter+name again still ok
+    r2 = requests.post(f"{API}/report", json={"reporterId": pid, "nickname": "RudeBird99"}, timeout=10).json()
+    assert r2["ok"] is True
+    assert requests.post(f"{API}/report", json={"reporterId": "bad id!", "nickname": "X"}, timeout=10).json()["ok"] is False
+    assert requests.post(f"{API}/report", json={"reporterId": pid, "nickname": ""}, timeout=10).json()["ok"] is False

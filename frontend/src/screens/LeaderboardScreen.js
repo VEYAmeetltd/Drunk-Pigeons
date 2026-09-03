@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, Pressable, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
@@ -90,8 +90,15 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   const checkSeq = useRef(0);
   const [board, setBoard] = useState('normal'); // 'normal' (Global) | 'silly' (Easy Mode)
   const isSilly = board === 'silly';
-  const podium = isSilly ? top.slice(0, 3) : [];
-  const rest = isSilly ? top.slice(3) : top;
+  // Locally hidden (blocked) nicknames + the report/block action sheet target.
+  const [hidden, setHidden] = useState([]);
+  const [reportTarget, setReportTarget] = useState(null); // { nickname } | null
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportDone, setReportDone] = useState('');
+  const normName = (s) => String(s || '').trim().toLowerCase();
+  const visibleTop = top.filter((r) => r.isYou || !hidden.includes(normName(r.nickname)));
+  const podium = isSilly ? visibleTop.slice(0, 3) : [];
+  const rest = isSilly ? visibleTop.slice(3) : visibleTop;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +116,52 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   useEffect(() => {
     load();
   }, [load]);
+
+  // Load locally-hidden (blocked) nicknames.
+  useEffect(() => {
+    let alive = true;
+    Persistence.getHiddenNames().then((list) => { if (alive) setHidden(list); });
+    return () => { alive = false; };
+  }, []);
+
+  const hideName = useCallback(async (nick) => {
+    const list = await Persistence.addHiddenName(normName(nick));
+    setHidden(list);
+  }, []);
+
+  const openReport = useCallback((nick) => {
+    Audio.ui();
+    setReportDone('');
+    setReportTarget({ nickname: nick });
+  }, []);
+
+  const closeReport = useCallback(() => {
+    setReportTarget(null);
+    setReportBusy(false);
+    setReportDone('');
+  }, []);
+
+  const submitReport = useCallback(async () => {
+    if (!reportTarget || reportBusy) return;
+    setReportBusy(true);
+    let ok = true;
+    try {
+      const res = await LeaderboardAPI.reportNickname(playerId, reportTarget.nickname, 'offensive');
+      ok = !!(res && res.ok);
+    } catch {
+      ok = false;
+    }
+    // Reporting also hides the name locally so the player stops seeing it.
+    await hideName(reportTarget.nickname);
+    setReportBusy(false);
+    setReportDone(ok ? 'reported' : 'failed');
+  }, [reportTarget, reportBusy, playerId, hideName]);
+
+  const hideAndClose = useCallback(async () => {
+    if (!reportTarget) return;
+    await hideName(reportTarget.nickname);
+    closeReport();
+  }, [reportTarget, hideName, closeReport]);
 
   // Load prior rules acceptance (local first for offline; reconcile with backend).
   useEffect(() => {
@@ -287,6 +340,18 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
                 <Text style={[styles.rank, r.isYou && styles.txtYou]}>#{r.rank}</Text>
                 <Text style={[styles.nick, r.isYou && styles.txtYou]} numberOfLines={1}>{r.nickname}</Text>
                 <Text style={[styles.dist, r.isYou && styles.txtYou]}>{formatInt(r.bestDistance)}m</Text>
+                {!r.isYou && (
+                  <Pressable
+                    testID={`lb-report-${r.rank}`}
+                    onPress={() => openReport(r.nickname)}
+                    style={styles.reportBtn}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Report or hide ${r.nickname}`}
+                  >
+                    <Text style={styles.reportDots}>⋯</Text>
+                  </Pressable>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -302,12 +367,72 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
           )}
         </>
       )}
+
+      <Modal visible={!!reportTarget} transparent animationType="fade" onRequestClose={closeReport}>
+        <Pressable style={styles.sheetBackdrop} onPress={closeReport}>
+          <Pressable style={styles.sheetCard} testID="report-sheet" onPress={() => {}}>
+            {reportDone === '' ? (
+              <>
+                <Text style={styles.sheetTitle}>Report or hide</Text>
+                <Text style={styles.sheetName} numberOfLines={1}>{reportTarget ? reportTarget.nickname : ''}</Text>
+                <Text style={styles.sheetBody}>Reporting sends this nickname to us for review and hides it from your leaderboard.</Text>
+                <Button
+                  testID="report-submit"
+                  label={reportBusy ? 'REPORTING…' : 'REPORT THIS NAME'}
+                  variant="danger"
+                  small
+                  disabled={reportBusy}
+                  onPress={submitReport}
+                  style={{ marginTop: 14 }}
+                />
+                <Button
+                  testID="report-hide"
+                  label="JUST HIDE IT"
+                  variant="ghost"
+                  small
+                  disabled={reportBusy}
+                  onPress={hideAndClose}
+                  style={{ marginTop: 10 }}
+                />
+                <Pressable
+                  testID="report-policy-link"
+                  onPress={() => { closeReport(); onOpenLegal && onOpenLegal('online-safety'); }}
+                  style={styles.policyLink}
+                  hitSlop={8}
+                >
+                  <Text style={styles.policyLinkTxt}>Read our Online Safety Policy</Text>
+                </Pressable>
+                <Button testID="report-cancel" label="CANCEL" variant="ghost" small onPress={closeReport} style={{ marginTop: 10 }} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.sheetTitle}>{reportDone === 'reported' ? 'Thanks — reported' : 'Hidden for now'}</Text>
+                <Text style={styles.sheetBody} testID="report-result">
+                  {reportDone === 'reported'
+                    ? 'Thanks for flagging it. Our team will review this nickname, and we\u2019ve hidden it from your leaderboard.'
+                    : 'We couldn\u2019t reach the server to file the report, but we\u2019ve hidden this nickname from your leaderboard.'}
+                </Text>
+                <Button testID="report-done" label="DONE" variant="primary" small onPress={closeReport} style={{ marginTop: 16 }} />
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg, paddingHorizontal: 18 },
+  reportBtn: { marginLeft: 8, width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
+  reportDots: { fontFamily: FONT, color: COLORS.textDim, fontSize: 20, fontWeight: '900', marginTop: -6 },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 26 },
+  sheetCard: { width: '100%', maxWidth: 380, backgroundColor: COLORS.card, borderRadius: 18, padding: 20 },
+  sheetTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 18, fontWeight: '700' },
+  sheetName: { fontFamily: FONT, color: COLORS.text, fontSize: 16, fontWeight: '700', marginTop: 6 },
+  sheetBody: { fontFamily: FONT, color: '#e9e2f7', fontSize: 13.5, lineHeight: 20, marginTop: 8 },
+  policyLink: { marginTop: 12, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  policyLinkTxt: { fontFamily: FONT, color: COLORS.teal, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline', letterSpacing: 0.5 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
   title: { fontFamily: FONT, color: COLORS.yellow, fontSize: 26, fontWeight: '700', letterSpacing: 2 },
   toggle: { width: 70, alignItems: 'flex-end', paddingVertical: 6 },
