@@ -1008,7 +1008,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "You can delete your online leaderboard record directly in the app using the \u201cDelete my leaderboard data\u201d button in this section. The leaderboard is anonymous and is not normally linked to your real name or email address, so no email address, real name or identifier is required to make the request. You are also welcome to contact gordon@intiesltd.com with any privacy question."
+        "text": "You can delete your online leaderboard record directly in the app using %%DELETE%%. The leaderboard is anonymous and is not normally linked to your real name or email address, so no email address, real name or identifier is required to make the request."
       },
       {
         "type": "paragraph",

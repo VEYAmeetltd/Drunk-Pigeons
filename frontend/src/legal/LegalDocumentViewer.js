@@ -111,7 +111,6 @@ function Section({ section, idPrefix }) {
 
 export default function LegalDocumentViewer({ doc, onBack, playerId, onManageConsent, onLeaderboardDeleted }) {
   const isPC = !!doc && doc.id === 'privacy-choices';
-  const [pcHasData, setPcHasData] = useState(false);
   const [pcUmp, setPcUmp] = useState(false);
   const [pcDeleting, setPcDeleting] = useState(false);
   const [pcResult, setPcResult] = useState(''); // '' | 'success' | 'fail'
@@ -129,14 +128,9 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
   useEffect(() => {
     if (!isPC) return undefined;
     let alive = true;
-    if (playerId) {
-      LeaderboardAPI.me(playerId).then((r) => {
-        if (alive && r && r.ok && r.nickname) setPcHasData(true);
-      });
-    }
     Ads.getPrivacyOptionsRequired().then((req) => { if (alive) setPcUmp(!!req); });
     return () => { alive = false; };
-  }, [isPC, playerId]);
+  }, [isPC]);
 
   const doDelete = async () => {
     setPcConfirm(false);
@@ -148,7 +142,6 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
         Persistence.setNickname('');
         Persistence.setSubmittedBest(0);
         Persistence.setSubmittedBestSilly(0);
-        setPcHasData(false);
         setPcResult('success');
         onLeaderboardDeleted && onLeaderboardDeleted();
       } else {
@@ -160,12 +153,46 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
     setPcDeleting(false);
   };
 
-  // Extra controls injected directly beneath the relevant legal sections.
+  // Renders the deletion paragraph with an inline "Delete my data" text button.
+  const renderDeleteParagraph = (section) => {
+    const parts = String(section.text).split('%%DELETE%%');
+    return (
+      <View>
+        <Text style={styles.body}>
+          {parts[0]}
+          {pcResult === 'success' ? (
+            <Text style={styles.deleteInlineDone}>Delete my data</Text>
+          ) : (
+            <Text
+              testID="delete-leaderboard-data"
+              style={styles.deleteInline}
+              onPress={() => { if (!pcDeleting) setPcConfirm(true); }}
+              accessibilityRole="button"
+              accessibilityLabel="Delete my leaderboard data"
+              suppressHighlighting
+              hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+            >
+              Delete my data
+            </Text>
+          )}
+          {parts[1]}
+        </Text>
+        {pcResult === 'success' && (
+          <Text style={styles.deleteSuccess} testID="delete-success">Your leaderboard data has been deleted.</Text>
+        )}
+        {pcResult === 'fail' && (
+          <Text style={styles.deleteFail} testID="delete-fail">Deletion failed — your data is unchanged. Please try again in a moment.</Text>
+        )}
+      </View>
+    );
+  };
+
+  // Google UMP button injected after the "Advertising choices" subheading, only when required.
   const injectAfter = (s) => {
     if (!isPC || s.type !== 'subheading') return null;
     const t = String(s.text || '').toLowerCase();
     if (/advertising choices/.test(t)) {
-      if (!pcUmp) return null; // only when Google UMP says the entry point is required
+      if (!pcUmp) return null;
       return (
         <Button
           testID="google-ump-button"
@@ -175,28 +202,6 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
           onPress={() => onManageConsent && onManageConsent()}
           style={{ marginTop: 12, alignSelf: 'flex-start' }}
         />
-      );
-    }
-    if (/delete leaderboard data/.test(t)) {
-      if (pcResult === 'success') {
-        return <Text style={styles.deleteSuccess} testID="delete-success">✓ Your leaderboard nickname and score have been removed.</Text>;
-      }
-      if (!pcHasData) return null; // only when online leaderboard data exists
-      return (
-        <View style={{ marginTop: 12 }}>
-          <Button
-            testID="delete-leaderboard-data"
-            label={pcDeleting ? 'DELETING…' : 'DELETE MY LEADERBOARD DATA'}
-            variant="danger"
-            small
-            disabled={pcDeleting}
-            onPress={() => setPcConfirm(true)}
-            style={{ alignSelf: 'flex-start' }}
-          />
-          {pcResult === 'fail' && (
-            <Text style={styles.deleteFail} testID="delete-fail">Couldn't reach the server. Please try again in a moment.</Text>
-          )}
-        </View>
       );
     }
     return null;
@@ -235,7 +240,9 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
 
         {doc.sections.map((s, i) => (
           <React.Fragment key={i}>
-            <Section section={s} idPrefix={`${idPrefix}-s${i}`} />
+            {isPC && s.type === 'paragraph' && String(s.text).includes('%%DELETE%%')
+              ? renderDeleteParagraph(s)
+              : <Section section={s} idPrefix={`${idPrefix}-s${i}`} />}
             {injectAfter(s)}
           </React.Fragment>
         ))}
@@ -270,7 +277,7 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
           <View style={styles.modalCard} testID="delete-confirm-modal">
             <Text style={styles.modalTitle}>Delete leaderboard data?</Text>
             <Text style={styles.modalBody}>
-              This removes your public nickname and leaderboard score from our servers. Your purchases are not affected. This can't be undone.
+              This will permanently remove your leaderboard nickname and scores. Your purchases and local game progress will not be affected.
             </Text>
             <View style={styles.modalRow}>
               <Button testID="delete-cancel" label="CANCEL" variant="ghost" small onPress={() => setPcConfirm(false)} style={{ flex: 1 }} />
@@ -313,8 +320,10 @@ const styles = StyleSheet.create({
   actionPanel: { backgroundColor: COLORS.card, borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 1, borderColor: '#4a3a6b' },
   minimalBox: { backgroundColor: COLORS.bgAlt, borderRadius: 12, padding: 14, marginTop: 14, borderLeftWidth: 3, borderLeftColor: COLORS.teal },
   minimalText: { fontFamily: FONT, color: '#e9e2f7', fontSize: 14, lineHeight: 21 },
-  deleteSuccess: { fontFamily: FONT, color: COLORS.teal, fontSize: 14, fontWeight: '700', marginTop: 12, lineHeight: 20 },
+  deleteSuccess: { fontFamily: FONT, color: COLORS.teal, fontSize: 14, fontWeight: '700', marginTop: 10, lineHeight: 20 },
   deleteFail: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, marginTop: 8, lineHeight: 19 },
+  deleteInline: { color: COLORS.yellow, fontWeight: '700', textDecorationLine: 'underline' },
+  deleteInlineDone: { color: COLORS.textDim, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 26 },
   modalCard: { width: '100%', maxWidth: 380, backgroundColor: COLORS.card, borderRadius: 18, padding: 20 },
   modalTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 18, fontWeight: '700', marginBottom: 10 },
