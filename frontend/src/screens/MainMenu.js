@@ -12,6 +12,7 @@ import { getPigeon } from '../data/pigeons';
 import { MAPS } from '../data/maps';
 import { Billing } from '../store/billing';
 import { Audio } from '../audio/audio';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function MainMenu({
   bestScore,
@@ -101,8 +102,7 @@ export default function MainMenu({
         bounces={false}
       >
       <View style={styles.top}>
-        <Pressable
-          testID="open-code-button"
+        <Pressable testID="open-code-button"
           onPress={() => {
             Audio.unlock();
             Audio.ui();
@@ -111,9 +111,6 @@ export default function MainMenu({
           style={styles.codeMark}
         >
           <Text style={styles.codeTxt}>{leetUnlock ? '1337' : 'CODE'}</Text>
-        </Pressable>
-        <Pressable testID="sound-toggle" onPress={onToggleSound} style={styles.sound}>
-          <Text style={styles.soundTxt}>{soundEnabled ? 'SOUND: ON' : 'SOUND: OFF'}</Text>
         </Pressable>
         <Pressable testID="legal-privacy-button" onPress={() => { Audio.ui(); onLegal && onLegal(); }} style={styles.legalPill}>
           <Text style={styles.soundTxt}>LEGAL & PRIVACY</Text>
@@ -132,6 +129,24 @@ export default function MainMenu({
           <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
         </Animated.View>
         <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
+      </View>
+
+      {/* Speaker toggle sits directly under the PIGEONS INJURED column, centred with it. */}
+      <View style={styles.speakerRow} pointerEvents="box-none">
+        <View style={styles.speakerSpacer} />
+        <View style={{ width: heroSize, marginHorizontal: 4 }} />
+        <View style={styles.speakerCol}>
+          <Pressable
+            testID="sound-toggle"
+            onPress={onToggleSound}
+            style={styles.speakerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={soundEnabled ? 'Turn sound off' : 'Turn sound on'}
+            accessibilityState={{ checked: soundEnabled, selected: soundEnabled }}
+          >
+            <Ionicons name={soundEnabled ? 'volume-high' : 'volume-mute'} size={22} color={COLORS.text} />
+          </Pressable>
+        </View>
       </View>
 
       <DrunknessSlider value={drunkLevel} onChange={onSetDrunk} onCommit={onCommitDrunk} />
@@ -251,7 +266,10 @@ const styles = StyleSheet.create({
   top: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 6, paddingTop: 8 },
   codeMark: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
-  sound: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  speakerRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 8, marginTop: 2 },
+  speakerSpacer: { flex: 1, minWidth: 0, maxWidth: 132 },
+  speakerCol: { flex: 1, minWidth: 0, maxWidth: 132, alignItems: 'center' },
+  speakerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   legalPill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   soundTxt: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
   titleWrap: { marginTop: 2, alignItems: 'center' },

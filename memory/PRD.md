@@ -309,3 +309,10 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Backend: POST /api/leaderboard/report {reporterId, nickname, reason?} -> db.reports, deduped per reporter+normalized name, anonymous (reporter key only), validates id + name length. Tests in test_acceptance.py (6 passed total incl. report ok/dedupe/validation).
 - Files: backend/server.py (ReportReq + /report), backend/tests/test_acceptance.py; frontend src/screens/LeaderboardScreen.js (report/hide UI + sheet + filter), src/storage/persistence.js (hiddenNames get/add), src/leaderboard/api.js (reportNickname).
 - Verified via screenshots at 390x844: sheet opens, report -> confirmation + name hidden (reported #1 removed from board), policy link wired. Preview rebuilt + re-served.
+
+## Update 43 (2026-06) — Main Menu sound control: text -> speaker icon under PIGEONS INJURED
+- Removed the misaligned "SOUND: ON/OFF" text pill from the top controls row (top row now CODE + LEGAL & PRIVACY).
+- Added a speaker icon button (Ionicons volume-high when enabled / volume-mute when disabled, from bundled @expo/vector-icons — no new dependency) in a new speakerRow that mirrors the heroRow flex layout so it sits directly under and centred with the PIGEONS INJURED stat (verified dx=0). 44x44 pressable target, no card/label, high-contrast COLORS.text icon, subordinate to the pink injured number.
+- Reuses the existing onToggleSound handler + soundEnabled state (no duplicate sound logic); saved preference persists and the correct icon shows on load. accessibilityRole button, dynamic label 'Turn sound off'/'Turn sound on', accessibilityState checked/selected.
+- File changed: src/screens/MainMenu.js only.
+- Responsive: verified 360x740, 375x667, 390x844, 430x932 — icon centred under PIGEONS INJURED (dx=0), below it, 44x44 target, no horizontal scroll, stats/pigeon unchanged. Toggle switches icon + audio; preference survives.
