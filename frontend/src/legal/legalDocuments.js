@@ -975,11 +975,6 @@ export const LEGAL_DOCUMENTS = [
         "text": "A short player-facing notice suitable for the in-app Legal/Privacy area and, if hosted publicly, as an Apple Privacy Choices URL."
       },
       {
-        "type": "callout",
-        "title": "PUBLICATION DETAILS",
-        "text": "Privacy/support email: gordon@intiesltd.com. Before publication, verify that Privacy Choices, Support ID, Report and Hide/Block locations match the final production app."
-      },
-      {
         "type": "heading",
         "text": "Your privacy choices in DRUNK PIGEONS"
       },
@@ -1013,7 +1008,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "To ask us to delete your online leaderboard record, email gordon@intiesltd.com and include the DRUNK PIGEONS Support ID/player identifier shown in the app's Settings or Legal/Support area. We use that identifier because the leaderboard is anonymous and is not normally linked to your real name or email address."
+        "text": "You can delete your online leaderboard record directly in the app using the \u201cDelete my leaderboard data\u201d button in this section. The leaderboard is anonymous and is not normally linked to your real name or email address, so no email address, real name or identifier is required to make the request. You are also welcome to contact gordon@intiesltd.com with any privacy question."
       },
       {
         "type": "paragraph",

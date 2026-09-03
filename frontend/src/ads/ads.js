@@ -84,4 +84,15 @@ export const Ads = {
     }
     return { ok: false, reason: 'unavailable' };
   },
+
+  // Whether Google UMP reports the privacy-options entry point is REQUIRED. Only then
+  // should the "Google Ad Privacy Options" button be shown. Web preview returns false.
+  async getPrivacyOptionsRequired() {
+    try {
+      if (AdProvider.getPrivacyOptionsRequired) return await AdProvider.getPrivacyOptionsRequired();
+    } catch (e) {
+      // fall through
+    }
+    return false;
+  },
 };

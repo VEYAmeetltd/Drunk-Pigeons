@@ -46,6 +46,12 @@ export default function App() {
   const openLegalDoc = useCallback((id) => setLegalOverlay(id), []);
   const closeLegalDoc = useCallback(() => setLegalOverlay(null), []);
   const manageAdConsent = useCallback(() => Ads.showPrivacyOptions(), []);
+  const onLeaderboardDeleted = useCallback(() => {
+    lbRef.current.nickname = '';
+    lbRef.current.submittedBest = 0;
+    lbRef.current.submittedBestSilly = 0;
+    setNickname('');
+  }, []);
 
   // Phone-landscape guard: show a "rotate to portrait" overlay only on phone-sized
   // landscape (short side < 500). Leaves desktop/tablet alone. Native is already
@@ -399,6 +405,7 @@ export default function App() {
             doc={getLegalDoc(legalOverlay)}
             playerId={lbRef.current.playerId}
             onManageConsent={manageAdConsent}
+            onLeaderboardDeleted={onLeaderboardDeleted}
             onBack={closeLegalDoc}
           />
         </View>

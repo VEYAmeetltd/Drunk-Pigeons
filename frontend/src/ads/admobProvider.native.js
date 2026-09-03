@@ -174,6 +174,22 @@ export const AdProvider = {
       return { ok: false, reason: 'error' };
     }
   },
+  // True only when Google UMP reports the privacy-options entry point is REQUIRED.
+  async getPrivacyOptionsRequired() {
+    try {
+      const AdsConsent = SDK && SDK.AdsConsent;
+      if (!AdsConsent) return false;
+      let info = null;
+      if (AdsConsent.getConsentInfo) info = await AdsConsent.getConsentInfo();
+      else if (AdsConsent.requestInfoUpdate) info = await AdsConsent.requestInfoUpdate();
+      const status = info && info.privacyOptionsRequirementStatus;
+      const REQUIRED = (AdsConsent.PrivacyOptionsRequirementStatus
+        && AdsConsent.PrivacyOptionsRequirementStatus.REQUIRED) || 'REQUIRED';
+      return status === REQUIRED;
+    } catch (e) {
+      return false;
+    }
+  },
 };
 
 export default AdProvider;

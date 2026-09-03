@@ -1,47 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, Platform, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, Platform, BackHandler, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import { COMPANY } from './legalDocuments';
+import { LeaderboardAPI } from '../leaderboard/api';
+import { Persistence } from '../storage/persistence';
+import { Ads } from '../ads/ads';
 
 const EMAIL = COMPANY.email;
-
-async function copyText(text) {
-  try {
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // fall through to legacy fallback
-  }
-  try {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) return true;
-    }
-  } catch {
-    // fall through
-  }
-  try {
-    // Optional native clipboard if the app is built with it; never a hard dependency.
-    // eslint-disable-next-line global-require
-    const Clip = require('expo-clipboard');
-    if (Clip && Clip.setStringAsync) { await Clip.setStringAsync(text); return true; }
-  } catch {
-    // not available — graceful failure
-  }
-  return false;
-}
 
 const openMail = (subject, body) => {
   let url = `mailto:${EMAIL}`;
@@ -89,53 +56,6 @@ function RichText({ text, style, linkStyle, idPrefix }) {
         return p;
       })}
     </Text>
-  );
-}
-
-function PrivacyChoicesActions({ playerId, onManageConsent }) {
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-  const [consentMsg, setConsentMsg] = useState('');
-  const supportId = playerId || 'unavailable';
-
-  const doCopy = async () => {
-    const ok = await copyText(supportId);
-    setCopied(ok);
-    setCopyFailed(!ok);
-    setTimeout(() => { setCopied(false); setCopyFailed(false); }, 2500);
-  };
-
-  const doDeleteEmail = () => {
-    openMail(
-      'DRUNK PIGEONS leaderboard data deletion request',
-      `Please delete my DRUNK PIGEONS leaderboard data.\n\nMy Support ID: ${supportId}\n\n(Please keep this ID so we can locate the anonymous leaderboard record. Do not include passwords or payment-card details.)`
-    );
-  };
-
-  const doManageConsent = async () => {
-    setConsentMsg('');
-    try {
-      const res = onManageConsent ? await onManageConsent() : { ok: false };
-      if (!res || !res.ok) {
-        setConsentMsg('Ad privacy options are managed on the mobile app; not available in this preview.');
-      }
-    } catch {
-      setConsentMsg('Ad privacy options are managed on the mobile app; not available in this preview.');
-    }
-  };
-
-  return (
-    <View style={styles.actionPanel} testID="privacy-choices-actions">
-      <Text style={styles.actionTitle}>YOUR SUPPORT ID</Text>
-      <Text style={styles.supportId} testID="support-id-value" selectable>{supportId}</Text>
-      <View style={styles.actionRow}>
-        <Button testID="copy-support-id" label={copied ? 'COPIED ✓' : (copyFailed ? 'COPY FAILED' : 'COPY ID')} variant="teal" small onPress={doCopy} style={{ flex: 1 }} />
-        <Button testID="email-delete-request" label="EMAIL DELETION REQUEST" variant="primary" small onPress={doDeleteEmail} style={{ flex: 1.6 }} />
-      </View>
-      <Button testID="manage-ad-choices" label="MANAGE AD PRIVACY CHOICES" variant="ghost" small onPress={doManageConsent} style={{ marginTop: 10 }} />
-      {!!consentMsg && <Text style={styles.consentMsg} testID="manage-ad-choices-msg">{consentMsg}</Text>}
-      <Text style={styles.actionHint}>Include your Support ID in any deletion request. Never send passwords or card details.</Text>
-    </View>
   );
 }
 
@@ -189,7 +109,14 @@ function Section({ section, idPrefix }) {
   }
 }
 
-export default function LegalDocumentViewer({ doc, onBack, playerId, onManageConsent }) {
+export default function LegalDocumentViewer({ doc, onBack, playerId, onManageConsent, onLeaderboardDeleted }) {
+  const isPC = !!doc && doc.id === 'privacy-choices';
+  const [pcHasData, setPcHasData] = useState(false);
+  const [pcUmp, setPcUmp] = useState(false);
+  const [pcDeleting, setPcDeleting] = useState(false);
+  const [pcResult, setPcResult] = useState(''); // '' | 'success' | 'fail'
+  const [pcConfirm, setPcConfirm] = useState(false);
+
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -198,6 +125,82 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
     });
     return () => sub.remove();
   }, [onBack]);
+
+  useEffect(() => {
+    if (!isPC) return undefined;
+    let alive = true;
+    if (playerId) {
+      LeaderboardAPI.me(playerId).then((r) => {
+        if (alive && r && r.ok && r.nickname) setPcHasData(true);
+      });
+    }
+    Ads.getPrivacyOptionsRequired().then((req) => { if (alive) setPcUmp(!!req); });
+    return () => { alive = false; };
+  }, [isPC, playerId]);
+
+  const doDelete = async () => {
+    setPcConfirm(false);
+    if (pcDeleting || !playerId) return;
+    setPcDeleting(true);
+    try {
+      const res = await LeaderboardAPI.deleteLeaderboardData(playerId);
+      if (res && res.ok) {
+        Persistence.setNickname('');
+        Persistence.setSubmittedBest(0);
+        Persistence.setSubmittedBestSilly(0);
+        setPcHasData(false);
+        setPcResult('success');
+        onLeaderboardDeleted && onLeaderboardDeleted();
+      } else {
+        setPcResult('fail');
+      }
+    } catch {
+      setPcResult('fail');
+    }
+    setPcDeleting(false);
+  };
+
+  // Extra controls injected directly beneath the relevant legal sections.
+  const injectAfter = (s) => {
+    if (!isPC || s.type !== 'subheading') return null;
+    const t = String(s.text || '').toLowerCase();
+    if (/advertising choices/.test(t)) {
+      if (!pcUmp) return null; // only when Google UMP says the entry point is required
+      return (
+        <Button
+          testID="google-ump-button"
+          label="GOOGLE AD PRIVACY OPTIONS"
+          variant="teal"
+          small
+          onPress={() => onManageConsent && onManageConsent()}
+          style={{ marginTop: 12, alignSelf: 'flex-start' }}
+        />
+      );
+    }
+    if (/delete leaderboard data/.test(t)) {
+      if (pcResult === 'success') {
+        return <Text style={styles.deleteSuccess} testID="delete-success">✓ Your leaderboard nickname and score have been removed.</Text>;
+      }
+      if (!pcHasData) return null; // only when online leaderboard data exists
+      return (
+        <View style={{ marginTop: 12 }}>
+          <Button
+            testID="delete-leaderboard-data"
+            label={pcDeleting ? 'DELETING…' : 'DELETE MY LEADERBOARD DATA'}
+            variant="danger"
+            small
+            disabled={pcDeleting}
+            onPress={() => setPcConfirm(true)}
+            style={{ alignSelf: 'flex-start' }}
+          />
+          {pcResult === 'fail' && (
+            <Text style={styles.deleteFail} testID="delete-fail">Couldn't reach the server. Please try again in a moment.</Text>
+          )}
+        </View>
+      );
+    }
+    return null;
+  };
 
   if (!doc) return null;
   const idPrefix = `legal-${doc.id}`;
@@ -222,12 +225,19 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
         </View>
         <Text style={styles.lastUpdated} testID="legal-doc-updated">Last updated: {doc.lastUpdated}</Text>
 
-        {doc.id === 'privacy-choices' && (
-          <PrivacyChoicesActions playerId={playerId} onManageConsent={onManageConsent} />
+        {isPC && (
+          <View style={styles.minimalBox} testID="privacy-minimal-note">
+            <Text style={styles.minimalText}>
+              DRUNK PIGEONS collects the minimum information needed to run the game. It does not require identity documents, real names, email addresses, phone numbers, account passwords or precise location.
+            </Text>
+          </View>
         )}
 
         {doc.sections.map((s, i) => (
-          <Section key={i} section={s} idPrefix={`${idPrefix}-s${i}`} />
+          <React.Fragment key={i}>
+            <Section section={s} idPrefix={`${idPrefix}-s${i}`} />
+            {injectAfter(s)}
+          </React.Fragment>
         ))}
 
         {/* Persistent company-information section */}
@@ -254,6 +264,21 @@ export default function LegalDocumentViewer({ doc, onBack, playerId, onManageCon
           <Text style={styles.companyNote}>The online page may not be available yet; the full text above is always readable in-app.</Text>
         </View>
       </ScrollView>
+
+      <Modal visible={pcConfirm} transparent animationType="fade" onRequestClose={() => setPcConfirm(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="delete-confirm-modal">
+            <Text style={styles.modalTitle}>Delete leaderboard data?</Text>
+            <Text style={styles.modalBody}>
+              This removes your public nickname and leaderboard score from our servers. Your purchases are not affected. This can't be undone.
+            </Text>
+            <View style={styles.modalRow}>
+              <Button testID="delete-cancel" label="CANCEL" variant="ghost" small onPress={() => setPcConfirm(false)} style={{ flex: 1 }} />
+              <Button testID="delete-confirm" label="DELETE" variant="danger" small onPress={doDelete} style={{ flex: 1 }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -286,11 +311,15 @@ const styles = StyleSheet.create({
   tableLabel: { fontFamily: FONT, color: COLORS.pink, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 2, textTransform: 'uppercase' },
   tableValue: { fontFamily: FONT, color: '#e9e2f7', fontSize: 14, lineHeight: 20 },
   actionPanel: { backgroundColor: COLORS.card, borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 1, borderColor: '#4a3a6b' },
-  actionTitle: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  supportId: { fontFamily: Platform.OS === 'web' ? 'monospace' : FONT, color: COLORS.yellow, fontSize: 15, fontWeight: '700', marginTop: 6, marginBottom: 12 },
-  actionRow: { flexDirection: 'row', gap: 10 },
-  consentMsg: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, marginTop: 8, lineHeight: 17 },
-  actionHint: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, marginTop: 12, lineHeight: 16, fontStyle: 'italic' },
+  minimalBox: { backgroundColor: COLORS.bgAlt, borderRadius: 12, padding: 14, marginTop: 14, borderLeftWidth: 3, borderLeftColor: COLORS.teal },
+  minimalText: { fontFamily: FONT, color: '#e9e2f7', fontSize: 14, lineHeight: 21 },
+  deleteSuccess: { fontFamily: FONT, color: COLORS.teal, fontSize: 14, fontWeight: '700', marginTop: 12, lineHeight: 20 },
+  deleteFail: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, marginTop: 8, lineHeight: 19 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 26 },
+  modalCard: { width: '100%', maxWidth: 380, backgroundColor: COLORS.card, borderRadius: 18, padding: 20 },
+  modalTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 18, fontWeight: '700', marginBottom: 10 },
+  modalBody: { fontFamily: FONT, color: '#e9e2f7', fontSize: 14, lineHeight: 21, marginBottom: 18 },
+  modalRow: { flexDirection: 'row', gap: 12 },
   companyBox: { backgroundColor: COLORS.bgAlt, borderRadius: 14, padding: 16, marginTop: 26 },
   companyTitle: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 6 },
   companyLine: { fontFamily: FONT, color: '#e9e2f7', fontSize: 13, lineHeight: 20 },

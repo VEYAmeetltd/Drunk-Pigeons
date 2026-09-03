@@ -24,6 +24,10 @@ export const AdProvider = {
   showPrivacyOptions() {
     return Promise.resolve({ ok: false, reason: 'unsupported-web' });
   },
+  // Web preview never requires the Google privacy-options entry point.
+  getPrivacyOptionsRequired() {
+    return Promise.resolve(false);
+  },
 };
 
 export default AdProvider;

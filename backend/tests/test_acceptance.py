@@ -43,3 +43,24 @@ def test_accept_version_change_overwrites():
     requests.post(f"{API}/accept", json={"playerId": pid, "acceptedVersion": "2.0|2.0|2.0"}, timeout=10)
     r = requests.get(f"{API}/accept", params={"playerId": pid}, timeout=10).json()
     assert r["acceptedVersion"] == "2.0|2.0|2.0"
+
+
+def test_leaderboard_delete_removes_record_and_frees_nickname():
+    import re
+    pid = new_pid()
+    name = "DelBird" + uuid.uuid4().hex[:8]
+    r = requests.post(f"{API}/register", json={"playerId": pid, "nickname": name}, timeout=10).json()
+    assert r.get("ok") is True
+    # me() reports the registered nickname
+    assert requests.get(f"{API}/me", params={"playerId": pid}, timeout=10).json()["nickname"] == name
+    # delete without any email / support id — just the anonymous player key
+    d = requests.post(f"{API}/delete", json={"playerId": pid}, timeout=10).json()
+    assert d.get("ok") is True and d.get("deleted", 0) >= 1
+    # record gone, nickname released
+    assert requests.get(f"{API}/me", params={"playerId": pid}, timeout=10).json()["nickname"] is None
+    assert requests.get(f"{API}/check", params={"nickname": name}, timeout=10).json().get("available") is True
+
+
+def test_leaderboard_delete_rejects_bad_id():
+    r = requests.post(f"{API}/delete", json={"playerId": "bad id!"}, timeout=10).json()
+    assert r["ok"] is False

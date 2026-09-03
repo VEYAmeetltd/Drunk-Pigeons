@@ -140,6 +140,10 @@ class AcceptReq(BaseModel):
     documents: dict | None = None
 
 
+class DeleteReq(BaseModel):
+    playerId: str
+
+
 class SubmitReq(BaseModel):
     playerId: str
     runId: str
@@ -425,6 +429,20 @@ async def get_acceptance(playerId: str | None = None):
         return {"ok": True, "acceptedVersion": None}
     doc = await db.acceptances.find_one({"playerId": playerId}, {"_id": 0, "acceptedVersion": 1})
     return {"ok": True, "acceptedVersion": (doc.get("acceptedVersion") if doc else None)}
+
+
+@app.post("/api/leaderboard/delete")
+async def delete_leaderboard_data(req: DeleteReq):
+    # Self-service deletion of the player's own server leaderboard data, authenticated
+    # by the app's existing local anonymous player key (no email / name / Support ID).
+    # Removes the nickname + score record (which also releases the nickname via the
+    # unique index) and the moderation-attempt counter. Purchases are NOT touched —
+    # Apple/Google own purchase entitlement and restoration.
+    if not valid_id(req.playerId):
+        return {"ok": False, "error": "bad-id"}
+    res = await db.players.delete_many({"playerId": req.playerId})
+    await db.mod_attempts.delete_one({"playerId": req.playerId})
+    return {"ok": True, "deleted": res.deleted_count}
 
 
 @app.get("/api/leaderboard/me")

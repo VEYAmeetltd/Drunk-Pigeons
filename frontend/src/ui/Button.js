@@ -9,6 +9,7 @@ const VARIANTS = {
   pink: { bg: COLORS.pink, fg: '#3a0620', border: '#c73a76' },
   teal: { bg: COLORS.teal, fg: '#053a2e', border: '#22a684' },
   ghost: { bg: 'transparent', fg: COLORS.text, border: '#6a5a95' },
+  danger: { bg: '#e0466b', fg: '#3a0614', border: '#b83455' },
 };
 
 export default function Button({ label, onPress, variant = 'primary', style, testID, small, disabled }) {
