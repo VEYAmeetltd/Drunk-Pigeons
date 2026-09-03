@@ -130,10 +130,7 @@ export default function PigeonsScreen({
       {/* Unlock All bundle */}
       {!ownedBundle && (
         <Pressable testID="unlock-all-button" onPress={openBundleSheet} style={styles.bundle}>
-          <View>
-            <Text style={styles.bundleTitle}>UNLOCK ALL 5 — {DEFAULT_PRICES.bundle}</Text>
-            <Text style={styles.bundleSave}>SAVE {DEFAULT_PRICES.bundleSave}</Text>
-          </View>
+          <Text style={styles.bundleTitle}>UNLOCK ALL 5 — {DEFAULT_PRICES.bundle}</Text>
           <Text style={styles.bundleChevron}>›</Text>
         </Pressable>
       )}
@@ -242,9 +239,8 @@ const styles = StyleSheet.create({
   previewName: { fontFamily: FONT, color: COLORS.text, fontSize: 22, fontWeight: '700', marginTop: 4 },
   previewTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 13, marginTop: 2, fontStyle: 'italic' },
   previewState: { fontFamily: FONT, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginTop: 10 },
-  bundle: { marginTop: 12, backgroundColor: COLORS.bgAlt, borderRadius: 16, borderWidth: 2, borderColor: COLORS.yellow, paddingVertical: 12, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bundle: { marginTop: 12, backgroundColor: COLORS.bgAlt, borderRadius: 16, borderWidth: 2, borderColor: COLORS.yellow, paddingVertical: 10, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bundleTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  bundleSave: { fontFamily: FONT, color: COLORS.teal, fontSize: 13, fontWeight: '700', marginTop: 2 },
   bundleChevron: { fontFamily: FONT, color: COLORS.yellow, fontSize: 30, fontWeight: '700' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: 14, justifyContent: 'center' },
   card: { width: 100, height: 120, backgroundColor: COLORS.bgAlt, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },

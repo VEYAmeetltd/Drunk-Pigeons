@@ -230,10 +230,7 @@ export default function MainMenu({
               <>
                 <Text style={styles.devTag}>DEV SIMULATOR</Text>
                 <Button testID="easy-sim-success" label={busy ? '…' : 'Simulate Success'} variant="teal" small onPress={() => runEasyPurchase('success')} style={styles.sheetBtn} />
-                <View style={styles.simRow}>
-                  <Button testID="easy-sim-cancel" label="Cancelled" variant="ghost" small onPress={() => runEasyPurchase('cancelled')} style={{ flex: 1 }} />
-                  <Button testID="easy-sim-fail" label="Failed" variant="ghost" small onPress={() => runEasyPurchase('failed')} style={{ flex: 1 }} />
-                </View>
+                <Button testID="easy-sim-fail" label="Simulate Failure" variant="ghost" small onPress={() => runEasyPurchase('failed')} style={styles.sheetBtn} />
               </>
             ) : (
               <Button testID="easy-buy-confirm" label={busy ? '…' : `BUY — ${easyPrice}`} variant="primary" onPress={() => runEasyPurchase('success')} style={styles.sheetBtn} />

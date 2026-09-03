@@ -316,3 +316,9 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - Reuses the existing onToggleSound handler + soundEnabled state (no duplicate sound logic); saved preference persists and the correct icon shows on load. accessibilityRole button, dynamic label 'Turn sound off'/'Turn sound on', accessibilityState checked/selected.
 - File changed: src/screens/MainMenu.js only.
 - Responsive: verified 360x740, 375x667, 390x844, 430x932 — icon centred under PIGEONS INJURED (dx=0), below it, 44x44 target, no horizontal scroll, stats/pigeon unchanged. Toggle switches icon + audio; preference survives.
+
+## Update 44 (2026-06) — Purchase UI clean-ups
+- PigeonsScreen bundle card: removed "SAVE £1.96" line; card now shows only "UNLOCK ALL 5 — £7.99" with the › arrow, title vertically centred (row alignItems center), arrow aligned, paddingVertical 12->10 (slightly shorter). Price/behaviour unchanged. Removed bundleSave style.
+- MainMenu Easy Mode DEV SIMULATOR: removed the "Cancelled" simulate button; renamed "Failed" -> "Simulate Failure"; Simulate Success + Simulate Failure now full-width stacked (sheetBtn); bottom CANCEL (closes modal) kept. Real Apple/Google cancellation handling in runEasyPurchase untouched.
+- Files changed: src/screens/PigeonsScreen.js, src/screens/MainMenu.js.
+- Verified at 360x740 and 390x844: bundle shows no SAVE + no horizontal scroll; easy simulator shows Simulate Success / Simulate Failure / CANCEL (Cancelled removed). Prices, entitlements, Restore, Remove Ads, Easy Mode behaviour unchanged.
