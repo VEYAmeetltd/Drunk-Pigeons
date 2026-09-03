@@ -162,6 +162,18 @@ export const AdProvider = {
       settle();
     }
   },
+  // Google UMP privacy-options form. Uses the SDK's AdsConsent when present and the
+  // form is available; otherwise resolves gracefully so callers never crash.
+  async showPrivacyOptions() {
+    try {
+      const AdsConsent = SDK && SDK.AdsConsent;
+      if (!AdsConsent || !AdsConsent.showPrivacyOptionsForm) return { ok: false, reason: 'unavailable' };
+      await AdsConsent.showPrivacyOptionsForm();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: 'error' };
+    }
+  },
 };
 
 export default AdProvider;

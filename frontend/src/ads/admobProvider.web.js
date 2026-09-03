@@ -20,6 +20,10 @@ export const AdProvider = {
     if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[Ads:web] rewarded revive (dev grant)');
     onReward();
   },
+  // Google UMP privacy-options form is native-only; unavailable in the web preview.
+  showPrivacyOptions() {
+    return Promise.resolve({ ok: false, reason: 'unsupported-web' });
+  },
 };
 
 export default AdProvider;

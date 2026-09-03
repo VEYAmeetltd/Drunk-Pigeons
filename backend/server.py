@@ -134,6 +134,12 @@ class RegisterReq(BaseModel):
     nickname: str
 
 
+class AcceptReq(BaseModel):
+    playerId: str
+    acceptedVersion: str
+    documents: dict | None = None
+
+
 class SubmitReq(BaseModel):
     playerId: str
     runId: str
@@ -389,6 +395,36 @@ async def submit(req: SubmitReq, request: Request):
     rank = await db.players.count_documents({field: {"$gt": best}}) + 1
     return {"ok": True, "status": "accepted", "mode": mode,
             "bestDistance": best, "rank": rank}
+
+
+@app.post("/api/leaderboard/accept")
+async def accept_rules(req: AcceptReq):
+    # Record anonymous acceptance of the Terms, Leaderboard Rules and Online Safety
+    # policy before a first public nickname. We deliberately store only the anonymous
+    # player id, the accepted version string, the per-document versions and a UTC
+    # timestamp — never a real name, email or conventional account.
+    if not valid_id(req.playerId):
+        return {"ok": False, "error": "bad-id"}
+    if not req.acceptedVersion or len(req.acceptedVersion) > 64:
+        return {"ok": False, "error": "bad-version"}
+    await db.acceptances.update_one(
+        {"playerId": req.playerId},
+        {"$set": {
+            "acceptedVersion": req.acceptedVersion,
+            "documents": req.documents or {},
+            "acceptedAt": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "acceptedVersion": req.acceptedVersion}
+
+
+@app.get("/api/leaderboard/accept")
+async def get_acceptance(playerId: str | None = None):
+    if not (playerId and valid_id(playerId)):
+        return {"ok": True, "acceptedVersion": None}
+    doc = await db.acceptances.find_one({"playerId": playerId}, {"_id": 0, "acceptedVersion": 1})
+    return {"ok": True, "acceptedVersion": (doc.get("acceptedVersion") if doc else None)}
 
 
 @app.get("/api/leaderboard/me")

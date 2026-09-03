@@ -6,6 +6,9 @@ import MainMenu from './src/screens/MainMenu';
 import PigeonsScreen from './src/screens/PigeonsScreen';
 import GameScreen from './src/screens/GameScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import LegalScreen from './src/screens/LegalScreen';
+import LegalDocumentViewer from './src/legal/LegalDocumentViewer';
+import { getLegalDoc } from './src/legal/legalDocuments';
 import { Persistence } from './src/storage/persistence';
 import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboard/api';
 import { Audio } from './src/audio/audio';
@@ -36,7 +39,13 @@ export default function App() {
     meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
   }, []);
 
-  const [screen, setScreen] = useState('menu'); // menu | game | pigeons
+  const [screen, setScreen] = useState('menu'); // menu | game | pigeons | leaderboard | legal
+  // Legal document overlay (docId) — shown above any screen so opening "Purchase
+  // terms" / rules links never resets store/menu/leaderboard state.
+  const [legalOverlay, setLegalOverlay] = useState(null);
+  const openLegalDoc = useCallback((id) => setLegalOverlay(id), []);
+  const closeLegalDoc = useCallback(() => setLegalOverlay(null), []);
+  const manageAdConsent = useCallback(() => Ads.showPrivacyOptions(), []);
 
   // Phone-landscape guard: show a "rotate to portrait" overlay only on phone-sized
   // landscape (short side < 500). Leaves desktop/tablet alone. Native is already
@@ -332,6 +341,8 @@ export default function App() {
             onToggleSound={handleToggleSound}
             onLeetUnlock={handleLeetUnlock}
             onLeaderboard={() => setScreen('leaderboard')}
+            onLegal={() => setScreen('legal')}
+            onOpenPurchaseTerms={() => openLegalDoc('purchases')}
           />
         )}
         {screen === 'leaderboard' && (
@@ -339,6 +350,13 @@ export default function App() {
             playerId={lbRef.current.playerId}
             nickname={nickname}
             onSetNickname={setLeaderboardName}
+            onBack={() => setScreen('menu')}
+            onOpenLegal={openLegalDoc}
+          />
+        )}
+        {screen === 'legal' && (
+          <LegalScreen
+            onOpenDoc={openLegalDoc}
             onBack={() => setScreen('menu')}
           />
         )}
@@ -358,6 +376,7 @@ export default function App() {
             onBuyRemoveAds={buyRemoveAds}
             onRestore={restorePurchases}
             onBack={() => setScreen('menu')}
+            onOpenPurchaseTerms={() => openLegalDoc('purchases')}
           />
         )}
         {screen === 'game' && (
@@ -374,6 +393,16 @@ export default function App() {
           />
         )}
       </View>
+      {legalOverlay && (
+        <View style={styles.legalOverlay}>
+          <LegalDocumentViewer
+            doc={getLegalDoc(legalOverlay)}
+            playerId={lbRef.current.playerId}
+            onManageConsent={manageAdConsent}
+            onBack={closeLegalDoc}
+          />
+        </View>
+      )}
       <RotateOverlay visible={phoneLandscape} />
     </SafeAreaProvider>
   );
@@ -382,4 +411,5 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
   boot: { flex: 1, backgroundColor: COLORS.bg },
+  legalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.bg, zIndex: 80 },
 });

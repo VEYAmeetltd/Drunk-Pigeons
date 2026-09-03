@@ -25,6 +25,7 @@ export default function PigeonsScreen({
   onBuyRemoveAds,
   onRestore,
   onBack,
+  onOpenPurchaseTerms,
 }) {
   const [preview, setPreview] = useState(selectedPigeon);
   const [sheet, setSheet] = useState(null); // { kind:'pigeon'|'bundle', id, price }
@@ -189,6 +190,10 @@ export default function PigeonsScreen({
         </Pressable>
       )}
 
+      <Pressable testID="store-purchase-terms" onPress={() => { Audio.ui(); onOpenPurchaseTerms && onOpenPurchaseTerms(); }} style={styles.termsLink}>
+        <Text style={styles.termsLinkTxt}>Purchase terms</Text>
+      </Pressable>
+
       {/* Purchase sheet (native flow placeholder + DEV simulator) */}
       {sheet && (
         <View style={styles.sheetOverlay} testID="purchase-sheet" onStartShouldSetResponder={() => true}>
@@ -215,6 +220,9 @@ export default function PigeonsScreen({
               <Button testID="purchase-confirm" label="BUY" variant="primary" onPress={() => runPurchase('success')} style={styles.sheetBtn} />
             )}
             <Button testID="purchase-cancel" label="Close" variant="ghost" small onPress={closeSheet} style={styles.sheetBtn} />
+            <Pressable testID="sheet-purchase-terms" onPress={() => { Audio.ui(); onOpenPurchaseTerms && onOpenPurchaseTerms(); }} style={styles.termsLink}>
+              <Text style={styles.termsLinkTxt}>Purchase terms</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -264,4 +272,6 @@ const styles = StyleSheet.create({
   devTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, letterSpacing: 2, marginTop: 14 },
   sheetBtn: { width: '100%', marginTop: 10 },
   simRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
+  termsLink: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 },
+  termsLinkTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 1, textDecorationLine: 'underline' },
 });

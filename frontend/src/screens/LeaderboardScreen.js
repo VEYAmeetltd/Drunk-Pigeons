@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import { LeaderboardAPI } from '../leaderboard/api';
+import { Persistence } from '../storage/persistence';
+import { ACCEPTANCE_VERSION, ACCEPTANCE_DOC_IDS, getLegalDoc } from '../legal/legalDocuments';
 import { formatInt } from '../config';
 import { Audio } from '../audio/audio';
 
@@ -70,7 +72,7 @@ function moderationMessage(attempt) {
   return `Must be really pigeoned if you thought you would get it on the ${ordinal(n)} try.`;
 }
 
-export default function LeaderboardScreen({ playerId, nickname, onSetNickname, onBack }) {
+export default function LeaderboardScreen({ playerId, nickname, onSetNickname, onBack, onOpenLegal }) {
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [top, setTop] = useState([]);
@@ -78,6 +80,10 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  // Rules acceptance: player must accept Terms + Leaderboard Rules + Online Safety
+  // (current versions) before submitting a first public nickname.
+  const [acceptedVersion, setAcceptedVersion] = useState('');
+  const isAccepted = acceptedVersion === ACCEPTANCE_VERSION;
   // Live name availability: '' (idle) | 'checking' | 'free' | 'taken' | 'invalid' | 'offline'
   const [avail, setAvail] = useState('');
   const checkTimer = useRef(null);
@@ -104,6 +110,32 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
     load();
   }, [load]);
 
+  // Load prior rules acceptance (local first for offline; reconcile with backend).
+  useEffect(() => {
+    let alive = true;
+    Persistence.getRulesAccepted().then((v) => {
+      if (alive && v) setAcceptedVersion(v);
+    });
+    if (playerId) {
+      LeaderboardAPI.getAcceptance(playerId).then((res) => {
+        if (alive && res && res.ok && res.acceptedVersion) setAcceptedVersion(res.acceptedVersion);
+      });
+    }
+    return () => { alive = false; };
+  }, [playerId]);
+
+  const acceptRules = useCallback(() => {
+    Audio.ui();
+    setAcceptedVersion(ACCEPTANCE_VERSION);
+    Persistence.setRulesAccepted(ACCEPTANCE_VERSION);
+    const documents = ACCEPTANCE_DOC_IDS.reduce((acc, id) => {
+      const d = getLegalDoc(id);
+      if (d) acc[id] = d.version;
+      return acc;
+    }, {});
+    LeaderboardAPI.recordAcceptance(playerId, ACCEPTANCE_VERSION, documents);
+  }, [playerId]);
+
   const onChangeName = useCallback((v) => {
     setName(v);
     setErr('');
@@ -125,6 +157,7 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
 
   const submitName = async () => {
     if (avail !== 'free' && avail !== 'blocked') return;
+    if (!isAccepted) return;
     setErr('');
     setSaving(true);
     const res = await onSetNickname(name);
@@ -196,13 +229,40 @@ export default function LeaderboardScreen({ playerId, nickname, onSetNickname, o
           {avail === 'invalid' && <Text style={styles.hintBad} testID="nickname-hint">That name won't fly, pigeon.</Text>}
           {avail === 'offline' && <Text style={styles.hintDim} testID="nickname-hint">Can't check right now — try again.</Text>}
           <Text style={styles.warnNote} testID="nickname-warning">⚠ Choose carefully — this cannot be changed.</Text>
+
+          {isAccepted ? (
+            <Text style={styles.acceptDone} testID="rules-accepted-confirm">✓ Rules accepted — you're good to go.</Text>
+          ) : (
+            <View style={styles.acceptBox} testID="rules-acceptance">
+              <Pressable
+                testID="accept-rules-checkbox"
+                onPress={acceptRules}
+                style={styles.acceptRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: false }}
+                hitSlop={8}
+              >
+                <View style={styles.checkbox}><Text style={styles.checkboxMark}> </Text></View>
+                <Text style={styles.acceptText}>I have read and agree to the rules linked below.</Text>
+              </Pressable>
+              <View style={styles.acceptLinksRow}>
+                <Text style={styles.acceptLink} testID="accept-link-terms" onPress={() => onOpenLegal && onOpenLegal('terms')}>Terms of Use</Text>
+                <Text style={styles.acceptDivider}> · </Text>
+                <Text style={styles.acceptLink} testID="accept-link-leaderboard" onPress={() => onOpenLegal && onOpenLegal('leaderboard-rules')}>Leaderboard & Fair Play Rules</Text>
+                <Text style={styles.acceptDivider}> · </Text>
+                <Text style={styles.acceptLink} testID="accept-link-safety" onPress={() => onOpenLegal && onOpenLegal('online-safety')}>Online Safety Policy</Text>
+              </View>
+              <Text style={styles.acceptHint}>Tap the box to accept. You can keep playing offline without submitting a name.</Text>
+            </View>
+          )}
+
           {!!err && <Text style={styles.err} testID="nickname-error">{err}</Text>}
           <Button
             testID="nickname-save"
             label={saving ? '…' : 'SAVE NAME'}
             variant="primary"
             small
-            disabled={(avail !== 'free' && avail !== 'blocked') || saving}
+            disabled={(avail !== 'free' && avail !== 'blocked') || saving || !isAccepted}
             onPress={submitName}
             style={{ marginTop: 10 }}
           />
@@ -271,6 +331,16 @@ const styles = StyleSheet.create({
   hintBad: { fontFamily: FONT, color: COLORS.pink, fontSize: 12, fontWeight: '700', marginTop: 6 },
   hintDim: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '700', marginTop: 6 },
   warnNote: { fontFamily: FONT, color: COLORS.yellow, fontSize: 12, fontWeight: '700', marginTop: 8, letterSpacing: 0.3 },
+  acceptBox: { marginTop: 10, backgroundColor: COLORS.bgAlt, borderRadius: 12, padding: 10 },
+  acceptRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: COLORS.teal, marginRight: 10, alignItems: 'center', justifyContent: 'center' },
+  checkboxMark: { color: COLORS.teal, fontSize: 14, fontWeight: '900' },
+  acceptText: { flex: 1, fontFamily: FONT, color: '#e9e2f7', fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  acceptLinksRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 8, paddingLeft: 36 },
+  acceptDivider: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12 },
+  acceptLink: { color: COLORS.teal, textDecorationLine: 'underline', fontWeight: '700', fontSize: 12.5 },
+  acceptHint: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, marginTop: 8, lineHeight: 15, fontStyle: 'italic' },
+  acceptDone: { fontFamily: FONT, color: COLORS.teal, fontSize: 12.5, fontWeight: '700', marginTop: 10 },
   err: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, fontWeight: '700', marginTop: 8 },
   list: { paddingVertical: 12, gap: 6 },
   podiumWrap: { paddingTop: 6, paddingBottom: 14, alignItems: 'center' },

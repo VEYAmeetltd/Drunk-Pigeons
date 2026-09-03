@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only validation of the new Legal & Privacy feature set for DRUNK PIGEONS. All 12 requirements verified against the preview URL. Legal & Privacy pill on main menu opens the list showing exactly the 6 public documents. No internal/private documents leak in the DOM. Each document viewer renders title, 'Last updated: 3 September 2026', full text with wrapped tables (no horizontal scroll), Back control, and persistent company info (INTIES LTD., 17433193, gordon@intiesltd.com). Privacy Choices interactive panel works: support ID matches anonymous player id, Copy ID → 'COPIED ✓' (with clipboard permission granted; browser clipboard API requires secure context / permission — works in-app), Email Deletion button present, Manage Ad Privacy Choices shows graceful failure message. Rules-acceptance gate blocks SAVE NAME until checkbox tapped; nickname save succeeds after acceptance and dp_rulesAccepted=2.0|2.0|2.0 recorded. Accept links open respective legal overlays. PLAY works without rules acceptance (game runs to splat). Purchase terms links reachable from Pigeons store, purchase sheet, and Easy Mode sheet. Legal overlay open/close preserves menu/leaderboard/store state. Responsive at 360/375/390/412/430 widths — no horizontal scroll; legal-privacy-button + PLAY remain visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LeaderboardScreen rules-acceptance", "issues": ["The whole row is a Pressable for the checkbox, but the inline legal links (accept-link-terms/leaderboard/safety) fill most of the row width. Tapping the text portion opens the legal doc instead of ticking the box — this is intended for the links themselves, but the hint 'Tap the box to accept' can mislead a user who taps anywhere on the row. Consider making the checkbox tap target more prominent or moving the links to a separate line so the checkbox row has empty space to tap."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_20.json"],
+  "action_items": [
+    "Optional UX: enlarge the accept-rules-checkbox tap target so it does not overlap the accept-link-* Text ranges, to reduce accidental link taps when a user attempts to check the box.",
+    "Consider: Copy-to-clipboard on web depends on navigator.clipboard which requires a secure origin and (in some browsers) explicit permission. On the deployed HTTPS preview it works; a fallback (document.execCommand or textarea select) would be more resilient in edge cases."
+  ],
+  "critical_code_review_comments": [
+    "LegalDocumentViewer.js copyText path relies on navigator.clipboard.writeText only; on browsers without the API the 'COPIED ✓' state never appears. Consider a fallback + user-visible error toast.",
+    "LeaderboardScreen.js line 244: checkbox square is 22x22 but nested inside a Pressable that also contains onPress'd Text links; tap coordinate resolution in RN Web depends on child order, so accidental link taps can happen. Not blocking but worth tightening."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100%"},
+  "test_credentials": "None required; app auto-generates UUID playerId. Fresh gate test: clear localStorage keys dp_nickname and dp_rulesAccepted.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 12 acceptance items verified at 390x844 plus 4 additional viewports. Playwright note: (a) to test Copy ID you must grant clipboard-write permission via context.grant_permissions before navigating; (b) to type in TextInput (nickname-input) use page.keyboard.type after clicking the input — do NOT use element_handle.fill (React Native Web ignores value assignment without input events); (c) to tick accept-rules-checkbox, click the small square by bounding-box top-left offset (~18,18) instead of the row center, otherwise the nested accept-link-* Text takes the press and opens a legal doc.",
+  "rca of the issue": "No blocking issues found. Two soft observations captured under design_issues and critical_code_review_comments."
+}

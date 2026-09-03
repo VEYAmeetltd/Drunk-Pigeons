@@ -19,6 +19,7 @@ const KEYS = {
   submittedBest: 'dp_submittedBest',
   submittedBestSilly: 'dp_submittedBestSilly',
   drunk: 'dp_drunkLevel',
+  rulesAccepted: 'dp_rulesAccepted',
 };
 
 async function getNumber(key, def) {
@@ -100,6 +101,12 @@ export const Persistence = {
   },
   setNickname(v) {
     AsyncStorage.setItem(KEYS.nickname, v).catch(() => {});
+  },
+  setRulesAccepted(version) {
+    AsyncStorage.setItem(KEYS.rulesAccepted, version || '').catch(() => {});
+  },
+  getRulesAccepted() {
+    return getString(KEYS.rulesAccepted, '');
   },
   setSubmittedBest(v) {
     AsyncStorage.setItem(KEYS.submittedBest, String(v)).catch(() => {});

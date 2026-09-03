@@ -73,4 +73,15 @@ export const Ads = {
   isRewardedReady() {
     return AdProvider.isRewardedReady ? AdProvider.isRewardedReady() : true;
   },
+
+  // Open the Google UMP privacy-options form where available (native). Resolves to
+  // { ok: false } gracefully when the form/SDK is unavailable so callers never crash.
+  async showPrivacyOptions() {
+    try {
+      if (AdProvider.showPrivacyOptions) return await AdProvider.showPrivacyOptions();
+    } catch (e) {
+      // fall through to graceful failure
+    }
+    return { ok: false, reason: 'unavailable' };
+  },
 };

@@ -30,6 +30,8 @@ export default function MainMenu({
   onToggleSound,
   onLeetUnlock,
   onLeaderboard,
+  onLegal,
+  onOpenPurchaseTerms,
   drunkStrength = 1,
   drunkLevel = 0.5,
   onSetDrunk,
@@ -112,6 +114,9 @@ export default function MainMenu({
         </Pressable>
         <Pressable testID="sound-toggle" onPress={onToggleSound} style={styles.sound}>
           <Text style={styles.soundTxt}>{soundEnabled ? 'SOUND: ON' : 'SOUND: OFF'}</Text>
+        </Pressable>
+        <Pressable testID="legal-privacy-button" onPress={() => { Audio.ui(); onLegal && onLegal(); }} style={styles.legalPill}>
+          <Text style={styles.soundTxt}>LEGAL & PRIVACY</Text>
         </Pressable>
       </View>
 
@@ -219,6 +224,9 @@ export default function MainMenu({
               <Button testID="easy-buy-confirm" label={busy ? '…' : `BUY — ${easyPrice}`} variant="primary" onPress={() => runEasyPurchase('success')} style={styles.sheetBtn} />
             )}
             <Button testID="easy-buy-cancel" label="CANCEL" variant="ghost" small onPress={closeEasySheet} style={styles.sheetBtn} />
+            <Pressable testID="easy-purchase-terms" onPress={() => { Audio.ui(); onOpenPurchaseTerms && onOpenPurchaseTerms(); }} style={styles.termsLink}>
+              <Text style={styles.termsLinkTxt}>Purchase terms</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -244,6 +252,7 @@ const styles = StyleSheet.create({
   codeMark: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
   sound: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  legalPill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   soundTxt: { fontFamily: FONT, color: COLORS.textDim, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
   titleWrap: { marginTop: 2, alignItems: 'center' },
   title: {
@@ -287,4 +296,6 @@ const styles = StyleSheet.create({
   devTag: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, letterSpacing: 2, marginTop: 14 },
   sheetBtn: { width: '100%', marginTop: 10 },
   simRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
+  termsLink: { marginTop: 12, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  termsLinkTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 1, textDecorationLine: 'underline' },
 });
