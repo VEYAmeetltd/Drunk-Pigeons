@@ -5,6 +5,7 @@ import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
 import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
 import { FONT } from '../ui/theme';
+import { familyForObstacle, variantFor, FAMILIES } from '../game/obstacleAppearance';
 
 const OW = CONFIG.OBSTACLE_WIDTH;
 
@@ -111,11 +112,12 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
   const topH = geom.topH;
   const bottomY = topH + geom.gap;
   const bottomH = Math.max(0, groundY - bottomY);
+  const family = familyForObstacle(geom.spawnIndex, theme.id);
   return (
     <Animated.View style={[styles.abs, { left: 0, top: 0, width: OW }, style]} pointerEvents="none">
-      <Building height={topH} theme={theme} seed={geom.seed} flip />
+      <Building height={topH} theme={theme} seed={geom.seed} family={family} flip />
       <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }}>
-        <Building height={bottomH} theme={theme} seed={geom.seed} ground />
+        <Building height={bottomH} theme={theme} seed={geom.seed} family={family} ground />
       </View>
     </Animated.View>
   );
@@ -123,7 +125,7 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
 
 // Procedurally varied cartoon building. Collision is unchanged (fixed OW column);
 // everything here is decorative and never intercepts touches.
-function Building({ height, theme, seed, flip, ground }) {
+function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDING }) {
   const cfg = useMemo(() => {
     const r = rngFrom((seed || 1) + (flip ? 7777 : 13));
     const bricks = theme.brickPalette && theme.brickPalette.length ? theme.brickPalette : [theme.obstacle];
@@ -156,6 +158,11 @@ function Building({ height, theme, seed, flip, ground }) {
   if (height <= 0) return null;
   const edgeStyle = flip ? { bottom: -3 } : { top: -3 };
   const accent = theme.accent;
+  const gapEdge = flip ? 'bottom' : 'top'; // edge facing the navigable gap
+  const anchorEdge = flip ? 'top' : 'bottom'; // edge anchored to screen edge (safe for extensions)
+  // Families with heavy bespoke art hide the default window grid to avoid clutter.
+  const showWindows = family === FAMILIES.BUILDING || family === FAMILIES.BUNTING
+    || family === FAMILIES.ROOFTOP || family === FAMILIES.BILLBOARD;
 
   return (
     <View style={[obStyles.col, { height, backgroundColor: cfg.body, borderColor: cfg.border }]}>
@@ -206,6 +213,7 @@ function Building({ height, theme, seed, flip, ground }) {
       )}
 
       {/* windows */}
+      {showWindows && (
       <View style={[obStyles.windows, ground && { justifyContent: 'flex-start' }]}>
         {rows.map((_, i) => (
           <View key={i} style={[obStyles.winRow, { gap: cfg.cols === 2 ? 8 : 0 }]}>
@@ -226,6 +234,17 @@ function Building({ height, theme, seed, flip, ground }) {
           </View>
         ))}
       </View>
+      )}
+
+      {/* family appearance overlay — confined to the column rect, never solid */}
+      <FamilyDecor
+        family={family}
+        height={height}
+        theme={theme}
+        seed={seed}
+        gapEdge={gapEdge}
+        anchorEdge={anchorEdge}
+      />
 
       {/* street-level shop / pub / door on the ground building */}
       {cfg.front && (
@@ -242,6 +261,95 @@ function Building({ height, theme, seed, flip, ground }) {
       )}
     </View>
   );
+}
+
+// Purely decorative per-family art. Everything is absolutely positioned INSIDE the
+// column rect (0..height x 0..OW) so it can never alter collision or block the gap.
+function FamilyDecor({ family, height, theme, seed, gapEdge, anchorEdge }) {
+  const v = variantFor(seed);
+  const accent = theme.accent;
+  const metal = '#9aa3ad';
+  const dark = theme.obstacleDark || '#333';
+  if (family === FAMILIES.SCAFFOLD) {
+    const planks = Math.max(1, Math.floor(height / 46));
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={{ position: 'absolute', left: 6, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.9 }} />
+        <View style={{ position: 'absolute', right: 6, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.9 }} />
+        <View style={{ position: 'absolute', left: OW / 2 - 2, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.7 }} />
+        {Array.from({ length: planks }).map((_, i) => (
+          <View key={i} style={{ position: 'absolute', left: 4, right: 4, top: 20 + i * 46, height: 6, backgroundColor: '#caa15a', opacity: 0.95 }} />
+        ))}
+        <View style={{ position: 'absolute', [gapEdge]: 6, left: 4, width: 6, height: 6, backgroundColor: accent }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.CRANE) {
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={{ position: 'absolute', left: OW / 2 - 3, top: 0, bottom: 0, width: 6, backgroundColor: '#f2c14e' }} />
+        {/* jib on the anchored (non-gap) edge — sits in free sky above the route */}
+        <View style={{ position: 'absolute', [anchorEdge]: 14, left: 4, right: 4, height: 6, backgroundColor: '#f2c14e' }} />
+        <View style={{ position: 'absolute', [anchorEdge]: 20, right: 8, width: 3, height: Math.min(26, height * 0.3), backgroundColor: dark }} />
+        <View style={{ position: 'absolute', [anchorEdge]: 20 + Math.min(26, height * 0.3), right: 6, width: 8, height: 6, backgroundColor: dark }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.BILLBOARD) {
+    const bh = Math.min(64, Math.max(34, height * 0.4));
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={{ position: 'absolute', [gapEdge]: 10, left: 6, right: 6, height: bh, backgroundColor: '#fff', borderWidth: 3, borderColor: accent, borderRadius: 3, justifyContent: 'center', paddingHorizontal: 6 }}>
+          <View style={{ height: 5, backgroundColor: accent, marginBottom: 4, width: '80%' }} />
+          <View style={{ height: 5, backgroundColor: dark, marginBottom: 4, width: '55%' }} />
+          <View style={{ height: 5, backgroundColor: v > 0.5 ? theme.window : accent, width: '70%' }} />
+        </View>
+        <View style={{ position: 'absolute', [gapEdge]: 0, left: 14, width: 4, height: 12, backgroundColor: dark }} />
+        <View style={{ position: 'absolute', [gapEdge]: 0, right: 14, width: 4, height: 12, backgroundColor: dark }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.RAILWAY) {
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 10, backgroundColor: dark }} />
+        <View style={{ position: 'absolute', [gapEdge]: 10, left: 0, right: 0, height: 6, backgroundColor: metal, opacity: 0.85 }} />
+        {[0, 1].map((i) => (
+          <View key={i} style={{ position: 'absolute', [gapEdge]: 18, left: 8 + i * (OW / 2), width: OW / 2 - 14, height: Math.min(40, height * 0.4), borderTopLeftRadius: 18, borderTopRightRadius: 18, backgroundColor: dark, opacity: 0.6 }} />
+        ))}
+      </View>
+    );
+  }
+  if (family === FAMILIES.ROOFTOP) {
+    return (
+      <View style={[obStyles.edgeDeco, { [gapEdge]: -2 }]} pointerEvents="none">
+        <View style={{ position: 'absolute', [gapEdge]: 4, left: 8, width: 20, height: 18, borderRadius: 4, backgroundColor: '#7d8790' }} />
+        <View style={{ position: 'absolute', [gapEdge]: 22, left: 12, width: 12, height: 8, backgroundColor: '#5f676e' }} />
+        <View style={{ position: 'absolute', [gapEdge]: 4, right: 10, width: 8, height: 14, backgroundColor: dark, borderRadius: 2 }} />
+        <View style={{ position: 'absolute', [gapEdge]: 4, right: 24, width: 8, height: 20, backgroundColor: dark, borderRadius: 2 }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.PARK) {
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={{ position: 'absolute', left: OW / 2 - 5, top: 8, bottom: 8, width: 10, backgroundColor: '#6b4a2b', borderRadius: 4 }} />
+        <View style={{ position: 'absolute', [gapEdge]: 6, left: 2, width: OW - 4, height: OW - 4, borderRadius: (OW - 4) / 2, backgroundColor: '#3f9d4a' }} />
+        <View style={{ position: 'absolute', [gapEdge]: 2, left: 10, width: OW - 24, height: OW - 24, borderRadius: (OW - 24) / 2, backgroundColor: '#57b562', opacity: 0.9 }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.BUNTING) {
+    const n = 5;
+    return (
+      <View style={{ position: 'absolute', [gapEdge]: 6, left: 4, right: 4, height: 16, flexDirection: 'row', justifyContent: 'space-between' }} pointerEvents="none">
+        {Array.from({ length: n }).map((_, i) => (
+          <View key={i} style={{ width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 10, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: i % 2 ? accent : theme.window }} />
+        ))}
+      </View>
+    );
+  }
+  return null;
 }
 
 function Roof({ roof, flip, color }) {

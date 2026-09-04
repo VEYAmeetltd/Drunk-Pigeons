@@ -11,6 +11,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
 
   const pigeon = { x: 0, y: 0, vy: 0 };
   const obstacles = [];
+  let spawnIndex = 0;
   const chips = [];
   const feathers = [];
 
@@ -94,6 +95,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     o.gap = gap;
     o.kind = Math.floor(Math.random() * 4);
     o.seed = Math.floor(Math.random() * 1000000);
+    o.spawnIndex = spawnIndex++;
     o.passed = false;
     dirtyObstacles.add(idx);
     generateChipsForObstacle(idx);
@@ -319,6 +321,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     pintT = 0;
     distance = 0;
     running = false;
+    spawnIndex = 0;
     dead = false;
     invincibleUntil = 0;
     usedRevive = false;
@@ -623,6 +626,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       gap: o.gap,
       kind: o.kind,
       seed: o.seed,
+      spawnIndex: o.spawnIndex,
     }));
   }
 
