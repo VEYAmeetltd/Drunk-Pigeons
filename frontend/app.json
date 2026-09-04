@@ -8,6 +8,7 @@
     "backgroundColor": "#1b1030",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": ["**/*"],
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.intiesltd.drunkpigeons",
