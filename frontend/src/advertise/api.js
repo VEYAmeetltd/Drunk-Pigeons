@@ -1,6 +1,7 @@
-// Advertising + admin API client. Uses the SAME ORIGIN as the loaded page on web so the
-// HttpOnly SameSite=Strict admin session cookie is sent (the /api path is routed to the
-// backend by the ingress on the same host). Falls back to env on native.
+// Advertising submission API client. Uses the same origin as the loaded page on web
+// (falls back to env on native). There is no admin client here — enquiry review/
+// moderation happens exclusively through the protected backend-to-backend integration
+// API consumed by the INTIES Admin Dashboard, never from this app's frontend.
 import { Platform } from 'react-native';
 
 function base() {
@@ -23,23 +24,4 @@ export const AdvertiseAPI = {
   async submit(formData) {
     return fetch(apiUrl('/advertise/submit'), { method: 'POST', body: formData, credentials: 'include' });
   },
-};
-
-export const AdminAPI = {
-  login: (username, password) =>
-    fetch(apiUrl('/admin/login'), {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }),
-  logout: () => fetch(apiUrl('/admin/logout'), { method: 'POST', credentials: 'include' }),
-  me: () => fetch(apiUrl('/admin/me'), { credentials: 'include' }),
-  list: () => fetch(apiUrl('/admin/enquiries'), { credentials: 'include' }),
-  setStatus: (id, status) =>
-    fetch(apiUrl(`/admin/enquiries/${id}/status`), {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    }),
-  artworkUrl: (id) => apiUrl(`/admin/enquiries/${id}/artwork`),
 };

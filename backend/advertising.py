@@ -1,29 +1,27 @@
-"""Advertising enquiry submission + private artwork storage + authenticated admin review.
+"""Advertising enquiry submission + private artwork storage.
 
 Security posture (see product spec):
 - Artwork is stored PRIVATELY on the backend under a cryptographically-random filename.
-  It is only retrievable through an authenticated admin endpoint that verifies the admin
-  session on every request. The filesystem path / storage name / a public URL are never
-  exposed, and directory listing is not possible.
+  It is only retrievable through the protected server-to-server integration API
+  (see service_advertising.py). The filesystem path / storage name / a public URL are
+  never exposed, and directory listing is not possible.
 - Uploads are validated by real MIME + magic-byte signature (not the filename), capped at
   10MB, restricted to png/jpeg/webp/pdf, stored as untrusted/quarantined content. Accepted
   raster images are re-encoded server-side (strips metadata / active content); PDFs are only
   ever served as downloadable attachments, never executed or embedded.
-- Admin auth: bcrypt password hash only (never plaintext); short-lived server session via a
-  Secure, HttpOnly, SameSite=Strict cookie; login + submit rate limiting; generic errors.
+- There is no human-facing admin login in this service. All enquiry review/moderation
+  happens through the authenticated backend-to-backend integration API consumed by the
+  INTIES Admin Dashboard (service_advertising.py), never exposed to ordinary users.
 """
 import os
 import re
 import io
-import base64
 import secrets
 import time
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timezone
 
-import bcrypt
 import requests
-from fastapi import APIRouter, Request, Response, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 
 try:
@@ -34,7 +32,7 @@ except Exception:  # pragma: no cover
 
 router = APIRouter(prefix="/api")
 
-# ---- private object storage (Emergent) — access ONLY via authenticated admin route ----
+# ---- private object storage (Emergent) — access ONLY via the protected integration API ----
 APP_NAME = "drunk-pigeons"
 _STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = _STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
@@ -70,8 +68,6 @@ def get_object(path):
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 MAX_BYTES = 10 * 1024 * 1024  # 10MB
-SESSION_HOURS = 2
-SESSION_COOKIE = "dp_admin"
 TERMS_VERSION = "1.0"
 
 # Single source of truth for advertising packages (id -> spec).
@@ -84,7 +80,23 @@ PACKAGES = {
 }
 PACKAGE_ORDER = ["test-flight", "city-run", "full-pigeon", "exclusive-14", "exclusive-30"]
 
-STATUSES = ["pending", "approved", "rejected", "payment_sent", "paid", "scheduled", "completed"]
+# Two independent state fields (see service_advertising.py for the moderation API):
+#  workflow_status  — campaign lifecycle progression.
+#  moderation_status — WHY an enquiry was rejected, if it was (kept separate so campaign
+#                       progression never gets tangled up with moderation reasoning).
+WORKFLOW_STATUSES = ["pending", "approved", "rejected", "payment_sent", "paid", "scheduled", "completed"]
+MODERATION_STATUSES = ["unreviewed", "cleared", "spam", "explicit_abuse", "suspected_illegal"]
+# Legal server-side workflow transitions. Enforced by service_advertising.set_status;
+# the moderation endpoint may force straight to "rejected" from any non-terminal state.
+WORKFLOW_TRANSITIONS = {
+    "pending": {"approved", "rejected"},
+    "approved": {"payment_sent", "rejected"},
+    "payment_sent": {"paid", "rejected"},
+    "paid": {"scheduled"},
+    "scheduled": {"completed"},
+    "rejected": set(),
+    "completed": set(),
+}
 
 # accepted type -> (list of magic-byte checks, canonical extension)
 _SIG = {
@@ -125,58 +137,6 @@ def client_ip(request: Request):
     if xff:
         return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
-
-# ---------------- admin auth ----------------
-
-def _load_admin_hash():
-    b64 = os.environ.get("ADMIN_PW_HASH_B64", "")
-    if not b64:
-        return None
-    try:
-        return base64.b64decode(b64)
-    except Exception:
-        return None
-
-def verify_admin_password(plain):
-    h = _load_admin_hash()
-    if not h:
-        return False
-    try:
-        return bcrypt.checkpw(plain.encode("utf-8"), h)
-    except Exception:
-        return False
-
-async def _mongo(request: Request):
-    return request.app.state.db
-
-async def require_admin(request: Request):
-    token = request.cookies.get(SESSION_COOKIE)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    db = request.app.state.db
-    sess = await db.admin_sessions.find_one({"token": token})
-    if not sess:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    exp = sess.get("expires_at")
-    if exp is None:
-        raise HTTPException(status_code=401, detail="Session expired")
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) > exp:
-        await db.admin_sessions.delete_one({"token": token})
-        raise HTTPException(status_code=401, detail="Session expired")
-    return sess
-
-def _set_session_cookie(response: Response, token: str):
-    response.set_cookie(
-        key=SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=SESSION_HOURS * 3600,
-        path="/",
-    )
 
 # ---------------- public: packages ----------------
 
@@ -276,7 +236,14 @@ async def submit_enquiry(
         "artwork_size": len(stored_bytes),
         "terms_version": TERMS_VERSION,
         "terms_accepted_at": now,
-        "status": "pending",
+        "workflow_status": "pending",
+        "moderation_status": "unreviewed",
+        "rejection_reason": None,
+        "moderated_at": None,
+        "moderated_by": None,
+        "escalation_reference": None,
+        "artwork_restricted": False,
+        "artwork_deleted_at": None,
         "email_notification_status": "not_configured",
         "created_at": now,
         "ip": ip,
@@ -293,73 +260,9 @@ async def submit_enquiry(
 
     return {"ok": True, "id": doc["id"], "email_notification_status": doc["email_notification_status"]}
 
-# ---------------- admin ----------------
+# ---------------- shared serialisation (used by the protected integration API too) ----------------
 
-@router.post("/admin/login")
-async def admin_login(request: Request, response: Response):
-    ip = client_ip(request)
-    if not rate_limit(f"login:{ip}", limit=10, window_s=600):
-        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
-    body = await request.json()
-    username = str(body.get("username", "")).strip()
-    password = str(body.get("password", ""))
-    expected_user = os.environ.get("ADMIN_USERNAME", "admin")
-    ok = username == expected_user and verify_admin_password(password)
-    if not ok:
-        raise HTTPException(status_code=401, detail="Incorrect username or password.")
-    db = request.app.state.db
-    token = secrets.token_urlsafe(32)
-    await db.admin_sessions.insert_one({
-        "token": token,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS),
-    })
-    _set_session_cookie(response, token)
-    return {"ok": True}
-
-@router.post("/admin/logout")
-async def admin_logout(request: Request, response: Response):
-    token = request.cookies.get(SESSION_COOKIE)
-    if token:
-        await request.app.state.db.admin_sessions.delete_one({"token": token})
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return {"ok": True}
-
-@router.get("/admin/me")
-async def admin_me(sess=Depends(require_admin)):
-    return {"ok": True}
-
-@router.post("/admin/rotate-password")
-async def admin_rotate(request: Request, response: Response, sess=Depends(require_admin)):
-    body = await request.json()
-    current = str(body.get("currentPassword", ""))
-    new = str(body.get("newPassword", ""))
-    if not verify_admin_password(current):
-        raise HTTPException(status_code=401, detail="Current password is incorrect.")
-    if len(new) < 10:
-        raise HTTPException(status_code=422, detail="New password must be at least 10 characters.")
-    new_hash = bcrypt.hashpw(new.encode("utf-8"), bcrypt.gensalt(rounds=12))
-    # persist the new hash (base64) so it survives restarts; only the hash is stored
-    b64 = base64.b64encode(new_hash).decode()
-    env_path = Path(__file__).parent / ".env"
-    lines = env_path.read_text().splitlines()
-    out, seen = [], False
-    for ln in lines:
-        if ln.startswith("ADMIN_PW_HASH_B64="):
-            out.append(f"ADMIN_PW_HASH_B64={b64}")
-            seen = True
-        else:
-            out.append(ln)
-    if not seen:
-        out.append(f"ADMIN_PW_HASH_B64={b64}")
-    env_path.write_text("\n".join(out) + "\n")
-    os.environ["ADMIN_PW_HASH_B64"] = b64
-    # invalidate all other sessions
-    await request.app.state.db.admin_sessions.delete_many({})
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return {"ok": True}
-
-def _public_enquiry(doc):
+def public_enquiry(doc):
     return {
         "id": doc["id"],
         "name": doc["name"],
@@ -371,58 +274,15 @@ def _public_enquiry(doc):
         "artwork_original_name": doc.get("artwork_original_name", ""),
         "artwork_mime": doc.get("artwork_mime", ""),
         "artwork_size": doc.get("artwork_size", 0),
+        "artwork_restricted": bool(doc.get("artwork_restricted", False)),
         "terms_version": doc.get("terms_version", ""),
-        "status": doc.get("status", "pending"),
+        "workflow_status": doc.get("workflow_status", "pending"),
+        "moderation_status": doc.get("moderation_status", "unreviewed"),
+        "rejection_reason": doc.get("rejection_reason"),
+        "moderated_at": doc.get("moderated_at").isoformat() if doc.get("moderated_at") else None,
+        "moderated_by": doc.get("moderated_by"),
+        "escalation_reference": doc.get("escalation_reference"),
         "email_notification_status": doc.get("email_notification_status", "not_configured"),
         "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
     }
 
-@router.get("/admin/enquiries")
-async def list_enquiries(request: Request, sess=Depends(require_admin)):
-    db = request.app.state.db
-    cur = db.ad_enquiries.find({}).sort("created_at", -1).limit(500)
-    items = [_public_enquiry(d) async for d in cur]
-    return {"enquiries": items, "statuses": STATUSES}
-
-@router.get("/admin/enquiries/{eid}")
-async def get_enquiry(eid: str, request: Request, sess=Depends(require_admin)):
-    doc = await request.app.state.db.ad_enquiries.find_one({"id": eid})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Not found")
-    return _public_enquiry(doc)
-
-@router.get("/admin/enquiries/{eid}/artwork")
-async def get_artwork(eid: str, request: Request, sess=Depends(require_admin)):
-    doc = await request.app.state.db.ad_enquiries.find_one({"id": eid})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Not found")
-    stored = doc.get("artwork_storage_path", "")
-    if not stored or ".." in stored:
-        raise HTTPException(status_code=404, detail="Not found")
-    mime = doc.get("artwork_mime", "application/octet-stream")
-    try:
-        data, _ct = get_object(stored)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Not found")
-    # PDFs (and everything) are served as downloadable attachments, never executed/embedded
-    disposition = "attachment" if mime == "application/pdf" else "inline"
-    safe_mime = mime if mime in _SIG else "application/octet-stream"
-    headers = {
-        "Content-Disposition": f'{disposition}; filename="artwork.{_SIG.get(mime, (None, "bin"))[1]}"',
-        "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store",
-    }
-    return StreamingResponse(io.BytesIO(data), media_type=safe_mime, headers=headers)
-
-@router.post("/admin/enquiries/{eid}/status")
-async def set_status(eid: str, request: Request, sess=Depends(require_admin)):
-    body = await request.json()
-    status = str(body.get("status", ""))
-    if status not in STATUSES:
-        raise HTTPException(status_code=422, detail="Invalid status")
-    res = await request.app.state.db.ad_enquiries.update_one(
-        {"id": eid}, {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}}
-    )
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Not found")
-    return {"ok": True, "status": status}

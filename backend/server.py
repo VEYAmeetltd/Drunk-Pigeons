@@ -32,10 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# expose the db + mount the advertising/admin router
+# expose the db + mount the advertising (public submit) + service integration routers
 app.state.db = db
 from advertising import router as advertising_router  # noqa: E402
+from service_advertising import router as service_advertising_router  # noqa: E402
 app.include_router(advertising_router)
+app.include_router(service_advertising_router)
 
 # ---- Gameplay-derived anti-cheat constants (must mirror the client engine) ----
 SPEED_MAX = 380.0            # px/sec cap
@@ -183,8 +185,13 @@ async def _startup():
     await _migrate_unique_nicknames()
     await db.ad_enquiries.create_index("id", unique=True)
     await db.ad_enquiries.create_index([("created_at", -1)])
-    await db.admin_sessions.create_index("token", unique=True)
-    await db.admin_sessions.create_index("expires_at", expireAfterSeconds=0)
+    await db.ad_enquiries.create_index([("workflow_status", 1)])
+    await db.ad_enquiries.create_index([("moderation_status", 1)])
+    await db.ad_admin_audit.create_index([("enquiry_id", 1), ("at", -1)])
+    # Service-to-service replay protection: each (key_id, nonce) pair usable exactly once,
+    # auto-expired shortly after the signing timestamp window closes.
+    await db.service_nonces.create_index([("key_id", 1), ("nonce", 1)], unique=True)
+    await db.service_nonces.create_index("createdAt", expireAfterSeconds=600)
     try:
         from advertising import init_storage
         init_storage()

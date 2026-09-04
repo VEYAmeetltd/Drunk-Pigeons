@@ -1,0 +1,42 @@
+{
+  "summary": "Full backend + frontend regression for the admin-dashboard-removal + INTIES signed integration API. Wrote 25 pytest cases against the deployed preview URL covering HMAC auth (happy path, missing headers, tampered signature, stale timestamp, replay), public advertise flow (packages, submit, no admin routes), list/detail/filter with no storage-path leak, workflow transition graph (valid full walk + illegal 409), moderation (clear/spam/explicit_abuse/suspected_illegal → artwork 403), artwork streaming, audit trail, and rate-limit trigger. All 25 backend tests PASS. Frontend regression via Playwright confirms /advertise deep-link still renders the enquiry form and /admin deep-link now falls back to the main menu with zero login UI.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "advertising.rate_limit", "issue": "In-memory rate limiter (_hits dict) resets on backend restart and is per-process; not durable and won't scale to multiple workers. Fine for single-uvicorn preview but worth noting for prod."},
+      {"endpoint": "/api/service/advertising/whoami", "issue": "Generic 401 detail 'Not authenticated' is correct (fails closed) — verified no info leak about which check failed."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "React Native Web console", "issues": ["Multiple deprecation warnings ('shadow*', 'textShadow*', 'props.pointerEvents') — cosmetic, not blocking, but should be migrated to boxShadow/textShadow/style.pointerEvents."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_service_integration.py",
+    "/app/test_reports/pytest/service_integration.xml"
+  ],
+  "action_items": [
+    "Optional: migrate React Native Web deprecated style props (shadow*, textShadow*, pointerEvents) to their new equivalents to silence console warnings.",
+    "Optional: if the service will run behind multiple workers/pods, replace the in-memory rate_limit() with a Mongo/Redis-backed counter so limits are actually enforced globally."
+  ],
+  "critical_code_review_comments": [
+    "service_auth.require_service_auth correctly fails closed with a generic 401 for every failure mode (missing header, unknown key_id, bad ts, bad nonce format, bad signature, replay) — good.",
+    "Replay protection uses a unique index on (key_id, nonce) with TTL — verified working via test_replay_rejected.",
+    "public_enquiry() correctly omits artwork_storage_path — verified explicitly in test_detail_no_storage_path_leak.",
+    "Workflow transitions are enforced server-side via WORKFLOW_TRANSITIONS graph; moderation actions that force 'rejected' bypass the graph intentionally, which is documented in advertising.py comments.",
+    "suspected_illegal correctly sets artwork_restricted=true and the /artwork endpoint returns 403 after that — verified.",
+    "Frontend App.js has zero remaining references to AdminScreen; /admin URL correctly falls through the deep-link matcher to the main menu (no dormant/hidden admin route)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_service_integration.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Read INTIES_SERVICE_KEY_ID / INTIES_SERVICE_SECRET from /app/backend/.env at test time (never hardcoded, never printed). No human admin login exists.",
+  "seed_data_creation": "Test creates enquiries with TEST_ prefixed name/email/business via public /api/advertise/submit; these persist in ad_enquiries. No cleanup performed as they don't affect functionality and preserve audit history.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend rate limits are in-memory: if you re-run test_service_integration.py within an hour and hit 429 on public submit or 429 on signed whoami, do 'sudo supervisorctl restart backend' first. All INTIES integration endpoints live under /api/service/advertising/ and require HMAC-SHA256 signed headers (X-Service-Key/X-Timestamp/X-Nonce/X-Signature). See /app/tests/service_auth_smoke.py for the canonical signing recipe."
+}

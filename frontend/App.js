@@ -8,7 +8,6 @@ import GameScreen from './src/screens/GameScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import AdvertiseScreen from './src/screens/AdvertiseScreen';
-import AdminScreen from './src/screens/AdminScreen';
 import LegalDocumentViewer from './src/legal/LegalDocumentViewer';
 import { getLegalDoc } from './src/legal/legalDocuments';
 import { Persistence } from './src/storage/persistence';
@@ -42,14 +41,13 @@ export default function App() {
   }, []);
 
   const [screen, setScreen] = useState(() => {
-    // Web deep-links: /admin and /advertise map to their screens on first load.
+    // Web deep-link: /advertise maps to its screen on first load.
     if (typeof window !== 'undefined' && window.location) {
       const p = (window.location.pathname || '') + (window.location.hash || '');
-      if (/admin/i.test(p)) return 'admin';
       if (/advertise/i.test(p)) return 'advertise';
     }
     return 'menu';
-  }); // menu | game | pigeons | leaderboard | legal | advertise | admin
+  }); // menu | game | pigeons | leaderboard | legal | advertise
   // Legal document overlay (docId) — shown above any screen so opening "Purchase
   // terms" / rules links never resets store/menu/leaderboard state.
   const [legalOverlay, setLegalOverlay] = useState(null);
@@ -401,9 +399,6 @@ export default function App() {
             onBack={() => setScreen('legal')}
             onOpenTerms={() => openLegalDoc('advertising-booking')}
           />
-        )}
-        {screen === 'admin' && (
-          <AdminScreen onExit={() => setScreen('menu')} />
         )}
         {screen === 'pigeons' && (
           <PigeonsScreen
