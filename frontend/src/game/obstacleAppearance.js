@@ -1,7 +1,7 @@
 // Reusable obstacle-APPEARANCE system. It only decides how the (unchanged) obstacle
-// geometry is *drawn* — collision hitboxes are never affected. Families are grouped
-// into short contiguous "sections" so the scenery transitions naturally between
-// rooftops, construction, commercial streets, railway areas and parks.
+// geometry is *drawn* — collision hitboxes are never affected. ~40% of obstacle pairs
+// are genuinely non-building structures (crane, scaffolding, railway gantry, tree,
+// billboard) with bold, unmistakable silhouettes; the rest are varied cartoon buildings.
 
 export const FAMILIES = {
   BUILDING: 'building',
@@ -9,12 +9,10 @@ export const FAMILIES = {
   CRANE: 'crane',
   BILLBOARD: 'billboard',
   RAILWAY: 'railway',
-  ROOFTOP: 'rooftop', // chimneys / vents / water tanks
+  ROOFTOP: 'rooftop', // (legacy) chimneys / vents — building-attached decor
   PARK: 'park', // trees / park structures
-  BUNTING: 'bunting', // washing lines / bunting
+  BUNTING: 'bunting', // (legacy) washing lines / bunting — building-attached decor
 };
-
-// Per-map non-building family pools are defined below (NON_BUILDING).
 
 function hash(n) {
   let a = (n | 0) >>> 0;
@@ -26,24 +24,43 @@ function hash(n) {
   return a >>> 0;
 }
 
+// Per-map pools of STRONG, bold non-building silhouettes (all rendered by
+// StructureColumn). Every entry is unmistakably not a rectangular building.
 const NON_BUILDING = {
   day: [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.RAILWAY],
-  night: [FAMILIES.ROOFTOP, FAMILIES.RAILWAY, FAMILIES.BILLBOARD, FAMILIES.SCAFFOLD, FAMILIES.CRANE],
-  dusk: [FAMILIES.BILLBOARD, FAMILIES.SCAFFOLD, FAMILIES.ROOFTOP, FAMILIES.BUNTING, FAMILIES.PARK],
-  easy: [FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.ROOFTOP],
+  night: [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.RAILWAY, FAMILIES.BILLBOARD],
+  dusk: [FAMILIES.BILLBOARD, FAMILIES.SCAFFOLD, FAMILIES.PARK, FAMILIES.CRANE, FAMILIES.RAILWAY],
+  easy: [FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.CRANE],
 };
 
-// Deterministic family for an obstacle. ~40% are genuinely non-building. A forced
-// non-building backbone on every 5th pair guarantees: a non-building within the first
-// six pairs (index 2) and never more than four building-only pairs in a row. Depends
-// only on spawn order + map id => stable per run and run-validation compatible.
+// Deterministic "is this spawn index a non-building?" — forced backbone every 4th pair
+// (caps consecutive building-only pairs at 3 and guarantees a non-building by index 2)
+// plus ~20% extra => ~40% non-building overall. Depends only on spawn order => stable
+// per run and compatible with server run-validation.
+function isNonBuilding(k) {
+  const forced = (k % 4) === 2;
+  const extra = (hash(k * 2654435761) % 5) === 0;
+  return forced || extra;
+}
+
+// 0-based rank of a non-building spawn among all non-buildings so far. Memoised so long
+// runs stay cheap (obsGeom is only recomputed on (re)spawn, but this keeps it O(1) amortised).
+const _rankCache = [];
+function nonBuildingRank(i) {
+  if (_rankCache.length === 0) _rankCache[0] = isNonBuilding(0) ? 1 : 0;
+  for (let k = _rankCache.length; k <= i; k++) {
+    _rankCache[k] = _rankCache[k - 1] + (isNonBuilding(k) ? 1 : 0);
+  }
+  return _rankCache[i] - 1;
+}
+
+// Deterministic family for an obstacle. Non-buildings rotate through the map pool by
+// rank so distinct silhouettes appear quickly (3+ within the first 12 pairs).
 export function familyForObstacle(spawnIndex, mapId) {
   const i = spawnIndex || 0;
   const nb = NON_BUILDING[mapId] || NON_BUILDING.day;
-  const forced = (i % 5) === 2; // backbone (caps consecutive buildings at 4, hits i=2)
-  const extra = (hash(i * 2654435761) % 5) === 0; // ~20% more => ~40% total
-  if (!(forced || extra)) return FAMILIES.BUILDING;
-  return nb[hash(i * 40503 + 7) % nb.length];
+  if (!isNonBuilding(i)) return FAMILIES.BUILDING;
+  return nb[nonBuildingRank(i) % nb.length];
 }
 
 // A stable 0..1 variant value for within-family art variety (seeded per obstacle).

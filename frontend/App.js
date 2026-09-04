@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions, BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import MainMenu from './src/screens/MainMenu';
@@ -58,6 +58,19 @@ export default function App() {
   // portrait-locked via app.json; this covers mobile web.
   const { width: winW, height: winH } = useWindowDimensions();
   const phoneLandscape = winW > winH && Math.min(winW, winH) < 500;
+
+  // Android hardware Back: close an open overlay first, else return to the menu from any
+  // sub-screen (so Back never abruptly quits the app or loses a run). Falls through to
+  // the OS default (exit) only when already on the menu. No-op on web/iOS.
+  useEffect(() => {
+    const onBack = () => {
+      if (legalOverlay) { closeLegalDoc(); return true; }
+      if (screen !== 'menu') { setScreen('menu'); return true; }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [screen, legalOverlay, closeLegalDoc]);
   const [state, setState] = useState({
     bestScore: 0,
     bestDistance: 0,
@@ -239,18 +252,23 @@ export default function App() {
       ...(state.removeAdsOwned ? [PRODUCTS.removeads] : []),
     ];
     const restored = await Billing.restore(owned);
-    const ids = Object.entries(PRODUCTS.pigeons)
-      .filter(([, pid]) => restored.includes(pid))
-      .map(([id]) => id);
-    const bundle = restored.includes(PRODUCTS.bundle);
-    const easy = restored.includes(PRODUCTS.mode.easy);
-    const removeAds = restored.includes(PRODUCTS.removeads);
+    const restoredSet = new Set(restored);
+    // Restore only ever ADDS entitlements — a failed/empty/partial result must never
+    // strip a purchase the player already owns locally.
     setState((s) => {
-      Persistence.setPurchased(ids);
-      Persistence.setBundle(bundle);
-      Persistence.setEasyMode(easy);
-      Persistence.setRemoveAds(removeAds);
-      return { ...s, purchasedPigeons: ids, bundleOwned: bundle, easyModeOwned: easy, removeAdsOwned: removeAds };
+      const pigeons = new Set(s.purchasedPigeons);
+      Object.entries(PRODUCTS.pigeons).forEach(([id, pid]) => {
+        if (restoredSet.has(pid)) pigeons.add(id);
+      });
+      const purchasedPigeons = [...pigeons];
+      const bundleOwned = s.bundleOwned || restoredSet.has(PRODUCTS.bundle);
+      const easyModeOwned = s.easyModeOwned || restoredSet.has(PRODUCTS.mode.easy);
+      const removeAdsOwned = s.removeAdsOwned || restoredSet.has(PRODUCTS.removeads);
+      Persistence.setPurchased(purchasedPigeons);
+      Persistence.setBundle(bundleOwned);
+      Persistence.setEasyMode(easyModeOwned);
+      Persistence.setRemoveAds(removeAdsOwned);
+      return { ...s, purchasedPigeons, bundleOwned, easyModeOwned, removeAdsOwned };
     });
     return restored.length;
   }, [state.purchasedPigeons, state.bundleOwned, state.easyModeOwned, state.removeAdsOwned]);

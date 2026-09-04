@@ -158,7 +158,7 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   if (height <= 0) return null;
   const gapEdgeB = flip ? 'bottom' : 'top';
   const anchorEdgeB = flip ? 'top' : 'bottom';
-  const STRUCT = [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.RAILWAY, FAMILIES.PARK];
+  const STRUCT = [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.RAILWAY, FAMILIES.PARK, FAMILIES.BILLBOARD];
   if (STRUCT.includes(family)) {
     return (
       <StructureColumn
@@ -173,11 +173,8 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   }
   const edgeStyle = flip ? { bottom: -3 } : { top: -3 };
   const accent = theme.accent;
-  const gapEdge = flip ? 'bottom' : 'top'; // edge facing the navigable gap
-  const anchorEdge = flip ? 'top' : 'bottom'; // edge anchored to screen edge (safe for extensions)
-  // Families with heavy bespoke art hide the default window grid to avoid clutter.
-  const showWindows = family === FAMILIES.BUILDING || family === FAMILIES.BUNTING
-    || family === FAMILIES.ROOFTOP || family === FAMILIES.BILLBOARD;
+  // Only genuine buildings reach here (non-building families render as StructureColumn).
+  const showWindows = true;
 
   return (
     <View style={[obStyles.col, { height, backgroundColor: cfg.body, borderColor: cfg.border }]}>
@@ -251,16 +248,6 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
       </View>
       )}
 
-      {/* family appearance overlay — confined to the column rect, never solid */}
-      <FamilyDecor
-        family={family}
-        height={height}
-        theme={theme}
-        seed={seed}
-        gapEdge={gapEdge}
-        anchorEdge={anchorEdge}
-      />
-
       {/* street-level shop / pub / door on the ground building */}
       {cfg.front && (
         <View style={obStyles.front} pointerEvents="none">
@@ -278,165 +265,193 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   );
 }
 
-// Distinct non-building structures. Each FILLS the column footprint (so the collision
-// rect still matches the visible solid — no invisible open-space collisions) but with a
-// clearly non-building silhouette/texture. Thin extensions (crane jib) sit on the
-// anchored screen-edge, never in the flight path.
+// Distinct non-building structures with BOLD, unmistakable silhouettes.
+//
+// Fairness/collision: the engine's hitbox is a solid rect spanning the full OW column
+// from the screen edge to the gap edge (same as buildings) — difficulty is unchanged.
+// So the OPAQUE solid body of every structure fills that exact column (visible solid ==
+// hitbox — you never die on empty air). The recognisable "signature" parts (crane jib,
+// billboard panel, tree canopy bumps, scaffold poles) project OUTWARD on the anchored
+// screen-edge side into genuinely free sky and carry NO hidden hitbox, so they can only
+// ever be forgiving, never unfair. The wrapper does NOT clip, so those signatures show.
 function StructureColumn({ family, height, theme, seed, gapEdge, anchorEdge }) {
-  const v = variantFor(seed);
-  const accent = theme.accent;
-  const dark = theme.obstacleDark || '#3a3a3a';
-  if (family === FAMILIES.CRANE) {
-    const braces = Math.max(2, Math.floor(height / 40));
-    return (
-      <View style={[obStyles.col, { height, backgroundColor: '#e0a83a', borderColor: '#a97a19', overflow: 'hidden' }]}>
-        <View style={{ position: 'absolute', left: 3, top: 0, bottom: 0, width: 5, backgroundColor: '#a97a19' }} />
-        <View style={{ position: 'absolute', right: 3, top: 0, bottom: 0, width: 5, backgroundColor: '#a97a19' }} />
-        {Array.from({ length: braces }).map((_, i) => (
-          <View key={i} style={{ position: 'absolute', left: 4, right: 4, top: 6 + i * 40, height: 3, backgroundColor: '#a97a19', transform: [{ rotate: i % 2 ? '18deg' : '-18deg' }] }} />
-        ))}
-        {/* horizontal jib on the anchored (screen-edge) side, in free sky */}
-        <View style={{ position: 'absolute', [anchorEdge]: 10, left: -OW * 0.5, width: OW * 1.4, height: 7, backgroundColor: '#e0a83a', borderWidth: 1, borderColor: '#a97a19' }} />
-        <View style={{ position: 'absolute', [anchorEdge]: 17, left: -OW * 0.4, width: 3, height: 20, backgroundColor: dark }} />
-      </View>
-    );
-  }
-  if (family === FAMILIES.SCAFFOLD) {
-    const decks = Math.max(2, Math.floor(height / 42));
-    return (
-      <View style={[obStyles.col, { height, backgroundColor: 'rgba(60,70,80,0.55)', borderColor: '#6b7480', overflow: 'hidden' }]}>
-        {/* netting tint */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: v > 0.5 ? 'rgba(70,150,90,0.18)' : 'rgba(40,90,150,0.18)' }]} />
-        <View style={{ position: 'absolute', left: 5, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
-        <View style={{ position: 'absolute', left: OW / 2 - 2, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
-        <View style={{ position: 'absolute', right: 5, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
-        {Array.from({ length: decks }).map((_, i) => (
-          <React.Fragment key={i}>
-            <View style={{ position: 'absolute', left: 3, right: 3, top: 14 + i * 42, height: 6, backgroundColor: '#c79a54' }} />
-            <View style={{ position: 'absolute', left: 6, right: 6, top: 20 + i * 42, height: 3, backgroundColor: '#8a93a0', transform: [{ rotate: '20deg' }] }} />
-          </React.Fragment>
-        ))}
-        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 8, backgroundColor: '#e2b53a' }} />
-      </View>
-    );
-  }
-  if (family === FAMILIES.RAILWAY) {
-    return (
-      <View style={[obStyles.col, { height, backgroundColor: '#5b636b', borderColor: '#3c4249', overflow: 'hidden' }]}>
-        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 12, backgroundColor: '#3c4249' }} />
-        {Array.from({ length: Math.max(2, Math.floor(height / 34)) }).map((_, i) => (
-          <React.Fragment key={i}>
-            <View style={{ position: 'absolute', left: 2, right: 2, top: 16 + i * 34, height: 4, backgroundColor: '#7f8892', transform: [{ rotate: '24deg' }] }} />
-            <View style={{ position: 'absolute', left: 2, right: 2, top: 16 + i * 34, height: 4, backgroundColor: '#7f8892', transform: [{ rotate: '-24deg' }] }} />
-          </React.Fragment>
-        ))}
-        <View style={{ position: 'absolute', left: 4, top: 0, bottom: 0, width: 5, backgroundColor: '#40474e' }} />
-        <View style={{ position: 'absolute', right: 4, top: 0, bottom: 0, width: 5, backgroundColor: '#40474e' }} />
-      </View>
-    );
-  }
-  // PARK — a big leafy tree filling the footprint (trunk + canopy), clearly not a tower.
-  const cw = OW - 2;
+  if (family === FAMILIES.CRANE) return <CraneStruct height={height} anchorEdge={anchorEdge} />;
+  if (family === FAMILIES.SCAFFOLD) return <ScaffoldStruct height={height} seed={seed} anchorEdge={anchorEdge} />;
+  if (family === FAMILIES.RAILWAY) return <RailwayStruct height={height} anchorEdge={anchorEdge} />;
+  if (family === FAMILIES.BILLBOARD) return <BillboardStruct height={height} theme={theme} seed={seed} anchorEdge={anchorEdge} />;
+  return <TreeStruct height={height} gapEdge={gapEdge} anchorEdge={anchorEdge} />;
+}
+
+const structStyles = StyleSheet.create({
+  wrap: { width: OW, height: '100%' },
+  body: { position: 'absolute', left: 0, top: 0, width: OW, borderRadius: 4, overflow: 'hidden' },
+});
+
+// Yellow tower crane: opaque lattice mast (full column) + projecting jib + hook in free sky.
+function CraneStruct({ height, anchorEdge }) {
+  const dark = '#8a6410';
+  const yellow = '#f2b41c';
+  const jibY = 8; // distance from the anchored screen edge to the jib beam
+  const rungs = Math.max(3, Math.floor(height / 26));
   return (
-    <View style={[obStyles.col, { height, backgroundColor: 'transparent', borderWidth: 0 }]}>
-      <View style={{ position: 'absolute', left: OW / 2 - 6, top: 0, bottom: 0, width: 12, backgroundColor: '#6b4a2b', borderRadius: 5 }} />
-      <View style={{ position: 'absolute', [gapEdge]: 0, left: 1, width: cw, height: cw, borderRadius: cw / 2, backgroundColor: '#2f8b3c' }} />
-      <View style={{ position: 'absolute', [gapEdge]: cw * 0.35, left: 4, width: cw - 6, height: cw - 6, borderRadius: cw / 2, backgroundColor: '#49ab54' }} />
-      <View style={{ position: 'absolute', [gapEdge]: cw * 0.7, left: 10, width: cw - 20, height: cw - 20, borderRadius: cw / 2, backgroundColor: '#5fc06b' }} />
-      {/* fill the rest of the trunk column so silhouette stays honest for tall pieces */}
-      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 6, width: 12, top: 0, bottom: 0, backgroundColor: '#6b4a2b' }} />
-      <View style={{ position: 'absolute', [gapEdge]: 4, left: OW / 2 - 3, width: 6, height: 6, backgroundColor: accent, borderRadius: 3 }} />
+    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
+      {/* opaque mast body = the hitbox */}
+      <View style={[structStyles.body, { height, backgroundColor: yellow, borderWidth: 2, borderColor: dark }]}>
+        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
+          <SvgRect x="3" y="0" width="4" height={height} fill={dark} />
+          <SvgRect x={OW - 7} y="0" width="4" height={height} fill={dark} />
+          {Array.from({ length: rungs }).map((_, i) => {
+            const y = 4 + i * 26;
+            return (
+              <G key={i}>
+                <Line x1="5" y1={y} x2={OW - 5} y2={y + 20} stroke={dark} strokeWidth="3" />
+                <Line x1={OW - 5} y1={y} x2="5" y2={y + 20} stroke={dark} strokeWidth="3" />
+                <Line x1="5" y1={y} x2={OW - 5} y2={y} stroke={dark} strokeWidth="2.5" />
+              </G>
+            );
+          })}
+        </Svg>
+      </View>
+      {/* operator cab at the anchored end */}
+      <View style={{ position: 'absolute', [anchorEdge]: jibY - 2, left: OW / 2 - 9, width: 18, height: 16, backgroundColor: '#e9e2c9', borderWidth: 2, borderColor: dark, borderRadius: 2 }} />
+      {/* long horizontal jib projecting into free sky (no hitbox) */}
+      <View style={{ position: 'absolute', [anchorEdge]: jibY, left: -OW * 0.95, width: OW * 1.9, height: 9, backgroundColor: yellow, borderWidth: 2, borderColor: dark }} />
+      {/* short counter-jib block */}
+      <View style={{ position: 'absolute', [anchorEdge]: jibY - 6, right: -OW * 0.35, width: 14, height: 12, backgroundColor: dark, borderRadius: 2 }} />
+      {/* hook cable + hook hanging from the far end of the jib */}
+      <View style={{ position: 'absolute', [anchorEdge]: jibY + 9, left: -OW * 0.75, width: 2, height: 22, backgroundColor: dark }} />
+      <View style={{ position: 'absolute', [anchorEdge]: jibY + 31, left: -OW * 0.75 - 3, width: 8, height: 6, backgroundColor: dark, borderRadius: 2 }} />
     </View>
   );
 }
 
-// Purely decorative per-family art. Everything is absolutely positioned INSIDE the
-// column rect (0..height x 0..OW) so it can never alter collision or block the gap.
-function FamilyDecor({ family, height, theme, seed, gapEdge, anchorEdge }) {
+// Scaffolding-clad building: opaque muted body + dense pole/plank/brace frame + green net + poles jutting past the top.
+function ScaffoldStruct({ height, seed, anchorEdge }) {
+  const v = variantFor(seed);
+  const pole = '#c9ccd1';
+  const plankC = '#c79a54';
+  const decks = Math.max(2, Math.floor(height / 40));
+  const net = v > 0.5 ? 'rgba(78,168,102,0.30)' : 'rgba(64,132,196,0.28)';
+  return (
+    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
+      {/* opaque building carcass = the hitbox */}
+      <View style={[structStyles.body, { height, backgroundColor: '#8b8f96', borderWidth: 2, borderColor: '#5c6068' }]}>
+        {/* safety netting panel */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: net }]} />
+        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
+          {/* vertical standards */}
+          <SvgRect x="5" y="0" width="4" height={height} fill={pole} />
+          <SvgRect x={OW / 2 - 2} y="0" width="4" height={height} fill={pole} />
+          <SvgRect x={OW - 9} y="0" width="4" height={height} fill={pole} />
+          {Array.from({ length: decks }).map((_, i) => {
+            const y = 12 + i * 40;
+            return (
+              <G key={i}>
+                {/* ledger + wooden plank deck */}
+                <SvgRect x="4" y={y} width={OW - 8} height="3" fill={pole} />
+                <SvgRect x="4" y={y + 4} width={OW - 8} height="6" fill={plankC} />
+                {/* cross brace */}
+                <Line x1="7" y1={y + 10} x2={OW - 7} y2={y + 40} stroke={pole} strokeWidth="2.5" />
+                <Line x1={OW - 7} y1={y + 10} x2="7" y2={y + 40} stroke={pole} strokeWidth="2.5" />
+              </G>
+            );
+          })}
+        </Svg>
+      </View>
+      {/* poles + a warning banner jutting past the anchored edge */}
+      <View style={{ position: 'absolute', [anchorEdge]: -10, left: 5, width: 4, height: 14, backgroundColor: pole }} />
+      <View style={{ position: 'absolute', [anchorEdge]: -10, left: OW / 2 - 2, width: 4, height: 14, backgroundColor: pole }} />
+      <View style={{ position: 'absolute', [anchorEdge]: -10, left: OW - 9, width: 4, height: 14, backgroundColor: pole }} />
+      <View style={{ position: 'absolute', [anchorEdge]: -6, left: 3, right: 3, height: 6, backgroundColor: '#e2b53a' }} />
+    </View>
+  );
+}
+
+// Railway steel gantry / girder bridge: opaque steel body + triangulated truss + rivets + signal gantry beam.
+function RailwayStruct({ height, anchorEdge }) {
+  const steel = '#5f6870';
+  const dk = '#363c42';
+  const lt = '#828b94';
+  const bays = Math.max(3, Math.floor(height / 30));
+  return (
+    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
+      <View style={[structStyles.body, { height, backgroundColor: steel, borderWidth: 2, borderColor: dk }]}>
+        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
+          {/* flange chords */}
+          <SvgRect x="4" y="0" width="6" height={height} fill={dk} />
+          <SvgRect x={OW - 10} y="0" width="6" height={height} fill={dk} />
+          {Array.from({ length: bays }).map((_, i) => {
+            const y = i * 30;
+            return (
+              <G key={i}>
+                <Line x1="8" y1={y} x2={OW - 8} y2={y + 30} stroke={lt} strokeWidth="4" />
+                <Line x1={OW - 8} y1={y} x2="8" y2={y + 30} stroke={lt} strokeWidth="4" />
+                <Line x1="6" y1={y} x2={OW - 6} y2={y} stroke={dk} strokeWidth="3" />
+                <Circle cx="7" cy={y} r="1.6" fill={lt} />
+                <Circle cx={OW - 7} cy={y} r="1.6" fill={lt} />
+              </G>
+            );
+          })}
+        </Svg>
+      </View>
+      {/* signal gantry cross-beam projecting past both edges into free sky */}
+      <View style={{ position: 'absolute', [anchorEdge]: 6, left: -OW * 0.35, width: OW * 1.7, height: 8, backgroundColor: dk }} />
+      <View style={{ position: 'absolute', [anchorEdge]: 0, left: -OW * 0.28, width: 6, height: 6, borderRadius: 3, backgroundColor: '#e0483a' }} />
+      <View style={{ position: 'absolute', [anchorEdge]: 0, right: -OW * 0.28, width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ad06a' }} />
+    </View>
+  );
+}
+
+// Roadside billboard / sign gantry: opaque support leg (full column) + big ad panel projecting into free sky.
+function BillboardStruct({ height, theme, seed, anchorEdge }) {
   const v = variantFor(seed);
   const accent = theme.accent;
-  const metal = '#9aa3ad';
   const dark = theme.obstacleDark || '#333';
-  if (family === FAMILIES.SCAFFOLD) {
-    const planks = Math.max(1, Math.floor(height / 46));
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ position: 'absolute', left: 6, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.9 }} />
-        <View style={{ position: 'absolute', right: 6, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.9 }} />
-        <View style={{ position: 'absolute', left: OW / 2 - 2, top: 0, bottom: 0, width: 4, backgroundColor: metal, opacity: 0.7 }} />
-        {Array.from({ length: planks }).map((_, i) => (
-          <View key={i} style={{ position: 'absolute', left: 4, right: 4, top: 20 + i * 46, height: 6, backgroundColor: '#caa15a', opacity: 0.95 }} />
-        ))}
-        <View style={{ position: 'absolute', [gapEdge]: 6, left: 4, width: 6, height: 6, backgroundColor: accent }} />
+  const post = '#6a6f77';
+  const panelH = 46;
+  const panelW = OW * 1.7;
+  return (
+    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
+      {/* opaque support structure = the hitbox */}
+      <View style={[structStyles.body, { height, backgroundColor: post, borderWidth: 2, borderColor: '#464b52' }]}>
+        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
+          <SvgRect x={OW / 2 - 8} y="0" width="6" height={height} fill="#4d525a" />
+          <SvgRect x={OW / 2 + 2} y="0" width="6" height={height} fill="#4d525a" />
+          {Array.from({ length: Math.max(2, Math.floor(height / 34)) }).map((_, i) => (
+            <Line key={i} x1={OW / 2 - 6} y1={10 + i * 34} x2={OW / 2 + 8} y2={30 + i * 34} stroke="#3b3f45" strokeWidth="3" />
+          ))}
+        </Svg>
       </View>
-    );
-  }
-  if (family === FAMILIES.CRANE) {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ position: 'absolute', left: OW / 2 - 3, top: 0, bottom: 0, width: 6, backgroundColor: '#f2c14e' }} />
-        {/* jib on the anchored (non-gap) edge — sits in free sky above the route */}
-        <View style={{ position: 'absolute', [anchorEdge]: 14, left: 4, right: 4, height: 6, backgroundColor: '#f2c14e' }} />
-        <View style={{ position: 'absolute', [anchorEdge]: 20, right: 8, width: 3, height: Math.min(26, height * 0.3), backgroundColor: dark }} />
-        <View style={{ position: 'absolute', [anchorEdge]: 20 + Math.min(26, height * 0.3), right: 6, width: 8, height: 6, backgroundColor: dark }} />
+      {/* the big billboard panel projecting into free sky on the anchored edge */}
+      <View style={{ position: 'absolute', [anchorEdge]: 4, left: (OW - panelW) / 2, width: panelW, height: panelH, backgroundColor: '#ffffff', borderWidth: 3, borderColor: dark, borderRadius: 4, padding: 6, justifyContent: 'center' }}>
+        <View style={{ height: 8, width: '85%', backgroundColor: accent, marginBottom: 5, borderRadius: 2 }} />
+        <View style={{ height: 7, width: '60%', backgroundColor: v > 0.5 ? theme.window : '#e0483a', marginBottom: 5, borderRadius: 2 }} />
+        <View style={{ height: 7, width: '72%', backgroundColor: dark, borderRadius: 2 }} />
       </View>
-    );
-  }
-  if (family === FAMILIES.BILLBOARD) {
-    const bh = Math.min(64, Math.max(34, height * 0.4));
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ position: 'absolute', [gapEdge]: 10, left: 6, right: 6, height: bh, backgroundColor: '#fff', borderWidth: 3, borderColor: accent, borderRadius: 3, justifyContent: 'center', paddingHorizontal: 6 }}>
-          <View style={{ height: 5, backgroundColor: accent, marginBottom: 4, width: '80%' }} />
-          <View style={{ height: 5, backgroundColor: dark, marginBottom: 4, width: '55%' }} />
-          <View style={{ height: 5, backgroundColor: v > 0.5 ? theme.window : accent, width: '70%' }} />
-        </View>
-        <View style={{ position: 'absolute', [gapEdge]: 0, left: 14, width: 4, height: 12, backgroundColor: dark }} />
-        <View style={{ position: 'absolute', [gapEdge]: 0, right: 14, width: 4, height: 12, backgroundColor: dark }} />
-      </View>
-    );
-  }
-  if (family === FAMILIES.RAILWAY) {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 10, backgroundColor: dark }} />
-        <View style={{ position: 'absolute', [gapEdge]: 10, left: 0, right: 0, height: 6, backgroundColor: metal, opacity: 0.85 }} />
-        {[0, 1].map((i) => (
-          <View key={i} style={{ position: 'absolute', [gapEdge]: 18, left: 8 + i * (OW / 2), width: OW / 2 - 14, height: Math.min(40, height * 0.4), borderTopLeftRadius: 18, borderTopRightRadius: 18, backgroundColor: dark, opacity: 0.6 }} />
-        ))}
-      </View>
-    );
-  }
-  if (family === FAMILIES.ROOFTOP) {
-    return (
-      <View style={[obStyles.edgeDeco, { [gapEdge]: -2 }]} pointerEvents="none">
-        <View style={{ position: 'absolute', [gapEdge]: 4, left: 8, width: 20, height: 18, borderRadius: 4, backgroundColor: '#7d8790' }} />
-        <View style={{ position: 'absolute', [gapEdge]: 22, left: 12, width: 12, height: 8, backgroundColor: '#5f676e' }} />
-        <View style={{ position: 'absolute', [gapEdge]: 4, right: 10, width: 8, height: 14, backgroundColor: dark, borderRadius: 2 }} />
-        <View style={{ position: 'absolute', [gapEdge]: 4, right: 24, width: 8, height: 20, backgroundColor: dark, borderRadius: 2 }} />
-      </View>
-    );
-  }
-  if (family === FAMILIES.PARK) {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ position: 'absolute', left: OW / 2 - 5, top: 8, bottom: 8, width: 10, backgroundColor: '#6b4a2b', borderRadius: 4 }} />
-        <View style={{ position: 'absolute', [gapEdge]: 6, left: 2, width: OW - 4, height: OW - 4, borderRadius: (OW - 4) / 2, backgroundColor: '#3f9d4a' }} />
-        <View style={{ position: 'absolute', [gapEdge]: 2, left: 10, width: OW - 24, height: OW - 24, borderRadius: (OW - 24) / 2, backgroundColor: '#57b562', opacity: 0.9 }} />
-      </View>
-    );
-  }
-  if (family === FAMILIES.BUNTING) {
-    const n = 5;
-    return (
-      <View style={{ position: 'absolute', [gapEdge]: 6, left: 4, right: 4, height: 16, flexDirection: 'row', justifyContent: 'space-between' }} pointerEvents="none">
-        {Array.from({ length: n }).map((_, i) => (
-          <View key={i} style={{ width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 10, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: i % 2 ? accent : theme.window }} />
-        ))}
-      </View>
-    );
-  }
-  return null;
+    </View>
+  );
+}
+
+// Big leafy tree / topiary: the OPAQUE full-width green foliage fills the whole column
+// (so the solid hitbox stays honest — no dying on empty air beside a thin trunk), with a
+// bushy rounded canopy at the gap edge and a brown trunk detail drawn on top at the base.
+function TreeStruct({ height, gapEdge, anchorEdge }) {
+  const trunk = '#7a5330';
+  const cw = OW;
+  const canopyH = Math.min(height, OW + 22);
+  return (
+    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
+      {/* full-width foliage body = the honest hitbox */}
+      <View style={{ position: 'absolute', left: 0, top: 0, width: cw, height, backgroundColor: '#2f8b3c', borderTopLeftRadius: 8, borderTopRightRadius: 8, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
+      {/* brown trunk detail on the anchored (screen-edge) base, drawn over the foliage */}
+      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 7, width: 14, height: Math.min(height, height * 0.5), backgroundColor: trunk }} />
+      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 7, width: 5, height: Math.min(height, height * 0.5), backgroundColor: '#5f4025' }} />
+      {/* bushy rounded leaf layers near the gap edge (never poke past the gap edge line) */}
+      <View style={{ position: 'absolute', [gapEdge]: 0, left: -4, width: cw + 8, height: canopyH, borderRadius: cw, backgroundColor: '#3fa24c' }} />
+      <View style={{ position: 'absolute', [gapEdge]: canopyH * 0.22, left: 4, width: cw - 8, height: canopyH * 0.66, borderRadius: cw, backgroundColor: '#57bd62' }} />
+      <View style={{ position: 'absolute', [gapEdge]: canopyH * 0.4, left: 12, width: cw - 26, height: canopyH * 0.38, borderRadius: cw, backgroundColor: '#74d17e', opacity: 0.92 }} />
+    </View>
+  );
 }
 
 function Roof({ roof, flip, color }) {

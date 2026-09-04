@@ -175,7 +175,9 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   };
   cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
     Audio.crash();
-    const isNewBest = sc > bestScore || dist > bestDistance;
+    // bestDistance is already mode-aware (Easy uses the silly best); only compare the
+    // score against the global best in normal mode so Easy runs can't show a false best.
+    const isNewBest = dist > bestDistance || (mode !== 'easy' && sc > bestScore);
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
     setOver({ message: randomDeathMessage(), score: sc, chips: ch, distance: dist, isNewBest });
     Ads.registerDeath();
