@@ -7,6 +7,8 @@ import PigeonsScreen from './src/screens/PigeonsScreen';
 import GameScreen from './src/screens/GameScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import LegalScreen from './src/screens/LegalScreen';
+import AdvertiseScreen from './src/screens/AdvertiseScreen';
+import AdminScreen from './src/screens/AdminScreen';
 import LegalDocumentViewer from './src/legal/LegalDocumentViewer';
 import { getLegalDoc } from './src/legal/legalDocuments';
 import { Persistence } from './src/storage/persistence';
@@ -39,7 +41,15 @@ export default function App() {
     meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
   }, []);
 
-  const [screen, setScreen] = useState('menu'); // menu | game | pigeons | leaderboard | legal
+  const [screen, setScreen] = useState(() => {
+    // Web deep-links: /admin and /advertise map to their screens on first load.
+    if (typeof window !== 'undefined' && window.location) {
+      const p = (window.location.pathname || '') + (window.location.hash || '');
+      if (/admin/i.test(p)) return 'admin';
+      if (/advertise/i.test(p)) return 'advertise';
+    }
+    return 'menu';
+  }); // menu | game | pigeons | leaderboard | legal | advertise | admin
   // Legal document overlay (docId) — shown above any screen so opening "Purchase
   // terms" / rules links never resets store/menu/leaderboard state.
   const [legalOverlay, setLegalOverlay] = useState(null);
@@ -65,6 +75,7 @@ export default function App() {
   useEffect(() => {
     const onBack = () => {
       if (legalOverlay) { closeLegalDoc(); return true; }
+      if (screen === 'advertise') { setScreen('legal'); return true; }
       if (screen !== 'menu') { setScreen('menu'); return true; }
       return false;
     };
@@ -382,7 +393,17 @@ export default function App() {
           <LegalScreen
             onOpenDoc={openLegalDoc}
             onBack={() => setScreen('menu')}
+            onOpenAdvertise={() => setScreen('advertise')}
           />
+        )}
+        {screen === 'advertise' && (
+          <AdvertiseScreen
+            onBack={() => setScreen('legal')}
+            onOpenTerms={() => openLegalDoc('advertising-booking')}
+          />
+        )}
+        {screen === 'admin' && (
+          <AdminScreen onExit={() => setScreen('menu')} />
         )}
         {screen === 'pigeons' && (
           <PigeonsScreen

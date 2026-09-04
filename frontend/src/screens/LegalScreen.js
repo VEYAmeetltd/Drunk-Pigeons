@@ -1,12 +1,12 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, BackHandler, Linking } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import { LEGAL_DOCUMENTS } from '../legal/legalDocuments';
 import { Audio } from '../audio/audio';
 
-export default function LegalScreen({ onOpenDoc, onBack }) {
+export default function LegalScreen({ onOpenDoc, onBack, onOpenAdvertise }) {
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -15,25 +15,6 @@ export default function LegalScreen({ onOpenDoc, onBack }) {
     });
     return () => sub.remove();
   }, [onBack]);
-
-  // "ADVERTISE IN DRUNK PIGEONS" — opens a pre-filled email. We never collect any of
-  // these details inside the app; the enquiry is composed entirely in the mail client.
-  const openAdvertise = useCallback(() => {
-    Audio.ui();
-    const subject = 'Drunk Pigeons advertising enquiry';
-    const body = [
-      'Business name:',
-      'Contact name:',
-      'Product or service:',
-      'Website:',
-      'Proposed advertisement:',
-      'Preferred campaign dates:',
-      'Intended countries:',
-      '',
-    ].join('\n\n');
-    const url = `mailto:support@intiesltd.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    Linking.openURL(url).catch(() => {});
-  }, []);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom', 'left', 'right']} testID="legal-screen">
@@ -61,16 +42,16 @@ export default function LegalScreen({ onOpenDoc, onBack }) {
           </Pressable>
         ))}
 
-        <Text style={styles.sectionLabel}>SUPPORT</Text>
+        <Text style={styles.sectionLabel}>PIGEON PROMOTIONS</Text>
         <Pressable
           testID="advertise-enquiry-button"
-          onPress={openAdvertise}
+          onPress={() => { Audio.ui(); onOpenAdvertise && onOpenAdvertise(); }}
           style={[styles.row, styles.adRow]}
           accessibilityRole="button"
         >
           <View style={styles.rowText}>
-            <Text style={styles.rowTitle} numberOfLines={2}>ADVERTISE IN DRUNK PIGEONS</Text>
-            <Text style={styles.rowMeta}>Email our team about sponsored billboards</Text>
+            <Text style={styles.rowTitle} numberOfLines={2}>GET YOUR BRAND AIRBORNE</Text>
+            <Text style={styles.rowMeta}>Land your advert on billboards across Drunk Pigeons</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>

@@ -32,6 +32,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# expose the db + mount the advertising/admin router
+app.state.db = db
+from advertising import router as advertising_router  # noqa: E402
+app.include_router(advertising_router)
+
 # ---- Gameplay-derived anti-cheat constants (must mirror the client engine) ----
 SPEED_MAX = 380.0            # px/sec cap
 PIXELS_PER_METRE = 24.0
@@ -176,6 +181,15 @@ async def _startup():
     # Global case-insensitive username uniqueness. Backfill + de-duplicate any
     # legacy collisions BEFORE creating the unique index so it cannot fail.
     await _migrate_unique_nicknames()
+    await db.ad_enquiries.create_index("id", unique=True)
+    await db.ad_enquiries.create_index([("created_at", -1)])
+    await db.admin_sessions.create_index("token", unique=True)
+    await db.admin_sessions.create_index("expires_at", expireAfterSeconds=0)
+    try:
+        from advertising import init_storage
+        init_storage()
+    except Exception:
+        pass
 
 
 async def _migrate_unique_nicknames():

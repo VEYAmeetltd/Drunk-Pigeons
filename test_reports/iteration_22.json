@@ -1,0 +1,23 @@
+{
+  "summary": "E2E tested Pigeon Promotions frontend flow (deep-link /advertise) and cookie-based admin flow (/admin). All required test cases pass: advertise screen loads without mailto, form validation & disabled submit, package selector single-select with correct exclusive prices (£250/14d, £500/30d), web file upload via hidden input[type=file] with PNG, .txt rejection message, terms overlay preserving form state, happy path submit -> success 'YOUR PIGEON HAS LANDED' -> back-to-docs returns to Legal & Privacy showing 'GET YOUR BRAND AIRBORNE' card. Admin: wrong password shows generic error, correct login shows dashboard, list contains submitted enquiry, detail shows artwork (image), status change to 'approved' persists after nav back, logout returns to login and reload does not restore session.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "advertising.py line 161: session expiry timezone check uses a Python conditional-expression order-of-ops that always evaluates the datetime comparison regardless of tzinfo — logic works incidentally but is fragile/hard-to-read; consider explicit tz normalisation.",
+    "AdvertiseScreen submit() dependency array omits 'accept' state; useCallback closure captures initial accept value. In practice `submit` is re-created on other deps changing, but ideally include `accept`."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (curl-verified + live submit ok)", "frontend": "100%"},
+  "test_credentials": "admin creds provided in review request; NOT persisted.",
+  "seed_data_creation": "One live enquiry created via UI submission (Test Pigeon E2E, testpigeon+e2e@example.com, full-pigeon, tiny PNG). Marked status=approved in admin during testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Deep links /advertise and /admin work. Terms overlay from ad-terms-link is a full-screen overlay that must be dismissed via '‹ BACK' before submit; form state is preserved. Admin session is HttpOnly cookie; use same-origin (chip-pigeon.preview.emergentagent.com).",
+  "rca of the issue": "N/A — no issues found."
+}

@@ -378,3 +378,28 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 ### Remaining
 - The planned FINAL launch-readiness code audit (now to include the billboard system) is still outstanding.
 - Real ad-category restriction enforcement is a policy/process control (documented) — no third-party campaigns are actually live (house ads + fictional demos only).
+
+## Update 49 (2026-06) — Pigeon Promotions: advertising-enquiry flow + private artwork + Admin Dashboard
+### Frontend route/nav
+- New in-app screens: 'advertise' and 'admin' (state-based nav in App.js). Web deep-links: <base>/advertise and <base>/admin. Android hardware-back from advertise -> legal (documents); admin -> menu.
+- Legal & Privacy: section renamed SUPPORT -> "PIGEON PROMOTIONS"; card now "GET YOUR BRAND AIRBORNE" / "Land your advert on billboards across Drunk Pigeons"; tapping NAVIGATES to /advertise (mailto fully removed).
+### Advertise form (src/screens/AdvertiseScreen.js)
+- Heading PIGEON PROMOTIONS, title GET YOUR BRAND AIRBORNE, intro copy. Fields: Name*, Email* (validated), Business (opt), Package* (5 selectable cards, single-select, yellow border + checkmark), Artwork* uploader, Additional message (opt), Advertising Booking Terms checkbox* (link opens the new terms doc overlay without losing the form).
+- Packages: Test Flight 1 map/7d/£25; City Run all/14d/£50; Full Pigeon all/30d/£90; Exclusive Pigeon all/14d/£250; Exclusive Pigeon all/30d/£500 (14d & 30d are separate options). Copy notes selecting a package does not reserve the campaign.
+- Web artwork picker: a hidden <input type=file accept=png/jpeg/webp/pdf> created on tap -> native file picker; shows image preview / PDF box, filename, size, REPLACE, REMOVE. Native uses expo-document-picker (EAS build). 10MB + type enforced client-side too.
+- Submit disabled until name+valid email+package+valid artwork+terms; loading state prevents double submit; friendly inline error messages (exact copy per spec); fields preserved on recoverable failure. Success screen "YOUR PIGEON HAS LANDED" + BACK TO DOCUMENTS (no mailto).
+### Backend (src/backend/advertising.py, wired in server.py)
+- POST /api/advertise/submit (multipart, public, rate-limited 8/hr/IP): sanitises text, validates email, package, terms; validates artwork by real magic-byte signature + declared MIME + 10MB; re-encodes raster images via Pillow (strips metadata/active content); stores PRIVATELY in Emergent Object Storage under key drunk-pigeons/ad-artwork/<random>.<ext>; saves enquiry doc (status pending, email_notification_status not_configured). Never returns the storage key.
+- GET /api/advertise/packages (public single source of truth).
+- Admin (cookie session): POST /api/admin/login (bcrypt hash from ADMIN_PW_HASH_B64 env, rate-limited 10/10min, generic errors, sets Secure+HttpOnly+SameSite=Strict cookie, server session in Mongo admin_sessions w/ TTL + 2h expiry), POST /api/admin/logout, GET /api/admin/me, GET /api/admin/enquiries, GET /api/admin/enquiries/{id}, GET /api/admin/enquiries/{id}/artwork (auth-only; streams bytes from object storage with Content-Disposition attachment for PDFs, X-Content-Type-Options nosniff, no-store; never a public URL), POST /api/admin/enquiries/{id}/status (pending/approved/rejected/payment_sent/paid/scheduled/completed), POST /api/admin/rotate-password (persists new bcrypt hash to .env, invalidates sessions).
+- Admin auth: bcrypt hash ONLY (base64 in backend .env). Bootstrap password generated once and shown to the owner only — never stored in DB/source/logs/test_credentials.
+- Notification isolated in src/backend/notify.py (returns 'not_configured'; Resend can be added later without changing the submission flow; must never expose a public artwork URL).
+### Frontend API client (src/advertise/api.js)
+- Uses window.location.origin on web so the admin session cookie is same-origin (the app + /api share the host via ingress).
+### New legal doc
+- legalDocuments.js: added "Advertising Booking Terms & Campaign Order" (id 'advertising-booking', v1.0): enquiry != reservation, no payment at enquiry, package list incl. Exclusive £250/£500, prohibited-content list, artwork ownership, data. Privacy Policy already discloses sponsorship + aggregate impressions.
+### Verified
+- Backend curl: valid submit ok; SVG-as-PNG -> 415; bad email -> friendly msg; admin 401 without cookie; login sets cookie; list/artwork/status work; storage key never exposed. Object storage upload/stream works.
+- testing_agent iteration_22.json: 100% backend + frontend. Full UI journey (validation, single-select packages w/ £250/£500, web upload, .txt rejection, terms overlay preserving form, happy-path submit -> success -> back to docs) and cookie admin flow (wrong pw generic error, login, list contains submitted enquiry, detail + artwork preview, status persist, logout invalidates session) all pass. Fixed a fragile session-expiry tz check.
+### Remaining
+- Real email provider (Resend) not wired (email_notification_status=not_configured by design). Real malware scanning (ClamAV/managed) required pre-production before accepting public uploads (files remain quarantined until they pass). Native file picker (expo-document-picker) validated only on web preview here.

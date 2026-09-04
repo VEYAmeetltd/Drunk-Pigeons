@@ -1173,6 +1173,37 @@ export const LEGAL_DOCUMENTS = [
         "text": "INTIES LTD. is registered in England and Wales under company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Contact: gordon@intiesltd.com."
       }
     ]
+  },
+  {
+    "id": "advertising-booking",
+    "title": "Advertising Booking Terms & Campaign Order",
+    "version": "1.0",
+    "lastUpdated": "4 September 2026",
+    "sections": [
+      { "type": "heading", "text": "1. What this document is" },
+      { "type": "paragraph", "text": "These Advertising Booking Terms govern advertising ENQUIRIES submitted through DRUNK PIGEONS' \"Pigeon Promotions\" form. Submitting an enquiry and ticking the acceptance box does NOT reserve a campaign, guarantee placement, or take any payment. It is a request for us to review your proposed artwork and details." },
+      { "type": "heading", "text": "2. Enquiry, review and approval" },
+      { "type": "paragraph", "text": "We review each enquiry manually. We may approve, reject or request changes at our discretion. A binding booking only exists once we issue an approved Campaign Order and you complete the separate payment process referenced in that order. Until then no space is held for you." },
+      { "type": "heading", "text": "3. Packages" },
+      { "type": "list", "items": [
+        "TEST FLIGHT — one map, 7 days — £25.",
+        "CITY RUN — all maps, 14 days — £50.",
+        "FULL PIGEON — all maps, 30 days — £90.",
+        "EXCLUSIVE PIGEON — 14 days, £250: you are the ONLY paid billboard sponsor across all maps for the period.",
+        "EXCLUSIVE PIGEON — 30 days, £500: exclusive paid sponsor across all maps for the period."
+      ] },
+      { "type": "paragraph", "text": "Prices are indicative and confirmed on the Campaign Order. \"Exclusive\" means no other PAID third-party sponsor billboard runs across the maps during your booked period; DRUNK PIGEONS house adverts may still appear." },
+      { "type": "heading", "text": "4. Artwork and your responsibilities" },
+      { "type": "paragraph", "text": "You confirm you own or are licensed to use all submitted artwork and that it does not infringe any third-party rights. Accepted formats: PNG, JPG, WEBP or PDF up to 10MB. We store artwork privately for review and may re-encode images. You grant us a licence to display approved artwork in-game for the booked period." },
+      { "type": "heading", "text": "5. Prohibited content" },
+      { "type": "paragraph", "text": "We do not accept advertising involving alcohol, tobacco or vaping, gambling, pornography or sexual services, weapons, illegal products, political campaigning, hate or discrimination, scams, misleading health or financial claims, or content unsuitable for the game's audience. We may reject anything at our discretion." },
+      { "type": "heading", "text": "6. No payment at enquiry stage" },
+      { "type": "paragraph", "text": "No payment is taken through the enquiry form. Any payment happens later, only after approval, through the process set out in the Campaign Order. We will email you at the address provided if your campaign is approved." },
+      { "type": "heading", "text": "7. Data" },
+      { "type": "paragraph", "text": "We process the details and artwork you submit to review and administer advertising enquiries, as described in the Privacy Policy. We record the terms version and the time you accepted these terms with your enquiry." },
+      { "type": "heading", "text": "8. Company information" },
+      { "type": "paragraph", "text": "INTIES LTD., registered in England and Wales, company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Contact: support@intiesltd.com." }
+    ]
   }
 ];
 
