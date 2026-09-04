@@ -2,6 +2,7 @@
   "expo": {
     "name": "Drunk Pigeons",
     "slug": "drunk-pigeons",
+    "owner": "geebeeuks-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -27,6 +28,11 @@
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "17024325-88d8-42fd-9f91-dcc7add840a4"
+      }
     },
     "plugins": [
       [
