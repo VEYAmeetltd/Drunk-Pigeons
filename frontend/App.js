@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, Platform, useWindowDimensions, BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import MainMenu from './src/screens/MainMenu';
 import PigeonsScreen from './src/screens/PigeonsScreen';
 import GameScreen from './src/screens/GameScreen';
@@ -23,6 +24,12 @@ import { Ads } from './src/ads/ads';
 
 // Drunkness slider (0=SOBER, 0.5=TIPSY, 1=ABSOLUTELY PIGEONED) → amplitude multiplier.
 const drunkStrengthFor = (level) => 0.2 + Math.max(0, Math.min(1, level)) * 1.5;
+
+// Keep the native splash visible (instead of the OS auto-hiding it as soon as the JS
+// bundle mounts) until fonts + persisted state have actually loaded — see the
+// `Persistence.loadAll()` effect below, which calls `SplashScreen.hideAsync()`.
+// Called at module scope per Expo's guidance so it registers before mount. No-op on web.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -114,6 +121,13 @@ export default function App() {
       setState(loaded);
       Audio.setEnabled(loaded.soundEnabled);
       setReady(true);
+      // App content is now mounted and ready to render — safe to reveal it.
+      SplashScreen.hideAsync().catch(() => {});
+    }).catch(() => {
+      // Never leave the splash frozen: fall back to defaults and reveal the app
+      // rather than hanging forever on a startup/storage error.
+      setReady(true);
+      SplashScreen.hideAsync().catch(() => {});
     });
   }, []);
 

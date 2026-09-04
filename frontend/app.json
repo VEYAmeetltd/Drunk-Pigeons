@@ -25,6 +25,16 @@
     "web": {
       "bundler": "metro"
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#070B35",
+          "resizeMode": "contain"
+        }
+      ]
+    ],
     "react-native-google-mobile-ads": {
       "android_app_id": "ca-app-pub-1908215441963534~6037769588",
       "ios_app_id": "ca-app-pub-1908215441963534~2962732884"
