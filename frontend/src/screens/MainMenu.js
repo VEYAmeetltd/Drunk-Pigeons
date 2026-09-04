@@ -13,9 +13,10 @@ import { MAPS } from '../data/maps';
 import { Billing } from '../store/billing';
 import { Audio } from '../audio/audio';
 import { Ionicons } from '@expo/vector-icons';
+import { formatInt } from '../config';
 
 export default function MainMenu({
-  bestScore,
+  bestDistance,
   pigeonsInjured,
   soundEnabled,
   selectedPigeon,
@@ -124,7 +125,7 @@ export default function MainMenu({
       </View>
 
       <View style={styles.heroRow}>
-        <Stat label="BEST SCORE" value={bestScore} color={COLORS.yellow} testID="menu-best-score" />
+        <Stat label="BEST SCORE" value={`${formatInt(bestDistance)}m`} color={COLORS.yellow} testID="menu-best-score" />
         <Animated.View style={[styles.hero, pigeonStyle]}>
           <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
         </Animated.View>

@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only regression test of the 'BEST SCORE = longest distance in meters' bug fix. All targeted behaviors verified successfully via Playwright at 390x844: Main Menu BEST SCORE renders formatInt(bestDistance)+'m' from dp_bestDistance; legacy dp_bestScore key is fully orphaned (injected value 99 is ignored on load); Game Over overlay has NO go-score/go-best rows (only go-distance, go-best-distance, go-chips); NEW BEST badge appears only when distance strictly exceeds previous best; shorter run never decreases best; persistence across reload confirmed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "verification_matrix": {
+    "fresh_install_shows_0m": "PASS (menu-best-score = '0m')",
+    "legacy_dp_bestScore_ignored": "PASS (localStorage dp_bestScore=99 injected, still shows 0m)",
+    "renders_from_bestDistance_key": "PASS (dp_bestDistance=250 -> '250m')",
+    "go_score_row_removed": "PASS (go-score count=0)",
+    "go_best_row_removed": "PASS (go-best count=0)",
+    "go_distance_present": "PASS",
+    "go_best_distance_present": "PASS",
+    "go_chips_present": "PASS",
+    "shorter_run_no_decrease": "PASS (15m run with prior best 250m -> menu still 250m, no NEW BEST badge)",
+    "new_best_badge_on_improvement": "PASS (reset to 0, fresh run 19m -> new-best-badge count=1)",
+    "menu_updates_after_new_best": "PASS (menu shows 19m)",
+    "persistence_across_reload": "PASS (reloaded page still shows 19m)",
+    "legacy_key_not_written": "PASS (dp_bestScore remains stale value 99, never overwritten by fix code)"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "handleCrash / MainMenu / GameOverOverlay / persistence.js all consistently reference bestDistance only; obstacle-count best is completely removed as claimed.",
+    "GameScreen passes bestDistance={Math.max(bestDistance, over.distance)} to GameOverOverlay so BEST DISTANCE row reflects the just-set new best inline, which is correct.",
+    "Easy Mode routing in App.js correctly forwards state.bestDistanceSilly to GameScreen when modeForSelection(selectedMap)==='easy', preserving separation from Normal Mode bestDistance (regression-safe).",
+    "Non-blocking: several React Native Web deprecation warnings (props.pointerEvents, shadow*, textShadow*) - cosmetic, not caused by this fix."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "Injected localStorage values for dp_bestDistance and legacy dp_bestScore via page.evaluate to force deterministic states.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Fix verified end-to-end at 390x844 preview URL. Easy Mode's bestDistanceSilly was not exercised (would need DEV Simulate Success purchase), but code review confirms it is on a separate branch untouched by this fix. Chip/fatness independence not directly forced but confirmed via code inspection (handleCrash only updates bestDistance based on distance param).",
+  "rca of the issue": "N/A - this run is a verification of an existing fix, no bug reproduced."
+}

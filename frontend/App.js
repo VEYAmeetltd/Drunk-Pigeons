@@ -88,7 +88,6 @@ export default function App() {
     return () => sub.remove();
   }, [screen, legalOverlay, closeLegalDoc]);
   const [state, setState] = useState({
-    bestScore: 0,
     bestDistance: 0,
     bestDistanceSilly: 0,
     pigeonsInjured: 0,
@@ -296,7 +295,7 @@ export default function App() {
     return restored.length;
   }, [state.purchasedPigeons, state.bundleOwned, state.easyModeOwned, state.removeAdsOwned]);
 
-  const handleCrash = useCallback(({ score, distance, chips, runId, runDuration, reviveUsed, mode = 'normal' }) => {
+  const handleCrash = useCallback(({ distance, chips, runId, runDuration, reviveUsed, mode = 'normal' }) => {
     const isEasy = mode === 'easy';
     setState((s) => {
       const pigeonsInjured = s.pigeonsInjured + 1;
@@ -311,17 +310,14 @@ export default function App() {
         }
         patch.bestDistanceSilly = bestDistanceSilly;
       } else {
-        let bestScore = s.bestScore;
-        if (score > bestScore) {
-          bestScore = score;
-          Persistence.setBest(bestScore);
-        }
+        // Best Score = longest distance travelled this run, in meters. Only saved
+        // when it's a genuine improvement over the stored best — never derived from
+        // obstacle-pass counts, chips, or fatness tiers.
         let bestDistance = s.bestDistance;
         if (distance > bestDistance) {
           bestDistance = distance;
           Persistence.setBestDistance(bestDistance);
         }
-        patch.bestScore = bestScore;
         patch.bestDistance = bestDistance;
       }
       return { ...s, ...patch };
@@ -368,7 +364,7 @@ export default function App() {
       <View style={styles.root}>
         {screen === 'menu' && (
           <MainMenu
-            bestScore={state.bestScore}
+            bestDistance={state.bestDistance}
             pigeonsInjured={state.pigeonsInjured}
             soundEnabled={state.soundEnabled}
             selectedPigeon={state.selectedPigeon}
@@ -438,7 +434,6 @@ export default function App() {
             key={state.selectedMap + state.selectedPigeon}
             pigeon={getPigeon(state.selectedPigeon)}
             mapSelection={state.selectedMap}
-            bestScore={state.bestScore}
             bestDistance={modeForSelection(state.selectedMap) === 'easy' ? state.bestDistanceSilly : state.bestDistance}
             drunkStrength={drunkStrength}
             drunkLevel={state.drunkLevel}

@@ -114,7 +114,7 @@ function ReadyHint() {
   );
 }
 
-export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, removeAdsOwned = false, onCrash, onExit }) {
+export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, removeAdsOwned = false, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const world = useSharedValue(emptySnapshot());
@@ -185,11 +185,11 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   };
   cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
     Audio.crash();
-    // bestDistance is already mode-aware (Easy uses the silly best); only compare the
-    // score against the global best in normal mode so Easy runs can't show a false best.
-    const isNewBest = dist > bestDistance || (mode !== 'easy' && sc > bestScore);
+    // Best Score = longest distance travelled, in meters. This is the ONLY source of
+    // truth for "best" — never obstacle-pass counts, chips, or fatness tiers.
+    const isNewBest = dist > bestDistance;
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
-    setOver({ message: randomDeathMessage(), score: sc, chips: ch, distance: dist, isNewBest });
+    setOver({ message: randomDeathMessage(), chips: ch, distance: dist, isNewBest });
     Ads.registerDeath();
     if (onCrash)
       onCrash({
@@ -505,8 +505,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       {over && (
         <GameOverOverlay
           message={over.message}
-          score={over.score}
-          best={Math.max(bestScore, over.score)}
           chips={over.chips}
           distance={over.distance}
           bestDistance={Math.max(bestDistance, over.distance)}

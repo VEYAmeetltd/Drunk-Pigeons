@@ -6,8 +6,6 @@ import { formatInt } from '../config';
 
 export default function GameOverOverlay({
   message,
-  score,
-  best,
   chips,
   distance,
   bestDistance,
@@ -30,8 +28,6 @@ export default function GameOverOverlay({
         <View style={styles.rows}>
           <Row label="DISTANCE" value={`${formatInt(distance)}m`} color={COLORS.orange} testID="go-distance" />
           <Row label="BEST DISTANCE" value={`${formatInt(bestDistance)}m`} color={COLORS.teal} testID="go-best-distance" />
-          <Row label="SCORE" value={score} color={COLORS.yellow} testID="go-score" />
-          <Row label="BEST" value={best} color={COLORS.teal} testID="go-best" />
           <Row label="CHIPS EATEN" value={chips} color={COLORS.pink} testID="go-chips" />
         </View>
 

@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS = {
-  best: 'dp_bestScore',
   bestDist: 'dp_bestDistance',
   injured: 'dp_pigeonsInjured',
   sound: 'dp_soundEnabled',
@@ -43,8 +42,7 @@ async function getString(key, def) {
 
 export const Persistence = {
   async loadAll() {
-    const [best, bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy, removeAds, drunk] = await Promise.all([
-      getNumber(KEYS.best, 0),
+    const [bestDist, bestDistSilly, injured, sound, pigeon, map, unlocked, leet, purchased, bundle, easy, removeAds, drunk] = await Promise.all([
       getNumber(KEYS.bestDist, 0),
       getNumber(KEYS.bestDistSilly, 0),
       getNumber(KEYS.injured, 0),
@@ -60,7 +58,6 @@ export const Persistence = {
       getString(KEYS.drunk, '0.5'),
     ]);
     return {
-      bestScore: best,
       bestDistance: bestDist,
       bestDistanceSilly: bestDistSilly,
       pigeonsInjured: injured,
@@ -135,9 +132,6 @@ export const Persistence = {
   },
   setLeet(on) {
     AsyncStorage.setItem(KEYS.leet, on ? '1' : '0').catch(() => {});
-  },
-  setBest(v) {
-    AsyncStorage.setItem(KEYS.best, String(v)).catch(() => {});
   },
   setBestDistance(v) {
     AsyncStorage.setItem(KEYS.bestDist, String(v)).catch(() => {});
