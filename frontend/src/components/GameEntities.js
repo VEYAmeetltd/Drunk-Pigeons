@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, useDerivedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
 import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
@@ -545,26 +545,89 @@ export function FeatherView({ world, index, color }) {
 }
 
 /* ---------------- Window heckler (person clipped inside a window) ---------------- */
-export function HecklerView({ world, text, reaction, theme }) {
+// The speech bubble is positioned/sized independently of the anchor window so it can
+// flip above/below and slide horizontally to stay fully inside the visible viewport
+// (including the top safe-area inset on notch/Dynamic-Island devices) — its own real
+// measured height (text can wrap to any number of lines) drives the containment math,
+// never a text-shrinking fallback.
+const BUBBLE_W = 168;
+const BUBBLE_MARGIN = 10; // safe margin kept from every screen edge
+const BUBBLE_GAP = 8;     // gap kept between the bubble and its window anchor
+const TAIL_HALF = 7;
+
+export function HecklerView({ world, text, reaction, theme, screenW = 400, screenH = 800, topInset = 0 }) {
   const WIN = 36;
-  const style = useAnimatedStyle(() => {
+  const bubbleH = useSharedValue(48); // corrected on layout once the real (wrapped) text height is known
+
+  const layout = useDerivedValue(() => {
     const h = world.value.heckler;
-    if (!h || !h.active) return { opacity: 0, transform: [{ translateX: -999 }] };
+    if (!h || !h.active) {
+      return { op: 0, winX: -999, winY: -999, bubX: -999, bubY: -999, tailX: BUBBLE_W / 2, tailBelow: 0 };
+    }
     const op = h.life > 0.35 ? 1 : Math.max(0, h.life / 0.35);
-    return { opacity: op, transform: [{ translateX: h.x - WIN / 2 }, { translateY: h.y - WIN / 2 }] };
+    const winX = h.x - WIN / 2;
+    const winY = h.y - WIN / 2;
+    const bh = bubbleH.value;
+    const safeTop = topInset + BUBBLE_MARGIN;
+    const safeBottom = screenH - BUBBLE_MARGIN;
+    const safeLeft = BUBBLE_MARGIN;
+    const safeRight = screenW - BUBBLE_MARGIN;
+
+    // Prefer above the window (classic speech-bubble placement); flip below it
+    // when there isn't enough safe-area room above (e.g. window near the top
+    // of the screen, behind a notch/Dynamic Island).
+    let bubY = winY - BUBBLE_GAP - bh;
+    let tailBelow = 0; // 0 = tail points down at the window (bubble above it)
+    if (bubY < safeTop) {
+      bubY = winY + WIN + BUBBLE_GAP;
+      tailBelow = 1; // tail points up at the window (bubble below it)
+      if (bubY + bh > safeBottom) bubY = Math.max(safeTop, safeBottom - bh);
+    }
+
+    let bubX = h.x - BUBBLE_W / 2;
+    if (bubX < safeLeft) bubX = safeLeft;
+    if (bubX + BUBBLE_W > safeRight) bubX = safeRight - BUBBLE_W;
+
+    // Tail stays aimed at the actual window x position even after the bubble
+    // itself was shifted inward to stay on-screen.
+    const tailX = Math.max(TAIL_HALF * 2, Math.min(BUBBLE_W - TAIL_HALF * 2, h.x - bubX));
+
+    return { op, winX, winY, bubX, bubY, tailX, tailBelow };
   });
+
+  const winStyle = useAnimatedStyle(() => ({
+    opacity: layout.value.op,
+    transform: [{ translateX: layout.value.winX }, { translateY: layout.value.winY }],
+  }));
+
+  const bubbleStyle = useAnimatedStyle(() => ({
+    opacity: layout.value.op,
+    transform: [{ translateX: layout.value.bubX }, { translateY: layout.value.bubY }],
+  }));
+
+  const tailStyle = useAnimatedStyle(() => {
+    const left = layout.value.tailX - TAIL_HALF;
+    return layout.value.tailBelow
+      ? { left, top: -TAIL_HALF, bottom: undefined, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 3, borderTopWidth: 3 }
+      : { left, bottom: -TAIL_HALF, top: undefined, borderRightWidth: 3, borderBottomWidth: 3, borderLeftWidth: 0, borderTopWidth: 0 };
+  });
+
   return (
-    <Animated.View style={[styles.abs, { width: WIN, height: WIN }, style]} pointerEvents="none" testID="heckler">
-      {/* speech bubble points down to the window */}
-      <View style={hkStyles.bubble}>
-        <Text style={hkStyles.bubbleTxt} numberOfLines={2} testID="heckler-insult">{text}</Text>
-        <View style={hkStyles.bubbleTail} />
-      </View>
+    <React.Fragment>
+      {/* speech bubble — positioned independently so it can flip/slide to stay on-screen */}
+      <Animated.View style={[styles.abs, hkStyles.bubble, { width: BUBBLE_W }, bubbleStyle]} pointerEvents="none" testID="heckler-bubble">
+        <View onLayout={(e) => { bubbleH.value = e.nativeEvent.layout.height; }}>
+          <Text style={hkStyles.bubbleTxt} testID="heckler-insult">{text}</Text>
+        </View>
+        <Animated.View style={[hkStyles.bubbleTail, tailStyle]} />
+      </Animated.View>
       {/* window opening clips the person's body (lower body hidden behind wall) */}
-      <View style={[hkStyles.window, { width: WIN, height: WIN, backgroundColor: theme.window, borderColor: theme.obstacleDark }]}>
-        <WindowPerson reaction={reaction} theme={theme} win={WIN} />
-      </View>
-    </Animated.View>
+      <Animated.View style={[styles.abs, { width: WIN, height: WIN }, winStyle]} pointerEvents="none" testID="heckler">
+        <View style={[hkStyles.window, { width: WIN, height: WIN, backgroundColor: theme.window, borderColor: theme.obstacleDark }]}>
+          <WindowPerson reaction={reaction} theme={theme} win={WIN} />
+        </View>
+      </Animated.View>
+    </React.Fragment>
   );
 }
 
@@ -630,10 +693,6 @@ const hkStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   bubble: {
-    position: 'absolute',
-    bottom: 44,
-    left: -58,
-    width: 156,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 3,
@@ -644,13 +703,9 @@ const hkStyles = StyleSheet.create({
   bubbleTxt: { fontFamily: FONT, color: '#20232b', fontWeight: '700', fontSize: 12, textAlign: 'center' },
   bubbleTail: {
     position: 'absolute',
-    bottom: -9,
-    left: 70,
     width: 14,
     height: 14,
     backgroundColor: '#ffffff',
-    borderRightWidth: 3,
-    borderBottomWidth: 3,
     borderColor: '#20232b',
     transform: [{ rotate: '45deg' }],
   },

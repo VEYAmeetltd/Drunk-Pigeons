@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Background from '../components/Background';
 import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
@@ -116,6 +116,7 @@ function ReadyHint() {
 
 export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, removeAdsOwned = false, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const world = useSharedValue(emptySnapshot());
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
   const [activeMap, setActiveMap] = useState(() => getMapForSelection(mapSelection));
@@ -370,7 +371,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       ))}
 
       {/* window heckler (environmental comedy) */}
-      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} />
+      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} screenW={width} screenH={height} topInset={insets.top} />
 
       {/* chips */}
       {Array.from({ length: CONFIG.CHIP_POOL }).map((_, i) => (

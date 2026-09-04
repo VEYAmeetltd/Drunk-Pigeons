@@ -128,39 +128,44 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     return max;
   }
 
-  // Attach a tiny angry heckler to a valid window on a fully on-screen building.
-  // The person becomes a dependent of that obstacle slot (moves/dies with it).
+  // Attach a tiny angry heckler to a valid window on a fully on-screen BUILDING
+  // side only — a lamp post / crane / tree / etc has no window to shout from, so
+  // those sides are never eligible (root cause of people appearing on/inside
+  // non-building scenery). The person becomes a dependent of that obstacle slot
+  // (moves/dies with it).
   const WIN_W = 36;
   const WIN_H = 36;
+  const ROOF_CLEARANCE = 24;    // keep clear of the roof/chimney/antenna cluster at the gap-facing edge
+  const CEILING_CLEARANCE = 22; // keep clear of the ceiling edge on a hanging (top) building
+  const FRONT_CLEARANCE = 46;   // keep clear of the shop/pub/door signage at street level
   function trySpawnHeckler() {
     if (heckler.active) return;
     const gY = groundY();
+    // Every candidate is a concrete, valid window slot: {idx, side, lo, hi} where
+    // lo/hi bound the window's top-y within that specific BUILDING side's own bounds.
     const cands = [];
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
       // building must be fully on-screen (window can fit completely on screen)
-      if (o.active && o.x >= W * 0.45 && o.x + OW <= W - 4) cands.push(i);
+      if (!o.active || o.x < W * 0.45 || o.x + OW > W - 4) continue;
+      if (o.topFamily === FAMILIES.BUILDING) {
+        const lo = CEILING_CLEARANCE;
+        const hi = o.topH - ROOF_CLEARANCE - WIN_H;
+        if (hi > lo) cands.push({ idx: i, side: 'top', lo, hi });
+      }
+      if (o.bottomFamily === FAMILIES.BUILDING) {
+        const bottomTop = o.topH + o.gap;
+        const lo = bottomTop + ROOF_CLEARANCE;
+        const hi = gY - FRONT_CLEARANCE - WIN_H;
+        if (hi > lo) cands.push({ idx: i, side: 'bottom', lo, hi });
+      }
     }
-    if (cands.length === 0) return;
-    const idx = cands[Math.floor(Math.random() * cands.length)];
-    const o = obstacles[idx];
-    const bottomTop = o.topH + o.gap;
-    const pad = 12;
-    const topRoom = o.topH - (WIN_H + pad * 2);
-    const bottomRoom = gY - bottomTop - (WIN_H + pad * 2);
-    let side, top;
-    if (bottomRoom > 0 && (topRoom <= 0 || Math.random() < 0.6)) {
-      side = 'bottom';
-      top = bottomTop + pad + Math.random() * bottomRoom;
-    } else if (topRoom > 0) {
-      side = 'top';
-      top = pad + Math.random() * topRoom;
-    } else {
-      return; // no window fits => do not spawn
-    }
+    if (cands.length === 0) return; // no valid anchor anywhere on screen -> do not spawn
+    const pick = cands[Math.floor(Math.random() * cands.length)];
+    const top = pick.lo + Math.random() * (pick.hi - pick.lo);
     heckler.active = true;
-    heckler.obsIndex = idx;
-    heckler.side = side;
+    heckler.obsIndex = pick.idx;
+    heckler.side = pick.side;
     heckler.wx = OW / 2; // window centre within the column
     heckler.wy = top + WIN_H / 2; // absolute vertical centre (building doesn't move vertically)
     heckler.life = 1.5 + Math.random() * 0.5;
