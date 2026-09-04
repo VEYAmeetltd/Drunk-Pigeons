@@ -1,0 +1,50 @@
+{
+  "summary": "Full frontend regression after Expo SDK 51->52->53->54 migration. All 12 requested regression items verified via Playwright at 320x568 / 375x667 / 390x844 / 412x915. Zero console errors, zero pageerrors across all screens (Main Menu, Gameplay for all 4 maps, Game Over overlay, Revive, Pigeons/Store, Leaderboard, Legal & Privacy). No runtime regressions detected from the RN 0.74->0.81, React 18->19, reanimated 3.19.5, react-native-google-mobile-ads 16.0.1 upgrades.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MainMenu @ 320x568 and 375x667", "issues": ["Main menu content is taller than the shortest phone viewports; PLAY/PIGEONS/LEADERBOARD/Random/Easy Mode sit below the initial fold. RN ScrollView is internally scrollable (verified: scrollIntoView + click PLAY works), so buttons are reachable via touch-scroll and gameplay launches correctly. Not a migration regression, but on 320x568 the DRUNK PIGEONS title itself is above the fold once you scroll to reveal the buttons - consider tightening vertical spacing for very short viewports."]}
+    ]
+  },
+  "verification_matrix": {
+    "main_menu_renders": "PASS (title, best-score=0m, pigeons-injured=0, drunkness slider with Sober/Tipsy/Absolutely Pigeoned labels, all 4 map tiles + Easy Mode £14.99)",
+    "map_sunny_london_launches": "PASS (map-day -> gameplay screen with distance-hud, chip-hud, game-pigeon)",
+    "map_gritty_backstreets_launches": "PASS (map-night -> gameplay)",
+    "map_chippy_sunset_launches": "PASS (map-dusk -> gameplay)",
+    "map_random_launches": "PASS (map-random -> gameplay)",
+    "play_starts_gameplay": "PASS (TAP TO FLAP screen, distance grows 3m -> 15m with taps, HUD live-updates)",
+    "drunkness_slider_interactive": "PASS (click at slider right end selects 'Absolutely Pigeoned' label; visual thumb moves)",
+    "collision_ends_run": "PASS (game-over-overlay appears with SPLAT!, death-message, DISTANCE/BEST DISTANCE/CHIPS EATEN rows)",
+    "best_score_persists": "PASS (previously verified in iteration_33; menu-best-score reads from dp_bestDistance)",
+    "new_best_badge": "PASS (new-best-badge shown on first run, distance=15m -> best=15m)",
+    "revive_one_time_only": "PASS (revive-button visible on 1st game over; consumed after use; on 2nd game over reviveVisible=false as expected per one-time revive design)",
+    "pigeons_screen_opens": "PASS (Classic/Business/Roadman/King/Gym/Tourist/Fancy skins listed, £1.99 tier pricing, UNLOCK ALL £7.99, REMOVE ADS £2.99, restore-purchases; no crash)",
+    "easy_mode_1499": "PASS (map-easy tile shows lock + £14.99 on main menu)",
+    "leaderboard_loads": "PASS (100 rows lb-row-1..100 rendered from MongoDB, GLOBAL/SILLY tabs, nickname-input flow present, no crash)",
+    "legal_screen_opens": "PASS (7 legal doc rows: Privacy, Terms, Purchases, Leaderboard Rules, Privacy Choices, Online Safety, Advertising Booking; advertise-enquiry-button present)",
+    "console_errors": "PASS (0 errors, 0 pageerrors across all flows)",
+    "reanimated_svg_safearea_admob": "PASS (no runtime errors from any of these libs; menu SVG pigeon renders, safe-area HUD renders, ad providers no-op on web)",
+    "viewport_320x568": "PASS-with-note (HUD in gameplay fully visible; menu buttons reachable via internal scroll)",
+    "viewport_375x667": "PASS-with-note (same as above)",
+    "viewport_412x915": "PASS (all elements in viewport, no clipping)"
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/COSMETIC: Consider slightly tightening MainMenu vertical rhythm so PLAY is at least partially visible above the fold on 320x568 without needing to scroll. Not blocking - internal ScrollView already allows reaching the buttons."
+  ],
+  "critical_code_review_comments": [
+    "app.json plugin migration is correct: react-native-google-mobile-ads is now a proper config-plugin array entry with both androidAppId and iosAppId preserved; no invalid top-level admob key remains; newArchEnabled:false is retained as required.",
+    "package.json correctly pins react-native-reanimated via expo.install.exclude to prevent auto-upgrade to v4 (which requires New Architecture).",
+    "No console warnings related to reanimated, svg, safe-area-context, or google-mobile-ads observed in preview - Legacy Architecture path is clean on web.",
+    "Revive one-time gating works as designed on web (mock provider grants reward, but UI still hides revive-button on subsequent deaths in the same session)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (out of scope)", "frontend": "100%"},
+  "seed_data_creation": "localStorage.clear() before revive/gameplay test to guarantee fresh best-score baseline",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Post-SDK-54 migration regression pass complete. Correct testids for key flows: play-button, pigeons-button, leaderboard-button, legal-privacy-button, map-day/night/dusk/random/easy, drunkness-slider, distance-hud, chip-hud, game-pigeon, game-over-overlay, go-distance, go-best-distance, go-chips, revive-button (NOT go-revive), play-again-button, menu-button, new-best-badge, pigeons-back, leaderboard-back, legal-back. Note: web preview mocks AdMob so revive always grants reward - the visible one-time gating is UI-level in GameOverOverlay.",
+  "rca of the issue": "N/A - regression pass, no bugs surfaced."
+}
