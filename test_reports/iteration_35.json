@@ -1,0 +1,43 @@
+{
+  "summary": "Frontend-only regression pass for the two internal perf refactors (engine.js getSnapshot() mutate-in-place, DrunkPigeon.js pushTimer() self-untracking one-shot timers). Verified via Playwright at 412x915: main menu loads, all 4 maps (Sunny London/Gritty Backstreets/Chippy Sunset/Random) launch gameplay with game-pigeon rendering, distance-hud/chip-hud update correctly, collision -> game-over-overlay shows correct final DISTANCE and CHIPS EATEN (verifies snapshot data is not stale/corrupted). Ran 8/8 consecutive Game Over -> Play Again cycles: each new run began with a clean scene (obstacle/chip DOM counts consistent, no ghosted leftover entities from previous runs bleeding into the fresh engine.reset()). Ran a sustained ~60s continuous session with 113 flap taps interleaved with restart-on-death, then triggered revive flow: revive-button granted revive (web mock AdMob), gameplay resumed with pigeon visible; the second game-over of the same session correctly hid revive-button (one-time gating intact). Zero console errors and zero pageerrors observed across the entire session.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_matrix": {
+    "main_menu_loads": "PASS",
+    "map_day_launches": "PASS (game-pigeon rendered)",
+    "map_night_launches": "PASS",
+    "map_dusk_launches": "PASS",
+    "map_random_launches": "PASS",
+    "flap_tap_gameplay": "PASS (taps register, distance-hud increments, HUD live-updates)",
+    "collision_ends_run": "PASS (SPLAT! game-over-overlay with DISTANCE/BEST DISTANCE/CHIPS EATEN)",
+    "game_over_data_correctness": "PASS (go-distance and go-chips populated correctly each cycle, e.g. dist=14/15/29m)",
+    "restart_cycles_8x": "PASS 8/8 (Play Again produced a clean new run each time; no stale/ghosted obstacles or chips carried over into new engine.reset())",
+    "long_session_stability": "PASS (~60s continuous session, 113 taps, no visual degradation, no console errors, no slowdown symptoms)",
+    "revive_flow_web_mock": "PASS (revive-button granted revive, game-pigeon reappeared, gameplay resumed)",
+    "revive_one_time_gating": "PASS (2nd game-over in same session showed revive-button count=0 as required)",
+    "console_errors": "PASS (0 errors, 0 pageerrors)"
+  },
+  "code_review_of_refactor": {
+    "engine_js_getSnapshot": "Correct. outObs/outChips/outFeathers arrays pre-allocated ONCE to match obstacles/chips/feathers pool sizes; each frame the for-loop mutates each element's fields (x, y, active, anim, eaten, rot, life). outHeckler/outJab/outPint are singleton objects mutated in place. Top-level returned wrapper object is still a fresh literal each call (required for Reanimated shared-value !== check to fire). Inactive slots correctly reflect out.active=0 - GameEntities.js worklet consumers gate rendering on .active so no ghost visuals possible.",
+    "DrunkPigeon_pushTimer": "Correct. untrack(id) uses indexOf + splice to remove the timer id from timers.current the instant the callback fires. Bulk-clear on unmount still walks timers.current and clearTimeout()s remaining ids, so cancellation semantics are unchanged. setInterval-based ambient bubble loop uses its own ref and is untouched, as documented in the code comment."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "getSnapshot() correctly returns a fresh top-level object every frame to satisfy Reanimated's referential-equality change detection while reusing the child containers - the design intent is well-documented in the source comment and is functionally correct.",
+    "The self-untracking timer helper in DrunkPigeon.js is a strict improvement over the previous unbounded-growth pattern; no functional cadence/timing change to random-event scheduler was observed during testing.",
+    "No regressions found in this pass; refactor is safe to ship for the perf-motivated goal."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (out of scope)", "frontend": "100%"},
+  "seed_data_creation": "localStorage.clear() at test start to guarantee fresh best-score baseline",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Refactor regression verified functionally. Correct testids reused from iteration_34: play-button, map-day/night/dusk/random, game-pigeon, distance-hud, chip-hud, game-over-overlay, go-distance, go-chips, go-best-distance, play-again-button, revive-button, menu-button. Web preview mocks AdMob so revive always grants reward - one-time gating is enforced at UI level in GameOverOverlay and is confirmed working (2nd death in same session hides revive-button).",
+  "limitations": "CRITICAL LIMITATION: Real-device frame pacing / FPS (60/90/120Hz) and micro-stutter measurement on low-end Android is NOT possible in this Playwright/web-preview environment. This report verifies only functional and visual-correctness regression of the two refactors (no stale/ghosted data, no memory-growth symptoms in a ~60s session, no console errors, revive/restart/collision/game-over flows intact). It DOES NOT and cannot confirm that the actual micro-stutter perceived on the Android APK is resolved - that requires on-device profiling (systrace/perfetto or in-app frame-time logging) which must be validated by the user on real hardware.",
+  "rca of the issue": "N/A - regression pass, no bugs surfaced."
+}

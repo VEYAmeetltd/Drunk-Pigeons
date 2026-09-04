@@ -205,8 +205,20 @@ export default function DrunkPigeon({
     suppressRef.current = suppressQuips;
   }, [suppressQuips]);
 
+  // Single reusable one-shot timeout helper: removes its own id from the
+  // tracking array the moment it fires (or is cancelled), so a long play
+  // session never accumulates an ever-growing array of stale timer ids.
+  // setInterval timers (the ambient bubble loop below) are NOT tracked here
+  // and are cleared directly via their own ref — never touched by this helper.
+  const untrack = (id) => {
+    const idx = timers.current.indexOf(id);
+    if (idx !== -1) timers.current.splice(idx, 1);
+  };
   const pushTimer = (fn, ms) => {
-    const t = setTimeout(fn, ms);
+    const t = setTimeout(() => {
+      untrack(t);
+      fn();
+    }, ms);
     timers.current.push(t);
     return t;
   };
