@@ -13,14 +13,23 @@ per owner's scope correction. There is no admin frontend and no admin password a
 - Rotation slots (optional, unset by default): INTIES_SERVICE_KEY_ID_PREV /
   INTIES_SERVICE_SECRET_PREV.
 
-## DP Admin Access — Admin Access + Tickets + Logs (added 2026-08)
+## DP Admin Access — Admin Access + Tickets + Logs (added 2026-08, credential remediated 2026-08)
 - DP-owned admin identity, fully separate from INTIES accounts/permissions. Auth =
   DP email/password (bcrypt) -> short-lived JWT (30 min), re-validated against the
   `dp_admins` DB record on EVERY request (immediate revocation). All `/api/service/
   admin/*` routes ALSO require the same INTIES HMAC service-to-service layer above.
-- Bootstrapped DP OWNER (setup completed this session, for testing purposes):
-  - email: gordon@intiesltd.com
-  - password: CorrectHorseBatteryStaple1
+- Real production DP OWNER: gordon@intiesltd.com — status: invited (password NOT
+  set). No agent or test file knows or stores this account's password. A fresh
+  one-time setup token was issued directly to the user in chat (never written to
+  any file) after an earlier test run's password was found written to this file and
+  to test fixtures — that compromised password has been fully revoked (password_hash
+  wiped back to null, all prior setup tokens for this account invalidated). The real
+  owner must complete setup themselves via `POST /api/admin/setup-password` using the
+  token they were given directly.
+- Automated-test-only DP OWNER (used exclusively by `tests/test_admin_flow.py` and
+  `tests/test_admin_adversarial.py` — never the real production identity):
+  - email: dp_test_owner@example.com
+  - password: DpTestFixtureOwner_2026!
   - role: owner, status: active
 - There is no default/shared password for any other DP admin — new admins are
   invited via `POST /api/service/admin/admins` (OWNER-only), which returns a

@@ -40,8 +40,8 @@ with open("/app/backend/.env") as f:
         elif line.startswith("DP_ADMIN_JWT_SECRET="):
             JWT_SECRET = line.split("=", 1)[1].strip()
 
-OWNER_EMAIL = "gordon@intiesltd.com"
-OWNER_PASSWORD = "CorrectHorseBatteryStaple1"
+OWNER_EMAIL = "dp_test_owner@example.com"
+OWNER_PASSWORD = "DpTestFixtureOwner_2026!"
 
 
 def _sign(method, path, query=None, body=b"", ts=None, nonce=None, key_id=None, secret=None):

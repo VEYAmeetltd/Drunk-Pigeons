@@ -45,9 +45,11 @@ try:
 except Exception:
     pass
 
-# Already-bootstrapped DP OWNER (see /app/memory/test_credentials.md)
-OWNER_EMAIL = "gordon@intiesltd.com"
-OWNER_PASSWORD = "CorrectHorseBatteryStaple1"
+# Synthetic test-fixture DP OWNER — deliberately NOT the real production owner
+# (gordon@intiesltd.com). Automated tests must never know/hardcode a real human's
+# password; this account exists solely for pytest.
+OWNER_EMAIL = "dp_test_owner@example.com"
+OWNER_PASSWORD = "DpTestFixtureOwner_2026!"
 
 
 def _sign(method, path, query=None, body=b"", ts=None, nonce=None, key_id=None):
