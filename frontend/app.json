@@ -10,13 +10,15 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.drunkpigeons.app",
+      "bundleIdentifier": "com.intiesltd.drunkpigeons",
+      "buildNumber": "1",
       "infoPlist": {
         "NSUserTrackingUsageDescription": "This lets us show more relevant ads and keep Drunk Pigeons free."
       }
     },
     "android": {
-      "package": "com.drunkpigeons.app",
+      "package": "com.intiesltd.drunkpigeons",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#070B35"
