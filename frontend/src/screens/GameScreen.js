@@ -164,6 +164,12 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   // DEV-only input instrumentation (never rendered in production).
   const inputStatsRef = useRef({ raw: 0, accepted: 0, flaps: 0, ignored: 0, lastReason: '' });
   const [devStats, setDevStats] = useState(null);
+  // DEV-only chunk-spawn / frame-time instrumentation (never rendered in
+  // production). Polled at a low cadence (not every frame) into a small HUD
+  // so a profile build can visually confirm chunk generation stays cheap and
+  // off the frame that becomes visible.
+  const perfStatsRef = useRef({ stepMs: 0, chunkMs: 0, maxChunkMs: 0 });
+  const [perfHud, setPerfHud] = useState(null);
 
   // keep latest callbacks
   cbRef.current.onChip = (c, fatCur) => {
@@ -259,6 +265,13 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       eng.step(dt, now);
       const snap = eng.getSnapshot(now);
       world.value = snap;
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        const p = eng.getPerfStats();
+        const stats = perfStatsRef.current;
+        stats.stepMs = p.stepMs;
+        stats.chunkMs = p.placeObstacleMs;
+        stats.maxChunkMs = Math.max(stats.maxChunkMs, p.placeObstacleMs);
+      }
       if (pigeon.id === 'roadman') {
         const flags = roadmanFlagsRef.current;
         if (!flags.wargwarn50 && snap.distM >= 50) {
@@ -283,6 +296,14 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // DEV-only: low-cadence poll of the perf ref into state so the on-screen
+  // HUD updates without adding a React re-render to the hot per-frame path.
+  useEffect(() => {
+    if (typeof __DEV__ === 'undefined' || !__DEV__) return undefined;
+    const id = setInterval(() => setPerfHud({ ...perfStatsRef.current }), 250);
+    return () => clearInterval(id);
   }, []);
 
   // keyboard support (web)
@@ -488,6 +509,14 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
         </View>
       )}
 
+      {typeof __DEV__ !== 'undefined' && __DEV__ && perfHud && (
+        <View style={styles.perfHud} pointerEvents="none" testID="dev-perf-stats">
+          <Text style={styles.devStatsTxt}>
+            step:{perfHud.stepMs.toFixed(3)}ms chunk:{perfHud.chunkMs.toFixed(3)}ms maxChunk:{perfHud.maxChunkMs.toFixed(3)}ms
+          </Text>
+        </View>
+      )}
+
       {confirmRestart && (
         <View style={styles.confirmOverlay} testID="restart-confirm-overlay" onStartShouldSetResponder={() => true}>
           <View style={styles.confirmCard}>
@@ -549,6 +578,7 @@ const styles = StyleSheet.create({
   hintTxt: { fontFamily: FONT, color: '#fff', fontSize: 34, fontWeight: '700', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
   hintSub: { fontFamily: FONT, color: '#fff', fontSize: 15, marginTop: 4, opacity: 0.9 },
   devStats: { position: 'absolute', bottom: 4, left: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, zIndex: 60 },
+  perfHud: { position: 'absolute', bottom: 24, left: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, zIndex: 60 },
   devStatsTxt: { fontFamily: FONT, color: '#7CFFB2', fontSize: 10, fontWeight: '700' },
   confirmOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.78)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   confirmCard: { width: '100%', maxWidth: 340, backgroundColor: COLORS.card, borderRadius: 24, padding: 24, alignItems: 'center' },

@@ -1,0 +1,53 @@
+{
+  "summary": "Frontend-only regression pass for the SPAWN_LOOKAHEAD=400 / OBSTACLE_POOL 7->9 / CHIP_POOL 28->36 change and the new dev-only perf HUD (testID='dev-perf-stats'). Verified via Playwright at 412x915 against the public preview URL. All 4 maps (Sunny London / Gritty Backstreets / Chippy Sunset / Random) launch gameplay with the pigeon rendered, distance/chip HUDs updating, and collision ending the run correctly with a proper SPLAT game-over overlay. Ran an extended session on map-day: 49 consecutive Game Over -> Play Again cycles completed cleanly (far exceeding the requested 8-10), maximum single-run distance 100m, BEST DISTANCE 103m — each new run began with the pigeon rendered and distance incrementing from 0, no residual/ghosted obstacles carried across resets. Revive flow: revive-button appeared on death, granting a revive brought the pigeon back with gameplay resuming. Restart-confirm dialog: overlay+cancel+yes testIDs are present in code (verified by grep) and the restart-button was clickable; automated verification of the cancel/confirm click could not be reliably held together in a single session because rapid Playwright taps couldn't keep the pigeon consistently alive long enough to open the dialog mid-run — restart-button click was reached but pigeon died in the 400ms interval before the modal could be interacted with. Dev perf HUD was visible with values step:0.000-0.100ms, chunk:0.100-0.200ms, maxChunk:0.200ms across the entire long session — chunk-generation cost is negligible (well under the 16.67ms/frame budget). Zero console errors and zero pageerrors across all test runs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_matrix": {
+    "main_menu_loads": "PASS (play-button, all 4 map cards visible)",
+    "map_sunny_london_day_launches": "PASS (game-pigeon rendered, distance ticked to 15m)",
+    "map_gritty_backstreets_night_launches": "PASS (distance ticked to 16m)",
+    "map_chippy_sunset_dusk_launches": "PASS (distance ticked to 17m)",
+    "map_random_launches": "PASS (distance ticked to 16m)",
+    "long_session_no_crash": "PASS (49 restart cycles + up to 100m single-run distance)",
+    "restart_cycles_min_8_10_requested": "PASS 49/49 Play Again cycles cleanly restarted with fresh game state each time",
+    "collision_ends_run": "PASS (SPLAT overlay with DISTANCE / BEST DISTANCE / CHIPS EATEN populated correctly, NEW BEST! shown on record run)",
+    "distance_hud_updates": "PASS (increments smoothly, e.g. 3m -> 100m across a long run)",
+    "chip_hud_updates": "PASS (visible in-game, top-right)",
+    "dev_perf_stats_hud_visible": "PASS (visible during gameplay AND on game-over overlay, __DEV__-gated)",
+    "dev_perf_stats_content": "step:0.000-0.100ms chunk:0.100-0.200ms maxChunk:0.200ms",
+    "revive_button_appears_on_first_death": "PASS",
+    "revive_flow_web_mock": "PASS (revive granted, game-pigeon reappears, gameplay resumes)",
+    "revive_one_time_gating": "PASS (2nd death after revive shows no revive-button)",
+    "restart_button_present_in_game": "PASS (restart-button testID visible during running state)",
+    "restart_confirm_dialog_testids_present_in_code": "PASS (restart-confirm-overlay / restart-confirm-yes / restart-cancel all defined in GameScreen.js lines 521-526)",
+    "restart_confirm_cancel_interactive_verification": "NOT_FULLY_AUTOMATED (Playwright rapid-tap flap cadence could not consistently keep pigeon alive long enough to hold the modal open; restart-button click reached but modal often missed as pigeon crashed just before/during click)",
+    "console_errors": "PASS (0 errors, 0 pageerrors across entire ~150s test window)"
+  },
+  "code_review_of_change": {
+    "config_js": "SPAWN_LOOKAHEAD=400 is documented and only affects WHERE (not spacing) the next chunk is placed. OBSTACLE_POOL 7->9 and CHIP_POOL 28->36 are pure capacity bumps — the reset()/placeObstacle()/generateChipsForObstacle()/spawnChip() paths already iterate the pool arrays generically (obstacles.forEach, chips.find(c=>!c.active)) so larger arrays are automatically covered.",
+    "engine_js_spawn_trigger": "Correct. `const lookaheadX = W + T.SPAWN_LOOKAHEAD; if (lx < lookaheadX - spacing) placeObstacle(free, Math.max(lookaheadX, lx + spacing))` — the Math.max guard preserves the SPACING invariant: if lx + spacing > lookaheadX (very unlikely at 400 lookahead + typical 232-300 spacing but defensively handled), spacing wins. Difficulty (spacing formula in difficulty()) is unchanged. Trigger condition `lx < lookaheadX - spacing` is equivalent to 'next slot at lx+spacing would be at or beyond lookaheadX'.",
+    "no_duplicate_obstacle_risk": "Trigger uses lastObstacleX() (max x of active obstacles) and Math.max(lookaheadX, lx+spacing) placement — cannot produce two obstacles at the same x. Reset() seeds only 3 obstacles at W+120, W+120+spacing, W+120+2*spacing, all distinct.",
+    "pool_exhaustion_risk": "obstacles.findIndex(o => !o.active) returns -1 when full; the spawn is skipped rather than corrupting an active slot. Deactivation happens once o.x + w < -20, so at any time there are at most ceil((W + SPAWN_LOOKAHEAD + 20) / SPACING_MIN) + 1 ≈ ceil((412+400+20)/232)+1 ≈ 5 active obstacles at 412px viewport — pool of 9 is comfortably larger. CHIP_POOL 36 is likewise adequate (2 chips inside gap + up to 4 trail chips per obstacle × ~5 active = 30 max).",
+    "dev_perf_hud": "Correctly __DEV__-gated at both GameScreen.js:512 and its perfHud state feed. testID='dev-perf-stats' present. getPerfStats() returns { stepMs, placeObstacleMs }; the HUD also tracks maxChunk locally — verified live values are sensible sub-millisecond figures."
+  },
+  "limitations": "CRITICAL LIMITATION (as noted in the request): this is a Playwright web-preview environment. Real on-device frame pacing / physical-device micro-stutter at the right-edge chunk spawn CANNOT be measured or confirmed here — only functional/visual correctness. No duplicate/overlapping/missing obstacles were observed across ~150s of continuous play + 49 restart cycles at 412×915 viewport, but this is a soft/best-effort observation (individual obstacle x positions are rendered inside Reanimated worklets without per-obstacle testIDs, so direct DOM-level position sampling is not available — the assertion 'no duplicates/overlaps' is inferred from stable gameplay, correct scoring, no console errors, and code review of the placement logic, NOT from direct sampling of obstacle x arrays). The real physical-device stutter fix must be re-validated by the user on the actual Android APK with systrace / perfetto / in-app frame-time logging.",
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Spawn trigger + Math.max(lookaheadX, lx+spacing) placement correctly preserves the difficulty spacing invariant while pushing generation forward — safe.",
+    "Pool-size increases (OBSTACLE_POOL 7->9, CHIP_POOL 28->36) are consumed generically by findIndex(!active) / forEach — no hard-coded pool indices anywhere in engine.js, so this is a truly no-op-for-gameplay bump.",
+    "Dev perf HUD testID is correctly __DEV__-gated (not visible in production builds); reads sub-millisecond chunk-construction times (~0.1-0.2ms) in the web preview which supports the theoretical claim that construction never coincides with the visible frame at 400px lookahead.",
+    "Restart-confirm dialog test in an automated harness is inherently fragile because opening it requires the pigeon to be alive; consider exposing a dev-only pause hook (e.g. testID='pause-toggle' or a window.__DEV_ENGINE_PAUSE__) to make this reliably automatable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (out of scope)", "frontend": "100% of functional criteria; 1 sub-flow (restart-confirm cancel interactive click) not fully automated but code-verified"},
+  "seed_data_creation": "localStorage.clear() at test start",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "TestIDs verified in this pass: play-button, map-day, map-night, map-dusk, map-random, game-pigeon, flap-area, distance-hud, chip-hud, dev-perf-stats, dev-input-stats, restart-button, menu-button, exit-button, game-over-overlay, go-distance, go-chips, go-best-distance, play-again-button, revive-button, restart-confirm-overlay, restart-confirm-yes, restart-cancel. The dev perf HUD lives at bottom-left of viewport during BOTH gameplay AND game-over overlay; on 412x915 it reads 'step:X.Xms chunk:X.Xms maxChunk:X.Xms' with sub-millisecond values in web preview. To keep the pigeon alive longer for interactive tests, use ~500ms tap intervals (not 320-400ms) — this was the difference between crashing at ~15m vs surviving to 100m.",
+  "rca of the issue": "N/A — this is a regression pass verifying a targeted perf-motivated change (SPAWN_LOOKAHEAD + pool sizes + dev HUD). No new bugs surfaced."
+}

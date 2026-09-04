@@ -46,6 +46,15 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   const dirtyObstacles = new Set();
   let T = CONFIG; // active tuning (standard = CONFIG; Easy Mode overrides via reset)
 
+  // Dev-only perf instrumentation (see requirements: instrument chunk-creation
+  // time + frame duration). performance.now() calls are cheap (~microseconds)
+  // and placeObstacle runs at most once every ~1-2s, so this is left always-on
+  // rather than __DEV__-gated; it costs nothing measurable in production and
+  // the numbers are only ever surfaced through the existing dev HUD.
+  const perfNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  let lastPlaceObstacleMs = 0;
+  let lastStepMs = 0;
+
   // Window heckler (tiny angry person) — single slot, bound to an obstacle window.
   const heckler = { active: false, obsIndex: -1, side: 'bottom', wx: 0, wy: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
   let hecklerTimer = 4;
@@ -442,6 +451,12 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   }
 
   function step(dt, now) {
+    const t0 = perfNow();
+    stepImpl(dt, now);
+    lastStepMs = perfNow() - t0;
+  }
+
+  function stepImpl(dt, now) {
     // feathers always simulate (for crash animation continuity)
     for (const f of feathers) {
       if (!f.active) continue;
@@ -498,13 +513,23 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         if (heckler.active && heckler.obsIndex === i) heckler.active = false;
       }
     }
-    // spawn new obstacle to keep the course endless (chips are generated in placeObstacle)
+    // Spawn the NEXT chunk well BEFORE it can be seen — SPAWN_LOOKAHEAD pushes
+    // the generation boundary far past the visible right edge, so the one-time
+    // buildGeometry()/chip-safety-validation work in placeObstacle() always
+    // completes many frames before the chunk scrolls into view (previously it
+    // was generated only ~40px off-screen, i.e. a fraction of a second before
+    // becoming visible, causing the reported spawn-time hitch). Spacing
+    // between obstacles (T.SPACING_BASE/MIN, the difficulty) is untouched —
+    // only WHERE the next one is first created shifts outward.
     // gated by quietUntilT so the 1000m blackout keeps an open, obstacle-free sky
     const lx = lastObstacleX();
-    if (now >= quietUntilT && lx < W - spacing) {
+    const lookaheadX = W + T.SPAWN_LOOKAHEAD;
+    if (now >= quietUntilT && lx < lookaheadX - spacing) {
       const free = obstacles.findIndex((o) => !o.active);
       if (free >= 0) {
-        placeObstacle(free, Math.max(W + 40, lx + spacing));
+        const t0 = perfNow();
+        placeObstacle(free, Math.max(lookaheadX, lx + spacing));
+        lastPlaceObstacleMs = perfNow() - t0;
       }
     }
 
@@ -735,6 +760,9 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     getObstacleGeom,
     consumeDirty,
     consumeHeckler,
+    getPerfStats() {
+      return { stepMs: lastStepMs, placeObstacleMs: lastPlaceObstacleMs };
+    },
     get score() {
       return score;
     },

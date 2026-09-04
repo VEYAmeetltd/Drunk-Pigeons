@@ -15,17 +15,23 @@ export const CONFIG = {
   PIGEON_RADIUS_RATIO: 0.33,
 
   // Obstacles
-  OBSTACLE_POOL: 7,
+  OBSTACLE_POOL: 9,
   OBSTACLE_WIDTH: 74,
   GAP_BASE: 258,
   GAP_MIN: 188,
   GAP_SHRINK_PER_SCORE: 1.1,
-  SPACING_BASE: 300, // horizontal distance between obstacle pairs (px)
+  SPACING_BASE: 300, // horizontal distance between obstacle pairs (px) — UNCHANGED, difficulty
   SPACING_MIN: 232,
   SPACING_SHRINK_PER_SCORE: 1.2,
   MIN_TOP: 58,
   MIN_BOTTOM: 70, // above ground
   MAX_TOP_DELTA: 0, // 0 = unrestricted vertical variation (standard chaos)
+  // How far beyond the visible right edge a new chunk is generated (data +
+  // geometry + chips), so the one-time construction/mount work always
+  // finishes well before the player can see it approach. Pure technical
+  // lookahead distance — does NOT change obstacle spacing/difficulty, which
+  // is still governed exclusively by SPACING_BASE/MIN above.
+  SPAWN_LOOKAHEAD: 400,
 
   // Segment-geometry difficulty (Normal Mode): longer arms/masts/jibs + real
   // pieces allowed to reach a bit past the gap edge into the flight corridor.
@@ -42,7 +48,7 @@ export const CONFIG = {
   SPEED_PER_SCORE: 2.6,
 
   // Chips
-  CHIP_POOL: 28,
+  CHIP_POOL: 36,
   CHIP_SIZE: 30,
   CHIP_SPAWN_MIN: 0.55, // seconds between chip spawns
   CHIP_SPAWN_MAX: 1.35,
