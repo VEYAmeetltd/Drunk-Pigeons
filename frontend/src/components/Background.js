@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Ellipse, Circle, Path, Line, G } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { CONFIG } from '../config';
+import SponsorBillboard from './SponsorBillboard';
 
 // deterministic tiny PRNG so silhouettes/props are stable per mount
 function mulberry32(a) {
@@ -296,7 +297,7 @@ function Birds({ tileW, groundY, color }) {
 }
 
 // Themed environment with layered parallax + subtle distance-based tone shift.
-export default function Background({ theme, width, height, world }) {
+export default function Background({ theme, width, height, world, removeAds }) {
   const groundY = height - CONFIG.GROUND_H;
   const tileW = Math.max(320, Math.round(width));
   const isEasy = theme.id === 'easy';
@@ -404,6 +405,10 @@ export default function Background({ theme, width, height, world }) {
           </ParallaxLayer>
         </>
       )}
+
+      {/* sponsored background billboard (mid-ground scenery — behind all gameplay,
+          no collision, never intercepts input, separate from scoring/run logic) */}
+      <SponsorBillboard world={world} theme={theme} width={width} groundY={groundY} removeAds={removeAds} />
 
       {/* ground */}
       <View style={{ position: 'absolute', top: groundY, width, height: CONFIG.GROUND_H, backgroundColor: theme.ground }} />

@@ -412,6 +412,7 @@ export default function App() {
             bestDistance={modeForSelection(state.selectedMap) === 'easy' ? state.bestDistanceSilly : state.bestDistance}
             drunkStrength={drunkStrength}
             drunkLevel={state.drunkLevel}
+            removeAdsOwned={state.removeAdsOwned}
             onCrash={handleCrash}
             onExit={() => setScreen('menu')}
           />

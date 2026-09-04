@@ -114,7 +114,7 @@ function ReadyHint() {
   );
 }
 
-export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, onCrash, onExit }) {
+export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistance = 0, drunkStrength = 1, drunkLevel = 0.5, removeAdsOwned = false, onCrash, onExit }) {
   const { width, height } = useWindowDimensions();
   const world = useSharedValue(emptySnapshot());
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
@@ -362,7 +362,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
   return (
     <View style={styles.root}>
-      <Background theme={activeMap} width={width} height={height} world={world} />
+      <Background theme={activeMap} width={width} height={height} world={world} removeAds={removeAdsOwned} />
 
       {/* obstacles */}
       {obsGeom.map((g, i) => (

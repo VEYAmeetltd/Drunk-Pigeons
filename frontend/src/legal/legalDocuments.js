@@ -201,6 +201,10 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
+        "text": "The game may also display in-game \"sponsored billboard\" artwork as part of the scrolling scenery. This artwork is chosen only from a fixed list of internally approved campaigns and DRUNK PIGEONS house adverts that are bundled with the app. Sponsored billboards are NOT personalised: they are never selected using your behaviour, profile or any personal information, we do not track individual players across campaigns, and we do not add advertising identifiers or additional device tracking for this feature. Where display measurement is used at all, we record only anonymous, aggregate totals per campaign. Players who have purchased Remove Ads are shown only DRUNK PIGEONS house artwork in these billboards."
+      },
+      {
+        "type": "paragraph",
         "text": "For users in the UK, EEA, Switzerland and other regions where consent is required, the production app must use an appropriate Google-certified consent mechanism (such as Google User Messaging Platform) before requesting ads that require consent. A privacy-options entry point will be provided where required so consent choices can be revisited."
       },
       {

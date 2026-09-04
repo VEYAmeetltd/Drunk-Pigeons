@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, BackHandler } from 'react-native';
+import React, { useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, BackHandler, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
@@ -15,6 +15,25 @@ export default function LegalScreen({ onOpenDoc, onBack }) {
     });
     return () => sub.remove();
   }, [onBack]);
+
+  // "ADVERTISE IN DRUNK PIGEONS" — opens a pre-filled email. We never collect any of
+  // these details inside the app; the enquiry is composed entirely in the mail client.
+  const openAdvertise = useCallback(() => {
+    Audio.ui();
+    const subject = 'Drunk Pigeons advertising enquiry';
+    const body = [
+      'Business name:',
+      'Contact name:',
+      'Product or service:',
+      'Website:',
+      'Proposed advertisement:',
+      'Preferred campaign dates:',
+      'Intended countries:',
+      '',
+    ].join('\n\n');
+    const url = `mailto:support@intiesltd.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    Linking.openURL(url).catch(() => {});
+  }, []);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom', 'left', 'right']} testID="legal-screen">
@@ -41,6 +60,21 @@ export default function LegalScreen({ onOpenDoc, onBack }) {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
+
+        <Text style={styles.sectionLabel}>SUPPORT</Text>
+        <Pressable
+          testID="advertise-enquiry-button"
+          onPress={openAdvertise}
+          style={[styles.row, styles.adRow]}
+          accessibilityRole="button"
+        >
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle} numberOfLines={2}>ADVERTISE IN DRUNK PIGEONS</Text>
+            <Text style={styles.rowMeta}>Email our team about sponsored billboards</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
         <Text style={styles.footer}>Published by INTIES LTD. · Company number 17433193 · England and Wales</Text>
       </ScrollView>
     </SafeAreaView>
@@ -54,6 +88,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 32 },
   intro: { fontFamily: FONT, color: COLORS.textDim, fontSize: 13, lineHeight: 19, marginBottom: 14 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 10, minHeight: 44 },
+  adRow: { borderWidth: 1.5, borderColor: COLORS.yellow },
+  sectionLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginTop: 8, marginBottom: 8 },
   rowText: { flex: 1, paddingRight: 10 },
   rowTitle: { fontFamily: FONT, color: COLORS.text, fontSize: 16, fontWeight: '700', lineHeight: 21 },
   rowMeta: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, marginTop: 3 },

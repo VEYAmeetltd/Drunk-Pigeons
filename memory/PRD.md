@@ -356,3 +356,25 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - [HIGH] SEC-001 (deferred by user): server-side receipt validation before granting paid entitlements.
 - Web mid-run viewport-height change vs cached ground (narrow, body scroll is locked) — confirm on device.
 - Files changed this session: frontend/App.js, frontend/src/components/GameEntities.js, frontend/src/game/obstacleAppearance.js, frontend/src/screens/GameScreen.js.
+
+## Update 48 (2026-06) — Sponsored background billboards (environmental scenery)
+### Feature
+- Added a large freestanding sponsored billboard to the scrolling environment (per the user's annotated reference). Renders in the mid-ground scenery layer inside `Background.js` (after the near-skyline/prop layers, before the ground) so it is ALWAYS behind obstacles/coins/pigeon/HUD and — being inside a `pointerEvents="none"` tree — can never intercept a tap. No collision, never touches obstacle generation, scoring or validated-run logic.
+- Scroll: mid-ground parallax factor 0.52 driven by `world.value.distPx` (same clock as the world; freezes on READY/paused/dead). Cadence via GAP_DISTPX=5600 px ≈ one billboard every ~15-25s across the speed range; each enters from the right, crosses, and leaves. Single at a time (spacing » width). Occupies ~50-60% of viewport width (BILL_W = clamp(width*0.56, 210, 300)).
+- Map-specific framing in `SponsorBillboard.js` FRAMES: day=Sunny London clean light-metal supports; night=Grimly darker worn supports; dusk=Chippy warm supports + marquee lights; easy=clean default. Rectangular ad face with backing colour, procedural (no image loading / no HTML / no script), consistent aspect, small readable "ADVERTISEMENT"/"DRUNK PIGEONS" label.
+### Campaign model & content — `src/ads/sponsorCampaigns.js`
+- Maintainable sponsor-campaign records: id, advertiser, approved artwork ref, start/end, enabled, eligible maps, weight. ONLY internally-approved, bundled records shown. No public uploads, no auto-approval, no in-app checkout, no remote/executable content. Demo advertisers are ORIGINAL FICTIONAL ("Breadcrumb Building Society", "Pigeon Post Express") — no real brands.
+- `pickBillboardAd({mapId,nowMs,removeAds,seed})`: deterministic weighted pick among valid, in-date, map-eligible campaigns; otherwise a DRUNK PIGEONS HOUSE advert. Fallback to house ad when: no approved campaign, offline / artwork can't load (procedural always renders), invalid/expired campaign data, or Remove Ads owned. House ads: "FLAP RESPONSIBLY", "CHIPS: A COMPLETE BREAKFAST", "ABSOLUTELY PIGEONED", "YOUR AD COULD BE HERE".
+- Privacy/measurement: selection uses only slot seed + map + date — never player behaviour/PII, no cross-campaign tracking, no ad identifiers. Optional anonymous aggregate impression counts stored locally (`recordImpression`/`getImpressionCounts`).
+### Remove Ads
+- Remove Ads owners are shown ONLY DRUNK PIGEONS house artwork (structure stays as scenery). Wired `removeAdsOwned` App.js → GameScreen → Background → SponsorBillboard.
+### Advertising enquiry & privacy disclosure
+- LegalScreen: new SUPPORT section with "ADVERTISE IN DRUNK PIGEONS" button → mailto:support@intiesltd.com, subject "Drunk Pigeons advertising enquiry", body pre-filled with Business name / Contact name / Product or service / Website / Proposed advertisement / Preferred campaign dates / Intended countries. No data collected in-app.
+- Privacy Policy section 7 updated: discloses non-personalised sponsorship artwork and anonymous aggregate impression counting; Remove Ads shows house artwork only.
+### Verified (live gameplay screenshots)
+- Billboard appears large in the intended mid-ground location; scrolls naturally; correct on all 3 maps (Breadcrumb/day, Pigeon Post/night, Breadcrumb/dusk) with distinct framing; sits BEHIND obstacles+coins+pigeon; no collision; no tap interception; artwork readable/undistorted; Remove Ads → house ad ("YOUR AD COULD BE HERE"); advertise button opens mailto without disrupting the app; 360px layout intact. Fallback/Remove-Ads/invalid-campaign selection unit-verified. No console errors.
+### Files
+- New: src/ads/sponsorCampaigns.js, src/components/SponsorBillboard.js. Changed: src/components/Background.js, src/screens/GameScreen.js, App.js, src/screens/LegalScreen.js, src/legal/legalDocuments.js.
+### Remaining
+- The planned FINAL launch-readiness code audit (now to include the billboard system) is still outstanding.
+- Real ad-category restriction enforcement is a policy/process control (documented) — no third-party campaigns are actually live (house ads + fictional demos only).
