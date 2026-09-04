@@ -7,7 +7,7 @@ import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintVi
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
-import { CONFIG, EASY_TUNING, fatLevelFor, FAT_LABELS, formatInt } from '../config';
+import { CONFIG, EASY_TUNING, fatLevelFor, FAT_LABELS, EXTRA_FAT_LABELS, extraFatLevelFor, formatInt } from '../config';
 import { getMapForSelection, modeForSelection } from '../data/maps';
 import { randomDeathMessage } from '../data/deathMessages';
 import { pickInsult, pickReaction } from '../data/insults';
@@ -121,7 +121,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
   const [activeMap, setActiveMap] = useState(() => getMapForSelection(mapSelection));
 
-  const [score, setScore] = useState(0);
   const [chips, setChips] = useState(0);
   const [fatChipsCur, setFatChipsCur] = useState(0); // currentFatness (resets on Skinny Jab); drives visible size
   const [deflateN, setDeflateN] = useState(0); // increments on jab -> squash animation
@@ -167,7 +166,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const [devStats, setDevStats] = useState(null);
 
   // keep latest callbacks
-  cbRef.current.onScore = (s) => setScore(s);
   cbRef.current.onChip = (c, fatCur) => {
     setChips(c);
     setFatChipsCur(fatCur); // currentFatness (== total until a Skinny Jab resets it)
@@ -207,7 +205,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
 
   const buildEngine = useCallback(() => {
     return createEngine({
-      onScore: (s) => cbRef.current.onScore(s),
       onChip: (c, fat) => cbRef.current.onChip(c, fat),
       onCrash: (info) => cbRef.current.onCrash(info),
       onSkinnyJab: () => cbRef.current.onSkinnyJab(),
@@ -227,7 +224,6 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     runStartRef.current = 0;
     startedRef.current = false;
     setStarted(false);
-    setScore(0);
     setChips(0);
     setFatChipsCur(0);
     setOver(null);
@@ -391,6 +387,9 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   }, [startRun]);
 
   const fatLevel = fatLevelFor(fatChipsCur);
+  // Beyond ABSOLUTE UNIT, wording keeps progressing off TOTAL chips this run (chips),
+  // independent of fatChipsCur (which a Skinny Jab resets) — see config.js.
+  const extraLevel = extraFatLevelFor(chips);
 
   return (
     <View style={styles.root}>
@@ -463,10 +462,12 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
             <Text style={styles.chipTxt}>{chips}</Text>
           </View>
         </View>
-        <View style={styles.scoreWrap} pointerEvents="none">
-          <Text style={styles.scoreShadow}>{score}</Text>
-          <Text style={styles.score} testID="score-hud">{score}</Text>
-          {fatLevel > 0 && <Text style={styles.fatLabel}>{FAT_LABELS[fatLevel]}</Text>}
+        <View style={styles.fatMsgWrap} pointerEvents="none">
+          {extraLevel > 0 ? (
+            <Text style={styles.fatLabel} testID="fat-label">{EXTRA_FAT_LABELS[extraLevel - 1]}</Text>
+          ) : (
+            fatLevel > 0 && <Text style={styles.fatLabel} testID="fat-label">{FAT_LABELS[fatLevel]}</Text>
+          )}
         </View>
       </SafeAreaView>
 
@@ -542,10 +543,8 @@ const styles = StyleSheet.create({
   chipHud: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
   chipIcon: { width: 18, height: 9, borderRadius: 3, backgroundColor: '#f4c542', borderWidth: 1.5, borderColor: '#c99a1e', transform: [{ rotate: '30deg' }] },
   chipTxt: { fontFamily: FONT, color: '#fff', fontWeight: '700', fontSize: 18 },
-  scoreWrap: { alignItems: 'center', marginTop: 10 },
-  score: { fontFamily: FONT, color: '#fff', fontSize: 64, fontWeight: '700' },
-  scoreShadow: { position: 'absolute', top: 3, fontFamily: FONT, color: 'rgba(0,0,0,0.3)', fontSize: 64, fontWeight: '700' },
-  fatLabel: { fontFamily: FONT, color: COLORS.yellow, fontSize: 16, fontWeight: '700', marginTop: -6, textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 3 },
+  fatMsgWrap: { alignItems: 'center', marginTop: 10 },
+  fatLabel: { fontFamily: FONT, color: COLORS.yellow, fontSize: 16, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 3 },
   shield: { position: 'absolute', bottom: 60, alignSelf: 'center', backgroundColor: 'rgba(62,242,192,0.9)', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center' },
   shieldTxt: { fontFamily: FONT, color: '#053a2e', fontWeight: '700', fontSize: 16, letterSpacing: 1 },
   hint: { position: 'absolute', top: '46%', left: 0, right: 0, alignItems: 'center' },

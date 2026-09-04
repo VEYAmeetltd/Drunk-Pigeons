@@ -96,6 +96,23 @@ export const FAT_LABELS = [
   'ABSOLUTE UNIT',
 ];
 
+// Wording-only progression BEYOND "ABSOLUTE UNIT" (visual size/hitbox stay capped at
+// MAX_FAT_LEVEL — these tiers never grow the pigeon further). Driven by TOTAL cumulative
+// chips eaten this run (never reset by a Skinny Jab, only by a genuinely new run), at the
+// same 10-chips-per-tier interval as the existing fatness tiers.
+export const EXTRA_FAT_LABELS = [
+  'AIRSPACE VIOLATION',
+  'NEEDS ITS OWN RUNWAY',
+  'HAS ITS OWN POSTCODE',
+  'LEGALLY A LANDMARK',
+  'VISIBLE FROM SPACE',
+];
+
+// 0 = not reached yet; 1..EXTRA_FAT_LABELS.length = index into EXTRA_FAT_LABELS (+1),
+// capped at the final tier ("VISIBLE FROM SPACE") so it never overflows or cycles.
+export const extraFatLevelFor = (totalChips) =>
+  Math.max(0, Math.min(EXTRA_FAT_LABELS.length, Math.floor((totalChips || 0) / 10) - CONFIG.MAX_FAT_LEVEL));
+
 
 // EASY MODE tuning — premium £14.99 ruleset. Overrides the standard difficulty
 // numbers only (collision geometry, physics & controls stay identical). Absurdly
