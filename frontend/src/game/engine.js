@@ -54,6 +54,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   const perfNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastPlaceObstacleMs = 0;
   let lastStepMs = 0;
+  let recycleCount = 0; // dev instrumentation: total pool-slot recycles this run
 
   // Window heckler (tiny angry person) — single slot, bound to an obstacle window.
   const heckler = { active: false, obsIndex: -1, side: 'bottom', wx: 0, wy: 0, life: 0, insultR: 0, reactionR: 0, id: 0 };
@@ -530,6 +531,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         const t0 = perfNow();
         placeObstacle(free, Math.max(lookaheadX, lx + spacing));
         lastPlaceObstacleMs = perfNow() - t0;
+        recycleCount++;
       }
     }
 
@@ -761,7 +763,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     consumeDirty,
     consumeHeckler,
     getPerfStats() {
-      return { stepMs: lastStepMs, placeObstacleMs: lastPlaceObstacleMs };
+      return { stepMs: lastStepMs, placeObstacleMs: lastPlaceObstacleMs, recycleCount };
     },
     get score() {
       return score;

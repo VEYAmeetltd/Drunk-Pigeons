@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
+import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast, DEV_MOUNT_STATS } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -170,6 +170,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   // off the frame that becomes visible.
   const perfStatsRef = useRef({ stepMs: 0, chunkMs: 0, maxChunkMs: 0 });
   const [perfHud, setPerfHud] = useState(null);
+  const mountBaselineRef = useRef(null);
 
   // keep latest callbacks
   cbRef.current.onChip = (c, fatCur) => {
@@ -302,7 +303,17 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   // HUD updates without adding a React re-render to the hot per-frame path.
   useEffect(() => {
     if (typeof __DEV__ === 'undefined' || !__DEV__) return undefined;
-    const id = setInterval(() => setPerfHud({ ...perfStatsRef.current }), 250);
+    const id = setInterval(() => {
+      const base = mountBaselineRef.current;
+      const mountsSinceStart = base
+        ? {
+            building: DEV_MOUNT_STATS.building - base.building,
+            structureShape: DEV_MOUNT_STATS.structureShape - base.structureShape,
+            obstacleView: DEV_MOUNT_STATS.obstacleView - base.obstacleView,
+          }
+        : null;
+      setPerfHud({ ...perfStatsRef.current, mountsSinceStart, recycles: engineRef.current ? engineRef.current.getPerfStats().recycleCount : 0 });
+    }, 250);
     return () => clearInterval(id);
   }, []);
 
@@ -341,11 +352,17 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       return;
     }
     if (!startedRef.current) {
-      // READY -> RUNNING on the first valid tap.
+      // READY -> RUNNING on the first valid tap. Snapshot the obstacle-pool
+      // mount counters right here so the dev HUD can show any mounts that
+      // happen AFTER this point (should stay exactly 0 for the pooled fix
+      // to be verified correct).
       startedRef.current = true;
       runStartRef.current = performance.now();
       eng.start();
       setStarted(true);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        mountBaselineRef.current = { ...DEV_MOUNT_STATS };
+      }
       if (pigeon.id === 'roadman' && !roadmanFlagsRef.current.wargwarn) {
         roadmanFlagsRef.current.wargwarn = true;
         showScriptedLine('Wargwarn?');
@@ -512,7 +529,8 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       {typeof __DEV__ !== 'undefined' && __DEV__ && perfHud && (
         <View style={styles.perfHud} pointerEvents="none" testID="dev-perf-stats">
           <Text style={styles.devStatsTxt}>
-            step:{perfHud.stepMs.toFixed(3)}ms chunk:{perfHud.chunkMs.toFixed(3)}ms maxChunk:{perfHud.maxChunkMs.toFixed(3)}ms
+            step:{perfHud.stepMs.toFixed(3)}ms chunk:{perfHud.chunkMs.toFixed(3)}ms maxChunk:{perfHud.maxChunkMs.toFixed(3)}ms pool:{CONFIG.OBSTACLE_POOL} recycles:{perfHud.recycles}{'\n'}
+            mountsSinceStart building:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.building : '-'} structureShape:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.structureShape : '-'} obstacleView:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.obstacleView : '-'}
           </Text>
         </View>
       )}

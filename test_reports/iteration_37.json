@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend regression test of the React-mount-architecture fix for the Drunk Pigeons chunk-spawn hitch. Web-preview Playwright confirms: (a) menu loads and all 4 maps (Sunny London, Gritty Backstreets, Chippy Sunset, Random) launch gameplay without crashing, (b) obstacles (Building + StructureShape/hanging scaffold) render correctly with no visible double-imagery/ghost artifacts even though both subtrees are now always-mounted per side, (c) dev HUD (testID='dev-perf-stats') consistently reads 'mountsSinceStart building:0 structureShape:0 obstacleView:0' throughout 60s+ of continuous play and across 8+ consecutive Play Again restart cycles, while 'recycles:N' increased over time (observed recycles reach 1 across the restart-cycle test, proving real pool-slot recycling occurred with ZERO new mounts). (d) In-game restart button opens confirm overlay; Cancel dismisses; Restart yes resets the run cleanly. (e) Pigeon picker opens and shows all pigeons (Classic, Business, Roadman, King, Gym, Tourist, Fancy). LIMITATION explicitly noted: this is a web-preview Playwright env — the actual physical-device stutter cannot be verified here, only functional/visual correctness + the dev-only mount-counter evidence.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GameEntities.js ObstacleView is well-commented and correctly always-mounts both Building and StructureShape subtrees per side with opacity/height toggles — matches the stated fix.",
+    "Building returns null when height<=0, but since the wrapper View still exists and its opacity toggles, the actual React subtree stays mounted; the internal children just render nothing — this is correct and consistent with the fix intent.",
+    "Dev-only mount instrumentation (DEV_MOUNT_STATS) is guarded by __DEV__ — zero cost in production.",
+    "GameScreen.js perf-HUD polling at 250ms is well isolated from the per-frame hot path.",
+    "Note: the flap-area View sits under the HUD but above the pigeon; verified via Playwright that HUD buttons (restart/exit) still receive taps correctly."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Dev HUD exposes mountsSinceStart building/structureShape/obstacleView + recycles count via testID='dev-perf-stats'. To verify mount-fix regression: launch any map, first tap sets the mount baseline, then any subsequent play (however long, however many recycles) should keep those three deltas at 0/0/0. Recycles increment over time (once obstacles start scrolling off-screen at ~30m distance or when the pool wraps on Play Again). Note: keyboard Space works as flap on web. Distance HUD selector: [data-testid='distance-hud']. Web-preview cannot reproduce physical-device stutter — this env only verifies the React reconciliation invariant.",
+  "rca of the issue": "N/A — no bugs found in this pass. Confirmed the previously-implemented fix holds: ObstacleView never unmount/remounts Building or StructureShape when recycling pool slots between BUILDING and HANGING families; only opacity/height toggle."
+}

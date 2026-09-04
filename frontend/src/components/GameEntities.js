@@ -8,6 +8,17 @@ import { FONT } from '../ui/theme';
 import { FAMILIES } from '../game/obstacleGeometry';
 
 const OW = CONFIG.OBSTACLE_WIDTH;
+// Stable, always-safe placeholder geometry for whichever side/family is NOT
+// active on a given recycle — StructureShape stays mounted permanently and
+// simply draws nothing (no segments) rather than being unmounted.
+const EMPTY_GEO = { segments: [], decor: [] };
+
+// DEV-ONLY mount instrumentation (no-op cost in production: a few integers,
+// never rendered). Each counter increments exactly once per REAL React mount
+// (empty-deps effect) so a test/dev build can confirm the obstacle pool's
+// subtrees mount ONCE at screen-open and never again during gameplay.
+export const DEV_MOUNT_STATS = { building: 0, structureShape: 0, obstacleView: 0 };
+const DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
 function shade(hex, f) {
   const h = (hex || '#888888').replace('#', '');
@@ -159,6 +170,9 @@ const skinnyStyles = StyleSheet.create({
 // segment/decor list (`geom.topGeo` / `geom.bottomGeo`) built once by the
 // engine — so the visible silhouette and the hitbox can never drift apart.
 export function ObstacleView({ world, index, geom, theme, screenH }) {
+  useEffect(() => {
+    if (DEV) DEV_MOUNT_STATS.obstacleView++;
+  }, []);
   const style = useAnimatedStyle(() => {
     const o = world.value.obs[index];
     return {
@@ -170,24 +184,28 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
   const topH = geom.topH;
   const bottomY = topH + geom.gap;
   const bottomH = Math.max(0, groundY - bottomY);
+  const topIsBuilding = geom.topFamily === FAMILIES.BUILDING;
+  const bottomIsBuilding = geom.bottomFamily === FAMILIES.BUILDING;
+  // Both possible silhouettes (Building AND StructureShape) are ALWAYS mounted
+  // for BOTH sides, for the lifetime of this pool slot. Recycling a slot
+  // between families (e.g. BUILDING <-> HANGING) only ever toggles
+  // height/opacity here — it can never unmount/mount this subtree, which was
+  // the actual cause of the visible spawn-time hitch (the earlier lookahead-
+  // distance fix alone did not touch this).
   return (
     <Animated.View style={[styles.abs, { left: 0, top: 0, width: OW }, style]} pointerEvents="none">
-      {geom.topFamily === FAMILIES.BUILDING && <Building height={topH} theme={theme} seed={geom.seed} flip />}
-      {geom.topGeo && (
-        <View style={{ position: 'absolute', top: 0, height: topH, width: OW }} pointerEvents="none">
-          <StructureShape geo={geom.topGeo} boxW={OW} boxH={topH} />
-        </View>
-      )}
-      {geom.bottomFamily === FAMILIES.BUILDING && (
-        <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }}>
-          <Building height={bottomH} theme={theme} seed={geom.seed} ground />
-        </View>
-      )}
-      {geom.bottomGeo && (
-        <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }} pointerEvents="none">
-          <StructureShape geo={geom.bottomGeo} boxW={OW} boxH={bottomH} />
-        </View>
-      )}
+      <View style={{ position: 'absolute', top: 0, height: topH, width: OW, opacity: topIsBuilding ? 1 : 0 }} pointerEvents="none">
+        <Building height={topIsBuilding ? topH : 0} theme={theme} seed={geom.seed} flip />
+      </View>
+      <View style={{ position: 'absolute', top: 0, height: topH, width: OW, opacity: topIsBuilding ? 0 : 1 }} pointerEvents="none">
+        <StructureShape geo={geom.topGeo || EMPTY_GEO} boxW={OW} boxH={topH} />
+      </View>
+      <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW, opacity: bottomIsBuilding ? 1 : 0 }} pointerEvents="none">
+        <Building height={bottomIsBuilding ? bottomH : 0} theme={theme} seed={geom.seed} ground />
+      </View>
+      <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW, opacity: bottomIsBuilding ? 0 : 1 }} pointerEvents="none">
+        <StructureShape geo={geom.bottomGeo || EMPTY_GEO} boxW={OW} boxH={bottomH} />
+      </View>
     </Animated.View>
   );
 }
@@ -195,6 +213,9 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
 // Procedurally varied cartoon building. Collision is unchanged (fixed OW column);
 // everything here is decorative and never intercepts touches.
 function Building({ height, theme, seed, flip, ground }) {
+  useEffect(() => {
+    if (DEV) DEV_MOUNT_STATS.building++;
+  }, []);
   const cfg = useMemo(() => {
     const r = rngFrom((seed || 1) + (flip ? 7777 : 13));
     const bricks = theme.brickPalette && theme.brickPalette.length ? theme.brickPalette : [theme.obstacle];
@@ -338,6 +359,9 @@ function segBounds(seg) {
 }
 
 function StructureShape({ geo, boxW, boxH }) {
+  useEffect(() => {
+    if (DEV) DEV_MOUNT_STATS.structureShape++;
+  }, []);
   const box = useMemo(() => {
     let minX = 0, minY = 0, maxX = boxW, maxY = boxH;
     for (const seg of [...geo.segments, ...(geo.decor || [])]) {
