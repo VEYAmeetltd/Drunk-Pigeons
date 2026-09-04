@@ -4,4 +4,4 @@ const base = require('./frontend/eslint.config.js');
 
 module.exports = base
   .map((cfg) => (cfg.files ? { ...cfg, files: cfg.files.map((f) => `frontend/${f}`) } : cfg))
-  .concat([{ ignores: ['**/node_modules/**', 'backend/**', 'tests/**', 'frontend/web-build/**', 'frontend/.expo/**', 'frontend/dist/**', 'eslint.config.js'] }]);
+  .concat([{ ignores: ['**/node_modules/**', 'backend/**', 'tests/**', 'test_reports/**', 'frontend/web-build/**', 'frontend/.expo/**', 'frontend/dist/**', 'eslint.config.js'] }]);
