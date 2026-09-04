@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only verification of the DRUNK PIGEONS difficulty-rebalance work. Wrote two pure-JS headless simulations (/app/tests/geometry_rebalance.mjs and /app/tests/chip_spread.mjs) that drive the real engine.js against both CONFIG (Normal) and EASY_TUNING (Easy), sample 400 obstacles per mode plus 300 chips per mode, and assert every rebalance invariant. All 12 assertions pass. Additionally smoke-tested the live frontend at REACT_APP_BACKEND_URL on iPhone-sized viewport: home screen loads (BEST SCORE / Sunny London / Gritty Backstreets / Chippy Sunset / Easy Mode £14.99 paywall visible), PLAY enters the game, TAP TO FLAP prompt shows, flap-area tap layer works, score-hud reads 0 pre-first-obstacle, no console errors (only pre-existing pointerEvents deprecation warnings). Easy Mode is paywalled and no dev unlock is exposed in the build, so the Easy-mode UX was verified via headless simulation of EASY_TUNING through the same engine code path the paywall would unlock.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/tests/geometry_rebalance.mjs",
+    "/app/tests/chip_spread.mjs",
+    "/app/tests/js_loader.mjs"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "obstacleAppearance.pickEncounter with hard=true delivers 26.3% paired non-building + 35.5% single-sided + 38.3% building over 400 sampled spawns — matches the 'Normal visibly harder / more paired top+bottom pressure' spec.",
+    "Easy Mode (hard=false) delivers 3.8% paired + 29.3% single-sided + 67.0% building — clearly forgiving / mostly open single-sided.",
+    "Normal geometry actually intrudes into the reserved flight corridor (bottom max=26.0 px, top max=2.5 px) — exactly bounded by CONFIG.GEOM_INTRUDE_BOTTOM=26 / GEOM_INTRUDE_TOP=26 via clampToGapEdge. Easy geometry never intrudes (0.0 px both sides), matching EASY_TUNING (0,0).",
+    "Normal arm/jib reach outside the OW lane: max 18.3 px, avg 10.5 px across 141 sampled arm segments vs Easy max 4.3 px avg 4.3 px over 15 — Normal genuinely shows longer protruding arms/jibs/masts as required.",
+    "CHIP_GAP_SPREAD in Normal produces max chip offset from gap-centre of 34.00 px (avg 17.00) vs Easy 18.00 px (avg 9.00) — exactly the configured 34 vs 18 values. Chips are noticeably wider-spread in Normal, tighter-centred in Easy, per spec.",
+    "Zero chips overlap obstacle segment art in either mode across the 300-chip sample — isChipPosSafe / clampToGapEdge cooperate correctly.",
+    "Collision fairness test: for every sampled obstacle, sweeping the pigeon centre through the interior of the 'fair corridor' (i.e. gap band minus the explicit intrude allowance minus pigeon radius minus 2 px safety) produced 0 spurious segment hits in both Normal and Easy — no invisible-box deaths, hitbox exactly follows visible geometry.",
+    "hard=true encounter-selection code shifts BOTH sides toward genuine pieces (pickTopFiller/pickBottomFiller returning BUILDING or a real family ~90% of the time instead of null) which is what drives the paired-pressure lift. Verified statistically.",
+    "engine.placeObstacle correctly consumes T.GEOM_SCALE / T.GEOM_INTRUDE_BOTTOM / T.GEOM_INTRUDE_TOP / T.HARD_GEOMETRY / T.CHIP_GAP_SPREAD from the active tuning (CONFIG in Normal, spread over CONFIG by EASY_TUNING in Easy) — the mode-switch path is one-file, one-line and correct.",
+    "No numeric changes to SPEED_BASE / SPEED_MAX / SPEED_PER_SCORE / GAP_BASE / GAP_MIN / SPACING_* / CHIP_SPAWN_* / MAX_FAT_LEVEL / PIXELS_PER_METRE / scoring per config.js diff — the 'geometry-only rebalance, don't touch numbers' constraint is respected.",
+    "Live frontend smoke: home & game screens render without errors, tap-to-flap responder works, HUD/score/chip/menu/restart buttons present with correct data-testids. No regressions vs iteration_23."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "100% (12/12 headless assertions + live smoke)"},
+  "test_credentials": "not needed for gameplay",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two headless statistical harnesses now live at /app/tests/geometry_rebalance.mjs (encounter distribution + intrusion + arm reach + collision fairness, 400 obstacles/mode) and /app/tests/chip_spread.mjs (chip offset stats, 300 chips/mode). Run with: node --loader ./tests/js_loader.mjs tests/geometry_rebalance.mjs && node --loader ./tests/js_loader.mjs tests/chip_spread.mjs — both exit 0 on success. These reproduce Normal vs Easy through the real engine.js code path without needing the game UI, so any future geometry tweak can be regressed in seconds. Easy Mode remains paywalled (£14.99) with no dev-unlock exposed; if the main agent wants an in-app QA path for Easy, expose a temporary dev toggle or preview-only unlock (currently the only way to exercise Easy is via the headless harness).",
+  "rca of the issue": "n/a — verification session, no bugs found. Difficulty rebalance is behaving exactly as specified: Normal Mode shows measurably longer arms (max 18.3 vs 4.3 px projection), 26% paired non-building encounters (Easy: 3.8%), up to 26 px genuine intrusion into the corridor (Easy: 0), and wider chip spread (max 34 vs 18 px). Collision boundaries stay strictly aligned with drawn geometry — no unfair invisible-box deaths in either mode."
+}

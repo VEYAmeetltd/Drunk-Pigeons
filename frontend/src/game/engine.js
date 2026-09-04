@@ -105,13 +105,14 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     // 4th spawn of the run, matching the verification requirement.
     const curIdx = spawnIndex;
     const mustVary = curIdx === 3 && !nonBuildingSeenEarly;
-    const enc = pickEncounter({ mustVary });
+    const enc = pickEncounter({ mustVary, hard: T.HARD_GEOMETRY });
     if (curIdx < 4 && isNonBuildingEncounter(enc)) nonBuildingSeenEarly = true;
     o.topFamily = enc.topFamily;
     o.bottomFamily = enc.bottomFamily;
     const bottomH = groundY() - (topH + gap);
-    o.topGeo = o.topFamily && o.topFamily !== FAMILIES.BUILDING ? buildGeometry(o.topFamily, { H: topH, OW, seed: o.seed }) : null;
-    o.bottomGeo = o.bottomFamily && o.bottomFamily !== FAMILIES.BUILDING ? buildGeometry(o.bottomFamily, { H: bottomH, OW, seed: o.seed }) : null;
+    const geomOpts = { scale: T.GEOM_SCALE, intrudeBottom: T.GEOM_INTRUDE_BOTTOM, intrudeTop: T.GEOM_INTRUDE_TOP };
+    o.topGeo = o.topFamily && o.topFamily !== FAMILIES.BUILDING ? buildGeometry(o.topFamily, { H: topH, OW, seed: o.seed, ...geomOpts }) : null;
+    o.bottomGeo = o.bottomFamily && o.bottomFamily !== FAMILIES.BUILDING ? buildGeometry(o.bottomFamily, { H: bottomH, OW, seed: o.seed, ...geomOpts }) : null;
     o.topMargin = o.topGeo ? projectionMargin(o.topGeo.segments, OW) : 0;
     o.bottomMargin = o.bottomGeo ? projectionMargin(o.bottomGeo.segments, OW) : 0;
 
@@ -265,8 +266,9 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
 
     // 1) up to 2 chips inside B's own gap (safe by construction, still validated)
     const gapCy = B.topH + B.gap / 2;
+    const spread = T.CHIP_GAP_SPREAD;
     let placedGap = 0;
-    for (const oy of [0, -24, 24]) {
+    for (const oy of [0, -spread, spread]) {
       if (placedGap >= 2) break;
       if (isChipPosSafe(B.x + OW / 2, gapCy + oy)) {
         spawnChip(B.x + OW / 2, gapCy + oy);

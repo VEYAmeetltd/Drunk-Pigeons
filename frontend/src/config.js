@@ -27,6 +27,15 @@ export const CONFIG = {
   MIN_BOTTOM: 70, // above ground
   MAX_TOP_DELTA: 0, // 0 = unrestricted vertical variation (standard chaos)
 
+  // Segment-geometry difficulty (Normal Mode): longer arms/masts/jibs + real
+  // pieces allowed to reach a bit past the gap edge into the flight corridor.
+  // Visible artwork only — hitboxes always match exactly what's drawn.
+  HARD_GEOMETRY: true, // favours paired top+bottom encounters over open sky
+  GEOM_SCALE: 1.6,
+  GEOM_INTRUDE_BOTTOM: 26,
+  GEOM_INTRUDE_TOP: 26,
+  CHIP_GAP_SPREAD: 34, // px chips may sit off gap-centre (rewards precise flying)
+
   // Speed / difficulty
   SPEED_BASE: 235,
   SPEED_MAX: 380,
@@ -104,4 +113,13 @@ export const EASY_TUNING = {
   MIN_TOP: 46,
   MIN_BOTTOM: 60,
   MAX_TOP_DELTA: 55, // clamp vertical jump between consecutive obstacles (no tight transitions)
+
+  // Segment-geometry difficulty (Easy Mode): short, stubby pieces, never
+  // reaching past the gap edge, and heavily favours open-sky single-sided
+  // encounters over paired top+bottom pressure.
+  HARD_GEOMETRY: false,
+  GEOM_SCALE: 0.55,
+  GEOM_INTRUDE_BOTTOM: 0,
+  GEOM_INTRUDE_TOP: 0,
+  CHIP_GAP_SPREAD: 18, // chips stay close to gap-centre, easy to scoop up
 };

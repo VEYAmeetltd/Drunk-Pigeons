@@ -13,6 +13,17 @@
 // industrial/railway) have their anchor (ground) at y=H and the gap-facing
 // edge at y=0. The one top-anchored family (hanging) has its anchor
 // (ceiling) at y=0 and the gap-facing edge at y=H.
+//
+// DIFFICULTY LEVERS (Normal vs Easy) are expressed ONLY through visible
+// geometry here — never through invisible/enlarged hitboxes:
+//  `scale`   — how long/thick the key blocking pieces (arm, jib, mast, legs,
+//              tank, canopy...) are drawn. Bigger scale = more of the lane
+//              genuinely occupied, for longer, by real solid artwork.
+//  `intrude` — how many px a family's near-gap piece may reach PAST the
+//              nominal gap edge into the flight corridor the difficulty
+//              generator already reserves as clear. 0 = never crosses it
+//              (old behaviour). This is the main "requires active height
+//              control" lever; `clampToGapEdge` enforces the cap either way.
 export const FAMILIES = {
   BUILDING: 'building',
   LAMP: 'lamp',
@@ -34,17 +45,17 @@ export const BOTTOM_FAMILIES = [
   FAMILIES.RAILWAY,
 ];
 
-function geomLamp(H, OW, seed) {
-  const poleH = Math.min(H - 8, 110 + (seed % 55));
-  const poleTopY = H - poleH;
-  const poleW = 7;
+function geomLamp(H, OW, seed, scale, intrude) {
+  const poleH = Math.min(H - 6 + intrude, (110 + (seed % 55)) * scale);
+  const poleTopY = H - poleH; // can go negative (past the gap edge) up to -intrude
+  const poleW = 6 + 2 * scale;
   const poleX = OW / 2 - poleW / 2;
   const dir = seed % 2 === 0 ? 1 : -1;
-  const armLen = 24;
+  const armLen = 22 * scale;
   const armT = 5;
   const armY = poleTopY + 6;
   const armX = dir > 0 ? poleX + poleW : poleX - armLen;
-  const headW = 22, headH = 15;
+  const headW = 20 * scale, headH = 14 * scale;
   const headX = dir > 0 ? armX + armLen - headW + 6 : armX - 6;
   const headY = armY - headH + 5;
   const black = '#25291f';
@@ -59,16 +70,16 @@ function geomLamp(H, OW, seed) {
   };
 }
 
-function geomCrane(H, OW, seed) {
+function geomCrane(H, OW, seed, scale, intrude) {
   const dark = '#8a6410';
   const yellow = '#f2b41c';
-  const mastW = 12;
+  const mastW = 10 + 4 * scale;
   const mastX = OW / 2 - mastW / 2;
-  const jibT = 8;
-  const jibY = 20;
-  const jibLenR = OW * 0.62;
-  const jibLenL = OW * 0.22;
-  const cabW = 16, cabH = 14;
+  const jibT = 7 + 2 * scale;
+  const jibY = 20 - intrude; // can go negative (past the gap edge) up to -intrude
+  const jibLenR = OW * (0.5 + 0.18 * scale);
+  const jibLenL = OW * (0.16 + 0.1 * scale);
+  const cabW = 14 + 4 * scale, cabH = 12 + 4 * scale;
   return {
     segments: [
       { type: 'rect', x: mastX, y: 0, w: mastW, h: H, fill: yellow, stroke: dark, strokeW: 2 },
@@ -84,36 +95,40 @@ function geomCrane(H, OW, seed) {
   };
 }
 
-function geomScaffold(H, OW, seed) {
+function geomScaffold(H, OW, seed, scale, intrude) {
   const pole = '#c9ccd1';
   const plankC = '#c79a54';
   const dark = '#5c6068';
   const segs = [];
   const decor = [];
-  const poleXs = [6, OW / 2 - 2, OW - 10];
-  for (const px of poleXs) segs.push({ type: 'rect', x: px, y: 0, w: 4, h: H, fill: pole, stroke: dark, strokeW: 1 });
-  const decks = Math.max(2, Math.floor(H / 42));
+  const poleW = 3 + 2 * scale;
+  const poleXs = [6, OW / 2 - poleW / 2, OW - 9 - poleW];
+  for (const px of poleXs) segs.push({ type: 'rect', x: px, y: -intrude, w: poleW, h: H + intrude, fill: pole, stroke: dark, strokeW: 1 });
+  const deckH = 7 + 2 * scale;
+  const deckGap = Math.max(30, 46 - 10 * scale); // decks closer together as scale increases
+  const decks = Math.max(2, Math.floor((H + intrude) / deckGap));
   for (let i = 0; i < decks; i++) {
-    const y = H - 16 - i * 42;
-    if (y < 2) break;
-    segs.push({ type: 'rect', x: 4, y, w: OW - 8, h: 8, fill: plankC, stroke: dark, strokeW: 1 });
-    const braceLen = Math.min(34, y - 2);
+    const y = H - 16 - i * deckGap;
+    if (y < -intrude + 2) break;
+    segs.push({ type: 'rect', x: 4, y, w: OW - 8, h: deckH, fill: plankC, stroke: dark, strokeW: 1 });
+    const braceLen = Math.min(34, y + intrude - 2);
     if (braceLen > 6) {
-      decor.push({ type: 'capsule', x1: 7, y1: y + 8, x2: OW - 7, y2: y + 8 + braceLen, stroke: pole, t: 2 });
-      decor.push({ type: 'capsule', x1: OW - 7, y1: y + 8, x2: 7, y2: y + 8 + braceLen, stroke: pole, t: 2 });
+      decor.push({ type: 'capsule', x1: 7, y1: y + deckH, x2: OW - 7, y2: y + deckH + braceLen, stroke: pole, t: 2 });
+      decor.push({ type: 'capsule', x1: OW - 7, y1: y + deckH, x2: 7, y2: y + deckH + braceLen, stroke: pole, t: 2 });
     }
   }
   return { segments: segs, decor };
 }
 
-function geomTree(H, OW, seed) {
+function geomTree(H, OW, seed, scale, intrude) {
   const trunk = '#7a5330';
   const green1 = '#2f8b3c', green2 = '#3fa24c', green3 = '#57bd62';
-  const trunkH = Math.min(H * 0.5, 80);
-  const trunkW = 12;
-  const canopyR = Math.min(OW * 0.5, 30 + (seed % 14), H * 0.4);
-  let canopyCy = H - trunkH - canopyR * 0.55;
-  if (canopyCy - canopyR < 2) canopyCy = canopyR + 2;
+  const trunkH = Math.min(H * 0.5 + intrude * 0.6, 80 * scale);
+  const trunkW = 10 + 4 * scale;
+  const canopyR = Math.min(OW * 0.56, (30 + (seed % 14)) * scale, H * 0.42 + intrude * 0.5);
+  let canopyCy = H - trunkH - canopyR * 0.5;
+  const minCy = canopyR - intrude;
+  if (canopyCy < minCy) canopyCy = minCy;
   return {
     segments: [
       { type: 'rect', x: OW / 2 - trunkW / 2, y: H - trunkH, w: trunkW, h: trunkH, fill: trunk, stroke: '#5f4025', strokeW: 1 },
@@ -125,19 +140,20 @@ function geomTree(H, OW, seed) {
   };
 }
 
-function geomIndustrial(H, OW, seed) {
+function geomIndustrial(H, OW, seed, scale, intrude) {
   const body = '#8a8f97', dark = '#565b62', warn = '#e2b53a';
   if (seed % 2 === 0) {
-    const w = 15;
+    const w = 13 + 8 * scale;
     return {
-      segments: [{ type: 'rect', x: OW / 2 - w / 2, y: 0, w, h: H, fill: '#9a4a3a', stroke: '#6b2f22', strokeW: 2 }],
-      decor: [{ type: 'rect', x: OW / 2 - w / 2 - 2, y: 0, w: w + 4, h: 10, fill: '#6b2f22' }],
+      segments: [{ type: 'rect', x: OW / 2 - w / 2, y: -intrude, w, h: H + intrude, fill: '#9a4a3a', stroke: '#6b2f22', strokeW: 2 }],
+      decor: [{ type: 'rect', x: OW / 2 - w / 2 - 2, y: -intrude, w: w + 4, h: 10, fill: '#6b2f22' }],
     };
   }
-  const tankW = Math.min(OW - 8, 48);
-  const tankH = Math.min(H * 0.5, 52);
-  const tankY = Math.max(0, H - tankH - Math.min(H * 0.35, 40));
-  const legW = 6;
+  const tankW = Math.min(OW - 8, 38 + 16 * scale);
+  const tankH = Math.min(H * 0.5 + intrude * 0.4, 38 + 20 * scale);
+  const topBuffer = Math.max(0, Math.min(H * 0.35, 40) - intrude * 1.2);
+  const tankY = Math.max(-intrude, H - tankH - topBuffer);
+  const legW = 5 + 2 * scale;
   const legXs = [OW / 2 - tankW / 2 + 5, OW / 2 + tankW / 2 - 5 - legW];
   const legY = tankY + tankH * 0.75;
   return {
@@ -150,11 +166,17 @@ function geomIndustrial(H, OW, seed) {
   };
 }
 
-function geomRailway(H, OW, seed) {
+function geomRailway(H, OW, seed, scale, intrude) {
   const steel = '#5f6870', dark = '#363c42', lt = '#828b94';
-  const legW = 8;
-  const legXs = [9, OW - 17];
-  const segs = legXs.map((lx) => ({ type: 'rect', x: lx, y: 0, w: legW, h: H, fill: steel, stroke: dark, strokeW: 2 }));
+  const legW = 6 + 4 * scale;
+  const legXs = [8, OW - 8 - legW];
+  const segs = legXs.map((lx) => ({ type: 'rect', x: lx, y: -intrude, w: legW, h: H + intrude, fill: steel, stroke: dark, strokeW: 2 }));
+  // an extra solid centre brace (real, collidable) when scale is high enough —
+  // Normal Mode gets an occasional genuine cross-blocker; Easy stays leg-only.
+  if (scale >= 0.85) {
+    const midY = H * 0.32;
+    segs.push({ type: 'capsule', x1: legXs[0] + legW / 2, y1: midY - 5, x2: legXs[1] + legW / 2, y2: midY + 5, stroke: steel, t: 6 + 3 * scale });
+  }
   const decor = [];
   const bays = Math.max(2, Math.floor(H / 46));
   for (let i = 0; i < bays; i++) {
@@ -167,12 +189,13 @@ function geomRailway(H, OW, seed) {
 }
 
 // Top-anchored only: hanging beam, suspended ad sign, or overhead railway gantry.
-function geomHanging(H, OW, seed) {
+function geomHanging(H, OW, seed, scale, intrude) {
   const variant = seed % 3;
   const dark = '#33373d', cable = '#1f2226';
   if (variant === 0) {
-    const beamT = 10;
-    const cableBottom = Math.min(H - 4, beamT + 34);
+    const beamT = 8 + 3 * scale;
+    const reach = beamT + (26 + 12 * scale);
+    const cableBottom = Math.min(H + intrude, reach);
     return {
       segments: [{ type: 'rect', x: -OW * 0.35, y: 0, w: OW * 1.7, h: beamT, fill: dark, stroke: '#1a1c1f', strokeW: 2 }],
       decor: [
@@ -182,10 +205,10 @@ function geomHanging(H, OW, seed) {
     };
   }
   if (variant === 1) {
-    const avail = H - 6;
-    const cableLen = Math.max(10, avail * 0.32);
-    const signW = Math.min(OW * 1.25, 88);
-    const signH = Math.max(16, Math.min(avail - cableLen, 32));
+    const avail = H - 4;
+    const cableLen = Math.max(10, avail * 0.28 * scale);
+    const signW = Math.min(OW * (1.05 + 0.2 * scale), 100);
+    const signH = Math.max(16, Math.min(avail - cableLen + intrude, 30 * scale));
     return {
       segments: [
         { type: 'capsule', x1: OW * 0.28, y1: 0, x2: OW * 0.28, y2: cableLen, stroke: cable, t: 4 },
@@ -195,12 +218,13 @@ function geomHanging(H, OW, seed) {
       decor: [{ type: 'rect', x: OW / 2 - signW / 2 + 6, y: cableLen + 6, w: signW - 12, h: 6, fill: '#e0483a', radius: 2 }],
     };
   }
-  const beamT = 8;
+  const beamT = 7 + 3 * scale;
+  const legH = 16 * scale + intrude;
   return {
     segments: [
       { type: 'rect', x: -OW * 0.3, y: 10, w: OW * 1.6, h: beamT, fill: '#3b3f45', stroke: '#22252a', strokeW: 2 },
-      { type: 'rect', x: 6, y: 0, w: 6, h: 18, fill: '#3b3f45', stroke: '#22252a', strokeW: 1 },
-      { type: 'rect', x: OW - 12, y: 0, w: 6, h: 18, fill: '#3b3f45', stroke: '#22252a', strokeW: 1 },
+      { type: 'rect', x: 6, y: 0, w: 6, h: legH, fill: '#3b3f45', stroke: '#22252a', strokeW: 1 },
+      { type: 'rect', x: OW - 12, y: 0, w: 6, h: legH, fill: '#3b3f45', stroke: '#22252a', strokeW: 1 },
     ],
     decor: [
       { type: 'capsule', x1: 4, y1: 18, x2: 4, y2: 18, fill: '#e0483a', t: 6 },
@@ -209,31 +233,35 @@ function geomHanging(H, OW, seed) {
   };
 }
 
-// Safety net: guarantees no piece can ever poke past the gap-facing edge into
-// the corridor the difficulty/gap generator already considers clear — no
-// matter what the per-family math above produced. Only the gap-facing edge is
-// clamped (the anchor edge is the structure's own ground/ceiling, never a
-// fairness concern).
-function clampToGapEdge(list, H, anchorEdge) {
+// Safety net: guarantees no piece can ever reach further than `intrude` px
+// past the gap-facing edge into the corridor — no matter what the per-family
+// math above produced. `intrude=0` reproduces the original "never crosses
+// the edge" behaviour; a positive value is the ONLY way a piece can reach
+// into the flight corridor, and it's always an explicit, bounded amount.
+function clampToGapEdge(list, H, anchorEdge, intrude) {
   const out = [];
   for (const seg of list) {
     if (seg.type === 'rect') {
       let { y, h } = seg;
       if (anchorEdge === 'bottom') {
-        if (y < 0) { h += y; y = 0; }
-      } else if (y + h > H) {
-        h = H - y;
+        const minY = -intrude;
+        if (y < minY) { h += y - minY; y = minY; }
+      } else {
+        const maxY = H + intrude;
+        if (y + h > maxY) h = maxY - y;
       }
       if (h <= 0) continue;
       out.push({ ...seg, y, h });
     } else {
       let { y1, y2 } = seg;
       if (anchorEdge === 'bottom') {
-        y1 = Math.max(0, y1);
-        y2 = Math.max(0, y2);
+        const minY = -intrude;
+        y1 = Math.max(minY, y1);
+        y2 = Math.max(minY, y2);
       } else {
-        y1 = Math.min(H, y1);
-        y2 = Math.min(H, y2);
+        const maxY = H + intrude;
+        y1 = Math.min(maxY, y1);
+        y2 = Math.min(maxY, y2);
       }
       out.push({ ...seg, y1, y2 });
     }
@@ -243,25 +271,29 @@ function clampToGapEdge(list, H, anchorEdge) {
 
 // Builds { segments, decor } for a non-BUILDING family. `H` is the reserved
 // height for that side (topH or bottomH); `seed` picks size/side variety.
+// `scale`/`intrudeBottom`/`intrudeTop` are the ONLY difficulty knobs (Normal
+// vs Easy Mode) — always expressed as real, visible geometry; the matching
+// clamp keeps every reach bounded and every visible piece = the hitbox.
 // Returns null for BUILDING/unknown — callers keep the existing full-rect
 // building collision & rendering path untouched.
-export function buildGeometry(family, { H, OW, seed }) {
+export function buildGeometry(family, { H, OW, seed, scale = 1, intrudeBottom = 0, intrudeTop = 0 }) {
   const s = (seed || 1) >>> 0;
   let raw;
   let anchorEdge = 'bottom';
+  let intrude = intrudeBottom;
   switch (family) {
-    case FAMILIES.LAMP: raw = geomLamp(H, OW, s); break;
-    case FAMILIES.CRANE: raw = geomCrane(H, OW, s); break;
-    case FAMILIES.SCAFFOLD: raw = geomScaffold(H, OW, s); break;
-    case FAMILIES.TREE: raw = geomTree(H, OW, s); break;
-    case FAMILIES.INDUSTRIAL: raw = geomIndustrial(H, OW, s); break;
-    case FAMILIES.RAILWAY: raw = geomRailway(H, OW, s); break;
-    case FAMILIES.HANGING: raw = geomHanging(H, OW, s); anchorEdge = 'top'; break;
+    case FAMILIES.LAMP: raw = geomLamp(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.CRANE: raw = geomCrane(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.SCAFFOLD: raw = geomScaffold(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.TREE: raw = geomTree(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.INDUSTRIAL: raw = geomIndustrial(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.RAILWAY: raw = geomRailway(H, OW, s, scale, intrudeBottom); break;
+    case FAMILIES.HANGING: raw = geomHanging(H, OW, s, scale, intrudeTop); anchorEdge = 'top'; intrude = intrudeTop; break;
     default: return null;
   }
   return {
-    segments: clampToGapEdge(raw.segments, H, anchorEdge),
-    decor: clampToGapEdge(raw.decor || [], H, anchorEdge),
+    segments: clampToGapEdge(raw.segments, H, anchorEdge, intrude),
+    decor: clampToGapEdge(raw.decor || [], H, anchorEdge, intrude),
   };
 }
 
