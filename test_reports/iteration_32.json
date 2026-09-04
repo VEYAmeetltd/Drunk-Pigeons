@@ -1,0 +1,35 @@
+{
+  "summary": "Independently verified DP Admin Access + Tickets + Logs backend feature. Ran E1's 12 admin_flow tests plus wrote 22 additional adversarial tests covering JWT forgery (alg:none, wrong-secret, expired, forged role claim), HMAC tampering (body/method/query), sensitive-field redaction sweep across all admin endpoints, role isolation edge cases (invited/disabled cannot login, duplicate invite, short password, bad setup token), and no-data-duplication invariants. Full backend suite: 142 passed (108 pre-existing regression + 12 admin_flow + 22 adversarial). No bugs found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DP_ADMIN_JWT_SECRET", "issue": "Current JWT secret is only 15 bytes (below RFC 7518 SHA256 minimum of 32 bytes). PyJWT emits InsecureKeyLengthWarning. Signature is still valid, but recommend rotating to a >=32-byte secret."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_admin_flow.py",
+    "/app/backend/tests/test_admin_adversarial.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Non-blocking) Rotate DP_ADMIN_JWT_SECRET in /app/backend/.env to a >=32-byte value to silence PyJWT InsecureKeyLengthWarning and follow RFC 7518."
+  ],
+  "critical_code_review_comments": [
+    "Solid separation: require_dp_admin re-reads status AND role from Mongo on every call, verified by adversarial test where a JWT claiming role=owner for an actual admin is correctly refused with 403 on owner-only routes.",
+    "HMAC verification correctly fails-closed on body/method/query tampering and enforces replay protection via unique nonce index.",
+    "Redaction verified: no password_hash, token_hash, plaintext setup_token, X-Signature, or the raw INTIES_SERVICE_SECRET/DP_ADMIN_JWT_SECRET values appear in any of /me, /admins, /tickets, /logs responses.",
+    "No data duplication: dp_tickets collection only holds player_support/operational_incident; ad_enquiry categories always sourced from ad_enquiries; leaderboard_moderation always from reports.",
+    "Minor: JWT secret length (15 bytes) < RFC 7518 SHA256 recommended (32 bytes). Not exploitable given the value is random, but flagged by PyJWT."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_adversarial.py (new - 22 adversarial tests)"
+  ],
+  "success_rate": {"backend": "100% (142/142)", "frontend": "N/A - backend-only feature"},
+  "test_credentials": "DP OWNER: gordon@intiesltd.com / CorrectHorseBatteryStaple1 (used successfully, JWT returned as expected).",
+  "seed_data_creation": "Adversarial tests create ephemeral TEST_ prefixed admins and tickets (auto-expiring via disable/revoke flow within tests). No manual cleanup required; test-created admins remain in dp_admins in status=disabled/revoked which is intended terminal state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend rate limiter is in-memory (advertising.py _hits dict). If you see 429 on /api/service/admin/login, either wait 15 minutes or `sudo supervisorctl restart backend` to reset (safe in preview env). All tests should be run after a fresh restart to avoid cumulative rate-limit hits from prior sessions. HMAC key/secret in /app/backend/.env under INTIES_SERVICE_KEY_ID / INTIES_SERVICE_SECRET; JWT signing secret DP_ADMIN_JWT_SECRET is 15 bytes (minor concern, non-blocking).",
+  "rca of the issue": "No bugs found. Feature works as designed and matches the integration contract."
+}

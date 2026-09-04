@@ -146,16 +146,11 @@ async def get_artwork(eid: str, request: Request, auth=Depends(require_service_a
     return StreamingResponse(io.BytesIO(data), media_type=safe_mime, headers=headers)
 
 
-@router.post("/enquiries/{eid}/status")
-async def set_status(eid: str, request: Request, auth=Depends(require_service_auth)):
-    body = await request.json()
-    status = str(body.get("status", ""))
-    note = body.get("note")
-    moderated_by = str(body.get("moderated_by") or f"service:{auth['key_id']}")[:120]
+async def _set_status_impl(db, eid, status, note, moderated_by, ip):
+    """Reused by both the /status route below and the DP Tickets resolve action
+    (admin_tickets.py) — one workflow-transition implementation, never duplicated."""
     if status not in WORKFLOW_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid status")
-
-    db = request.app.state.db
     doc = await db.ad_enquiries.find_one({"id": eid})
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
@@ -169,21 +164,24 @@ async def set_status(eid: str, request: Request, auth=Depends(require_service_au
         {"$set": {"workflow_status": status, "moderated_at": now, "moderated_by": moderated_by, "updated_at": now}},
     )
     after = {**doc, "workflow_status": status}
-    await _audit(db, eid, moderated_by, auth["ip"], "status_change", doc, after, note)
+    await _audit(db, eid, moderated_by, ip, "status_change", doc, after, note)
     return {"ok": True, "workflow_status": status}
 
 
-@router.post("/enquiries/{eid}/moderate")
-async def moderate(eid: str, request: Request, auth=Depends(require_service_auth)):
+@router.post("/enquiries/{eid}/status")
+async def set_status(eid: str, request: Request, auth=Depends(require_service_auth)):
     body = await request.json()
-    action = str(body.get("action", ""))
+    status = str(body.get("status", ""))
     note = body.get("note")
     moderated_by = str(body.get("moderated_by") or f"service:{auth['key_id']}")[:120]
-    escalation_reference = body.get("escalation_reference")
+    return await _set_status_impl(request.app.state.db, eid, status, note, moderated_by, auth["ip"])
+
+
+async def _moderate_impl(db, eid, action, note, moderated_by, ip, escalation_reference=None):
+    """Reused by both the /moderate route below and the DP Tickets resolve action
+    (admin_tickets.py) — one moderation implementation, never duplicated."""
     if action not in MODERATE_ACTIONS:
         raise HTTPException(status_code=422, detail="Invalid action")
-
-    db = request.app.state.db
     doc = await db.ad_enquiries.find_one({"id": eid})
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
@@ -208,10 +206,20 @@ async def moderate(eid: str, request: Request, auth=Depends(require_service_auth
 
     await db.ad_enquiries.update_one({"id": eid}, {"$set": updates})
     after = {**doc, **updates}
-    await _audit(db, eid, moderated_by, auth["ip"], f"moderate:{action}", doc, after, note)
+    await _audit(db, eid, moderated_by, ip, f"moderate:{action}", doc, after, note)
     return {"ok": True, "workflow_status": after.get("workflow_status"), "moderation_status": mod_status,
             "artwork_restricted": after.get("artwork_restricted", False),
             "escalation_reference": after.get("escalation_reference")}
+
+
+@router.post("/enquiries/{eid}/moderate")
+async def moderate(eid: str, request: Request, auth=Depends(require_service_auth)):
+    body = await request.json()
+    action = str(body.get("action", ""))
+    note = body.get("note")
+    moderated_by = str(body.get("moderated_by") or f"service:{auth['key_id']}")[:120]
+    escalation_reference = body.get("escalation_reference")
+    return await _moderate_impl(request.app.state.db, eid, action, note, moderated_by, auth["ip"], escalation_reference)
 
 
 @router.get("/enquiries/{eid}/audit")

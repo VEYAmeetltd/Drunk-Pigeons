@@ -36,8 +36,12 @@ app.add_middleware(
 app.state.db = db
 from advertising import router as advertising_router  # noqa: E402
 from service_advertising import router as service_advertising_router  # noqa: E402
+from admin_auth import router as admin_bootstrap_router, seed_dp_owner  # noqa: E402
+from service_admin import router as service_admin_router  # noqa: E402
 app.include_router(advertising_router)
 app.include_router(service_advertising_router)
+app.include_router(admin_bootstrap_router)
+app.include_router(service_admin_router)
 
 # ---- Gameplay-derived anti-cheat constants (must mirror the client engine) ----
 SPEED_MAX = 380.0            # px/sec cap
@@ -192,6 +196,20 @@ async def _startup():
     # auto-expired shortly after the signing timestamp window closes.
     await db.service_nonces.create_index([("key_id", 1), ("nonce", 1)], unique=True)
     await db.service_nonces.create_index("createdAt", expireAfterSeconds=600)
+    # DP admin identity/tickets/logs (fully separate from INTIES — see admin_auth.py,
+    # admin_tickets.py, admin_events.py).
+    await db.dp_admins.create_index("id", unique=True)
+    await db.dp_admins.create_index("email", unique=True)
+    await db.dp_admin_setup_tokens.create_index("token_hash", unique=True)
+    await db.dp_admin_setup_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.dp_tickets.create_index("id", unique=True)
+    await db.dp_tickets.create_index([("created_at", -1)])
+    await db.dp_tickets.create_index([("status", 1)])
+    await db.dp_events.create_index("id", unique=True)
+    await db.dp_events.create_index([("at", -1)])
+    await db.dp_events.create_index([("event_type", 1), ("at", -1)])
+    await db.dp_events.create_index([("target", 1), ("at", -1)])
+    await seed_dp_owner(db, os.environ.get("DP_OWNER_EMAIL", ""))
     try:
         from advertising import init_storage
         init_storage()

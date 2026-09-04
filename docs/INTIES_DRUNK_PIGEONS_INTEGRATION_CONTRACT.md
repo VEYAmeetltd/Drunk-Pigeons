@@ -346,3 +346,141 @@ hard cutover:
 11. Confirm the Drunk Pigeons service secret is never sent to, or readable by, the
     INTIES browser/frontend — it must exist only in the INTIES backend's own
     environment variables.
+
+---
+
+## 11. DP Admin Access + Tickets + Logs
+
+Added for the INTIES Admin Dashboard to manage Drunk Pigeons admins, tickets and
+operational logs. **Architecturally separate product**: DP owns its own admin
+identities, roles, tickets and logs end-to-end. INTIES permissions never grant DP
+permissions and vice versa; there is no cross-product super-admin. Every route below
+still requires the SAME HMAC service-to-service layer from sections 1–3 — nothing in
+this section is reachable without a validly signed request.
+
+```
+INTIES ADMIN BROWSER -> INTIES SERVER/BACKEND -> signed service request -> DRUNK PIGEONS BACKEND
+```
+The DP admin's own email/password NEVER goes anywhere except this signed
+server-to-server channel; DP's JWT secret and the HMAC secret are two separate,
+independently-rotatable values, both confined to server-side `.env` files.
+
+### DP API BASE URL
+```
+<Drunk Pigeons backend's REACT_APP_BACKEND_URL>/api/service/admin
+```
+(Plus one deliberately PUBLIC, non-HMAC endpoint for one-time password setup — see
+"Bootstrap / invite flow" below.)
+
+### AUTH METHOD
+Two independent layers, both required on every `/api/service/admin/*` call except `/login`:
+1. **Service-to-service**: identical HMAC-SHA256 scheme as section 3 (same key id/secret as the advertising API — no separate service credential for admin).
+2. **DP admin session**: `Authorization: Bearer <JWT>`, obtained from `/login`. The JWT is a DP-issued, HS256-signed, 30-minute token. On every request the DP backend re-loads the admin record from MongoDB and re-checks `status == 'active'` — a valid, unexpired JWT is **not** sufficient on its own; disabling/revoking an admin takes effect on their very next request.
+
+### REQUIRED HEADERS
+`X-Service-Key`, `X-Timestamp`, `X-Nonce`, `X-Signature` (see section 3) **+** `Authorization: Bearer <dp_admin_jwt>` (omitted only for `/login`, which still requires the 4 HMAC headers).
+
+### HMAC CANONICAL STRING
+Identical to section 3: `{METHOD}\n{PATH}{?QUERY}\n{SHA256_HEX(BODY)}\n{TIMESTAMP}\n{NONCE}`.
+
+### TIMESTAMP FORMAT / WINDOW
+Unix seconds as a string; ±5 minutes (identical to section 3).
+
+### NONCE RULES
+Identical to section 3 — `[A-Za-z0-9_-]{16,128}`, single-use per key id, enforced by a unique DB index.
+
+### API KEY HANDLING
+Identical to section 3 — never in query params, never logged, browser never sees it.
+
+### Bootstrap / invite flow (JWT identity only — separate from the HMAC layer above)
+- `POST /api/admin/setup-password` — **PUBLIC**, no HMAC, no JWT. Body: `{ "token": "<setup token>", "password": "<new password, 12-200 chars>" }`. Security comes entirely from the token: single-use, SHA-256-hashed at rest, 24h expiry, cryptographically random (32 bytes, url-safe). This is the one deliberate manual/dev path for an invited admin to set their own password (same trust model as an emailed password-reset link) — no plaintext password is ever transmitted, stored, or logged by Drunk Pigeons.
+- Response: `200 { "ok": true, "email": "..." }` or `400 { "detail": "Invalid or expired setup link." }` (also returned for an already-used token) or `422` (password too short) or `429` (rate limited).
+
+### ENDPOINTS / HTTP METHODS
+
+| Method | Path | Role required | Purpose |
+|---|---|---|---|
+| POST | `/login` | none (issues the JWT) | `{ email, password }` -> `{ ok, token, expires_in_minutes, admin }` |
+| GET | `/me` | any active admin | Current admin's own record |
+| GET | `/admins` | any active admin | List all DP admins |
+| POST | `/admins` | **owner** | Invite a new admin: `{ email, role: "admin"\|"owner" }` -> `{ ok, admin_id, setup_token, note }`. `setup_token` is DEV-MODE-ONLY (no email provider wired yet) — deliver it to the new admin via a secure out-of-band channel; production must wire real email delivery instead of returning it in this response. |
+| PATCH | `/admins/{admin_id}` | **owner** | `{ status: "active"\|"disabled" }` — reversible enable/disable |
+| DELETE | `/admins/{admin_id}` | **owner** | Permanent revoke (cannot be re-enabled; cannot target yourself) |
+| GET | `/tickets` | any active admin | List/filter/paginate (see below) |
+| POST | `/tickets` | any active admin | Create a new ticket — **only** for categories with no existing DP business record: `{ category: "player_support"\|"operational_incident", subject, description }` |
+| GET | `/tickets/{ticket_id}` | any active admin | Full detail + audit/notes history |
+| POST | `/tickets/{ticket_id}/resolve` | any active admin | See resolution schema below |
+| POST | `/tickets/{ticket_id}/note` | any active admin | `{ note }` — internal note, does not change status |
+| GET | `/logs` | any active admin | List/filter/paginate structured DP events |
+
+### REQUEST / RESPONSE SCHEMAS
+
+**Ticket object** (normalized across 3 sources — see "Ticket sources" below):
+```json
+{
+  "ticket_id": "ad_enquiry:ab12cd34ef56",
+  "source": "ad_enquiry",
+  "category": "artwork_review",
+  "status": "open",
+  "subject": "Jane Publican — CITY RUN · All maps · 14 days · £50",
+  "summary": "optional free-text excerpt, 160 chars",
+  "created_at": "2026-08-04T12:00:00+00:00",
+  "updated_at": "2026-08-04T12:00:00+00:00"
+}
+```
+`ticket_id` is always `{source}:{raw_id}` — pass it back verbatim to detail/resolve/note.
+
+**Ticket sources** (each maps to exactly one existing DP business record — never duplicated):
+| source | category (derived) | underlying collection | resolve action reuses |
+|---|---|---|---|
+| `ad_enquiry` | `artwork_review` (moderation_status still `unreviewed`) | `ad_enquiries` | section 4.6 `_moderate_impl` — body needs `{ action, resolution_reason }` |
+| `ad_enquiry` | `payment_admin` (workflow_status in `payment_sent`/`paid`/`scheduled`) | `ad_enquiries` | section 4.5 `_set_status_impl` — body needs `{ status, resolution_reason }` |
+| `ad_enquiry` | `advertising_enquiry` (anything else) | `ad_enquiries` | section 4.5 `_set_status_impl` — body needs `{ status, resolution_reason }` |
+| `report` | `leaderboard_moderation` | `reports` (existing player-report collection) | sets `resolved/resolved_by/resolved_at/resolution_note` directly — body needs `{ resolution_reason }` |
+| `dp_ticket` | `player_support` / `operational_incident` | NEW minimal `dp_tickets` collection (only created by `POST /tickets`) | sets `status: "resolved"` — body needs `{ resolution_reason }` |
+
+**Resolve body** — shape depends on the ticket's `category` (see table above); always include `resolution_reason` (free text, stored + audited).
+
+**Log/event object**:
+```json
+{ "id": "9f8e7d6c5b4a", "event_type": "dp_admin_login_success", "actor": "admin:d1211ce68f...",
+  "target": null, "detail": {}, "ip": "203.0.113.7", "at": "2026-08-04T12:00:00+00:00" }
+```
+`event_type` is one of: `dp_admin_invited`, `dp_admin_setup_completed`, `dp_admin_setup_failed`,
+`dp_admin_enabled`, `dp_admin_disabled`, `dp_admin_revoked`, `dp_admin_login_success`,
+`dp_admin_login_failed`, `ticket_created`, `ticket_resolved`, `ticket_note`, `service_auth_failure`.
+Note: granular per-enquiry moderation history (section 4.8's `/enquiries/{id}/audit`) remains the
+authoritative history for that specific advertising record; `/logs` is the cross-cutting
+DP-admin/ticket/service-auth event stream, not a replacement for it.
+
+### PAGINATION
+`/tickets` and `/logs`: `page` (default 1), `page_size` (default 25 for tickets / 50 for logs, max 100). Response includes `total`, `page`, `page_size`.
+
+### FILTERS
+`/tickets`: `category` (`advertising_enquiry`\|`artwork_review`\|`payment_admin`\|`leaderboard_moderation`\|`player_support`\|`operational_incident`), `status` (`open`\|`resolved`).
+`/logs`: `event_type` (one of the list above).
+
+### ERROR RESPONSES
+Same JSON shape as section 5 (`{ "detail": "..." }`). Additionally: `401` if the JWT is missing/invalid/expired/for a disabled-or-revoked admin; `403` if the role is insufficient (e.g. a non-owner admin calling `POST /admins`); `409` for invalid admin-status transitions (re-enabling a revoked admin, revoking yourself) or invalid ticket-state actions.
+
+### ROLE RULES
+- **owner**: everything an `admin` can do, **plus** invite/enable/disable/revoke other admins.
+- **admin**: login, view own profile, list/view/resolve/note tickets, view logs. Cannot manage admin accounts (403 on `/admins` POST/PATCH/DELETE).
+- No admin can revoke their own access. A revoked admin can never be re-enabled (permanent) — invite a new one instead.
+
+### SENSITIVE FIELDS NEVER RETURNED
+`password`, `password_hash`, setup tokens (only ever returned once, at creation, to the OWNER who created them, and never via `/logs` or `/tickets`), JWTs (only ever returned by `/login`), the HMAC secret, `artwork_storage_path` (inherited from section 4.7).
+
+### ENV VARIABLES REQUIRED ON DP SIDE
+`DP_ADMIN_JWT_SECRET` (HS256 signing key, independent from `INTIES_SERVICE_SECRET`), `DP_OWNER_EMAIL` (bootstrap seed, one-time use — see below).
+
+### ENV VARIABLES REQUIRED ON INTIES SERVER SIDE
+None beyond section 2's existing `DRUNK_PIGEONS_SERVICE_KEY_ID` / `DRUNK_PIGEONS_SERVICE_SECRET` — the DP admin JWT is obtained dynamically via `/login` and should be held server-side by INTIES for the duration of an operator's session (never forwarded to the INTIES browser).
+
+### Bootstrap note
+The very first DP OWNER (`DP_OWNER_EMAIL`) is seeded automatically on first backend
+startup with `status: "invited"` and no password — a one-time setup token is printed
+once to the DP backend's own startup console (never persisted in plaintext, never
+part of the `/logs` audit trail) for manual completion via `POST /api/admin/setup-password`.
+This only ever happens once per environment (idempotent — skipped if any DP admin already exists).
+

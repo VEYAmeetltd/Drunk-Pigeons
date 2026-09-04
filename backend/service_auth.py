@@ -58,19 +58,32 @@ def _canonical_query(request: Request) -> str:
 
 
 async def require_service_auth(request: Request):
-    """FastAPI dependency: verifies the full signed-request contract. Raises 401/429."""
+    """FastAPI dependency: verifies the full signed-request contract. Raises 401/429.
+    Every rejection is logged to dp_events (admin_events.py) with a REASON CATEGORY
+    only — never the signature, secret, nonce, or raw body."""
+    db = request.app.state.db
     key_id = request.headers.get("x-service-key", "")
     ts_raw = request.headers.get("x-timestamp", "")
     nonce = request.headers.get("x-nonce", "")
     sig = request.headers.get("x-signature", "")
+    ip = client_ip(request)
+
+    async def fail(reason):
+        try:
+            from admin_events import log_event
+            await log_event(db, "service_auth_failure", actor=(f"service:{key_id}" if key_id else "anonymous"),
+                             detail={"reason": reason, "path": request.url.path, "method": request.method}, ip=ip)
+        except Exception:
+            pass
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     if not (key_id and ts_raw and nonce and sig):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("missing_credentials")
 
     secrets_map = _configured_secrets()
     secret = secrets_map.get(key_id)
     if not secret:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("unknown_key")
 
     if not rate_limit(f"svc:{key_id}", limit=RATE_LIMIT, window_s=RATE_WINDOW_S):
         raise HTTPException(status_code=429, detail="Too many requests")
@@ -78,12 +91,12 @@ async def require_service_auth(request: Request):
     try:
         ts_int = int(ts_raw)
     except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("bad_timestamp")
     if abs(int(time.time()) - ts_int) > TS_WINDOW_S:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("stale_timestamp")
 
     if not NONCE_RE.match(nonce):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("bad_nonce_format")
 
     body = await request.body()
     body_hash = hashlib.sha256(body or b"").hexdigest()
@@ -93,11 +106,10 @@ async def require_service_auth(request: Request):
     expected = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(expected, sig):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("bad_signature")
 
     # replay protection: this (key_id, nonce) pair must never be seen twice within the
     # timestamp window. Enforced by a unique index + TTL in server.py startup.
-    db = request.app.state.db
     try:
         await db.service_nonces.insert_one({
             "key_id": key_id,
@@ -105,6 +117,6 @@ async def require_service_auth(request: Request):
             "createdAt": datetime.now(timezone.utc),
         })
     except DuplicateKeyError:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        await fail("replayed_nonce")
 
-    return {"key_id": key_id, "ip": client_ip(request)}
+    return {"key_id": key_id, "ip": ip}
