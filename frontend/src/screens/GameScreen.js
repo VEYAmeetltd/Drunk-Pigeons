@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Background from '../components/Background';
-import { PigeonView, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
+import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
@@ -139,6 +139,17 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
   const [heckler, setHeckler] = useState({ id: 0, text: '', reaction: 'fist' });
   const [pintBoost, setPintBoost] = useState(false); // temporary extra-drunk visual after a pint
   const boostTimer = useRef(null);
+  // Roadman-only one-time scripted lines (intro flap / 50m / 100m). A priority speech
+  // bubble anchored to the player pigeon — independent of, and takes priority over, his
+  // ordinary HIC/quip dialogue (see suppressQuips on PigeonView/DrunkPigeon below).
+  const [scriptedLine, setScriptedLine] = useState(null); // { key, text } | null
+  const roadmanFlagsRef = useRef({ wargwarn: false, wargwarn50: false, wargwarn100: false });
+  const scriptedTimerRef = useRef(null);
+  const showScriptedLine = useCallback((text) => {
+    if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+    setScriptedLine({ key: Date.now(), text });
+    scriptedTimerRef.current = setTimeout(() => setScriptedLine(null), 2200);
+  }, []);
 
   const engineRef = useRef(null);
   const rafRef = useRef(0);
@@ -226,6 +237,10 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
     setShield(false);
     setObsGeom(eng.getObstacleGeom());
     world.value = eng.getSnapshot(performance.now());
+    // A brand-new run resets the Roadman scripted-line triggers (revive must NOT).
+    roadmanFlagsRef.current = { wargwarn: false, wargwarn50: false, wargwarn100: false };
+    if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+    setScriptedLine(null);
   }, [width, height, mapSelection, mode]);
 
   // init engine + loop
@@ -246,7 +261,18 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       lastRef.current = now;
       if (dt > 1 / 30) dt = 1 / 30;
       eng.step(dt, now);
-      world.value = eng.getSnapshot(now);
+      const snap = eng.getSnapshot(now);
+      world.value = snap;
+      if (pigeon.id === 'roadman') {
+        const flags = roadmanFlagsRef.current;
+        if (!flags.wargwarn50 && snap.distM >= 50) {
+          flags.wargwarn50 = true;
+          showScriptedLine('I said wargwarn fam?');
+        } else if (!flags.wargwarn100 && snap.distM >= 100) {
+          flags.wargwarn100 = true;
+          showScriptedLine("A'ight say less, deekhed");
+        }
+      }
       const dirty = eng.consumeDirty();
       if (dirty) setObsGeom(eng.getObstacleGeom());
       const hk = eng.consumeHeckler();
@@ -258,6 +284,7 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       cancelAnimationFrame(rafRef.current);
       if (shieldTimer.current) clearTimeout(shieldTimer.current);
       if (boostTimer.current) clearTimeout(boostTimer.current);
+      if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -302,6 +329,10 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       runStartRef.current = performance.now();
       eng.start();
       setStarted(true);
+      if (pigeon.id === 'roadman' && !roadmanFlagsRef.current.wargwarn) {
+        roadmanFlagsRef.current.wargwarn = true;
+        showScriptedLine('Wargwarn?');
+      }
     }
     st.accepted += 1;
     eng.flap();
@@ -390,7 +421,12 @@ export default function GameScreen({ pigeon, mapSelection, bestScore, bestDistan
       ))}
 
       {/* pigeon */}
-      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} />
+      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} suppressQuips={!!scriptedLine} />
+
+      {/* Roadman-only one-time scripted lines — priority speech bubble, safe-area clamped */}
+      {scriptedLine && (
+        <PigeonSpeechBubble world={world} text={scriptedLine.text} textKey={scriptedLine.key} screenW={width} screenH={height} topInset={insets.top} />
+      )}
 
       {/* Drunk soft-focus over the WORLD only (never moves it) — below the HUD */}
       <DrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />

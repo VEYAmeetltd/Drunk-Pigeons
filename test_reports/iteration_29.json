@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only verification of Roadman Pigeon's 3 one-time scripted speech lines. Unlocked all premium pigeons via 1337 leet easter egg (localStorage dp_leetUnlock=1). Enabled Easy Mode + auto-fly (JS-based altitude-controlled Space dispatch) to reliably survive past 100m and beyond. All 3 lines fired exactly once at the correct thresholds, in a properly clamped bubble, with correct suppression/priority over ordinary HIC/quips, correct revive behaviour, correct per-run reset, and zero leakage to other pigeons.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviours": [
+    "READY screen (Roadman, before first tap): NO 'Wargwarn?' bubble present (roadman-script-bubble absent). Confirmed via DOM query.",
+    "First flap: 'Wargwarn?' appears in speech bubble anchored to pigeon at distance ~1m. testID roadman-script-text = 'Wargwarn?'.",
+    "50m milestone: 'I said wargwarn fam?' appears once at distance=49m (first frame after crossing 50m).",
+    "100m milestone: \"A'ight say less, deekhed\" appears once at distance=99m.",
+    "Each of the 3 lines displays for ~2.2s then disappears; polling confirmed each line is fired only ONCE per run (subsequent captures within the visible window are the same event, no re-fire after the bubble hides).",
+    "Revive test: crashed at 439m (after all 3 lines already fired), clicked REVIVE, continued the SAME run — none of the 3 lines re-triggered post-revive. postReviveWargwarn=false, post50AfterRevive=false, post100AfterRevive=false.",
+    "New run reset: Across 5 fresh runs (Play Again -> new run) with Roadman selected, 'Wargwarn?' fired again on each brand-new run's first flap (verified in the multi-run smoke test).",
+    "Other-pigeon test (Classic): flew for 35s / max 308m — roadman-script-bubble NEVER appeared. Classic's ordinary 'HIC!' quip appeared normally (visible in screenshot). Confirms only pigeon.id==='roadman' triggers the scripted lines.",
+    "Ordinary Roadman dialogue BEFORE first flap: on READY screen for 8s, saw 'SAFE.' and \"I'M GOOD.\" quips render normally — so ordinary dialogue is not permanently disabled.",
+    "No visual overlap during scripted line: while polling on Roadman runs during scripted bubble visibility windows, no ordinary HIC/quip text was seen overlapping the scripted bubble (suppressQuips gating in DrunkPigeon works).",
+    "Bubble containment at iPhone SE (375x667): scripted bubble rect = {left:17, right:193, top:134, bottom:165} — fully inside 375x667 viewport (no clipping top/bottom/left/right). Verified via getBoundingClientRect.",
+    "Bubble containment at Dynamic Island 393x852: bubble rendered fully on-screen in screenshot 04_first_flap.png — top ~140px, well below the 44px Dynamic Island safe-area."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GameScreen.js loop trigger uses `else if` for 50m/100m thresholds (line 271). Order-wise this is fine because 50m fires first and then the next frame handles 100m, but if distance jumps >50m in a single frame (e.g. after a lag spike) the 100m line could be delayed one frame. Non-blocking.",
+    "showScriptedLine has a 2200ms fixed timeout; if two triggers fire within 2.2s (theoretical: distance jumps 50-100m fast) the second call clears the timer and replaces text — the first line would be cut short. Not observed in practice but worth noting."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% (all 10 requested checks passed)"},
+  "seed_data_creation": "localStorage init: dp_leetUnlock=1 (all premium pigeons usable via leet), dp_easyOwned=1 (Easy Mode entitlement for larger gap), dp_selectedPigeon=roadman|classic, dp_selectedMap=easy.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To reach 50m/100m in this flappy engine, key-press 'Space' at fixed intervals dies at ~15m (first obstacle). Use altitude-controlled auto-fly: in page.evaluate, poll [data-testid='game-pigeon'] bounding rect and dispatch keydown Space only when pigeon Y > target (window.innerHeight*0.42) with a >=80ms cooldown. This survives indefinitely on Easy Mode.",
+  "rca of the issue": "No bug — feature works as specified."
+}

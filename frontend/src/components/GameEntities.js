@@ -36,7 +36,7 @@ function rngFrom(seed) {
 // The drunk personality (sway, wobble, bob, hiccups, HIC!, bubbles, wing flail
 // and the 360° barrel roll) lives INSIDE, in DrunkPigeon, so it can never touch
 // physics — collision/hitbox use world.px/py + size only, not this visual transform.
-export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1, deflateSignal = 0 }) {
+export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1, deflateSignal = 0, suppressQuips = false }) {
   const size = pigeonSizeFor(fatLevel);
   const style = useAnimatedStyle(() => {
     const w = world.value;
@@ -59,7 +59,60 @@ export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 
   });
   return (
     <Animated.View style={[styles.abs, { width: size, height: size }, style]} pointerEvents="none">
-      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound deflateSignal={deflateSignal} testID="game-pigeon" />
+      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound deflateSignal={deflateSignal} suppressQuips={suppressQuips} testID="game-pigeon" />
+    </Animated.View>
+  );
+}
+
+/* Scripted priority speech bubble for the player pigeon (e.g. Roadman's one-time
+ * intro/milestone lines). Independent of the ordinary HIC/quip system inside
+ * DrunkPigeon — tracks the pigeon's live world.px/py every frame and reuses the SAME
+ * flip/clamp containment recipe as HecklerView so it can never clip off any screen edge,
+ * including the top safe-area inset on notch/Dynamic-Island devices. */
+export function PigeonSpeechBubble({ world, text, textKey, screenW = 400, screenH = 800, topInset = 0 }) {
+  const bubbleH = useSharedValue(46);
+  const anchorHalf = 26; // approx pigeon radius, purely for bubble placement (not physics)
+
+  const layout = useDerivedValue(() => {
+    const w = world.value;
+    const bh = bubbleH.value;
+    const safeTop = topInset + BUBBLE_MARGIN;
+    const safeBottom = screenH - BUBBLE_MARGIN;
+    const safeLeft = BUBBLE_MARGIN;
+    const safeRight = screenW - BUBBLE_MARGIN;
+    const anchorTop = w.py - anchorHalf;
+    const anchorBottom = w.py + anchorHalf;
+
+    let bubY = anchorTop - BUBBLE_GAP - bh;
+    let tailBelow = 0;
+    if (bubY < safeTop) {
+      bubY = anchorBottom + BUBBLE_GAP;
+      tailBelow = 1;
+      if (bubY + bh > safeBottom) bubY = Math.max(safeTop, safeBottom - bh);
+    }
+    let bubX = w.px - PIGEON_BUBBLE_W / 2;
+    if (bubX < safeLeft) bubX = safeLeft;
+    if (bubX + PIGEON_BUBBLE_W > safeRight) bubX = safeRight - PIGEON_BUBBLE_W;
+    const tailX = Math.max(TAIL_HALF * 2, Math.min(PIGEON_BUBBLE_W - TAIL_HALF * 2, w.px - bubX));
+    return { bubX, bubY, tailX, tailBelow };
+  });
+
+  const bubbleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: layout.value.bubX }, { translateY: layout.value.bubY }],
+  }));
+  const tailStyle = useAnimatedStyle(() => {
+    const left = layout.value.tailX - TAIL_HALF;
+    return layout.value.tailBelow
+      ? { left, top: -TAIL_HALF, bottom: undefined, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 3, borderTopWidth: 3 }
+      : { left, bottom: -TAIL_HALF, top: undefined, borderRightWidth: 3, borderBottomWidth: 3, borderLeftWidth: 0, borderTopWidth: 0 };
+  });
+
+  return (
+    <Animated.View style={[styles.abs, hkStyles.bubble, { width: PIGEON_BUBBLE_W }, bubbleStyle]} pointerEvents="none" testID="roadman-script-bubble">
+      <View onLayout={(e) => { bubbleH.value = e.nativeEvent.layout.height; }}>
+        <Text key={textKey} style={hkStyles.bubbleTxt} testID="roadman-script-text">{text}</Text>
+      </View>
+      <Animated.View style={[hkStyles.bubbleTail, tailStyle]} />
     </Animated.View>
   );
 }
@@ -551,6 +604,7 @@ export function FeatherView({ world, index, color }) {
 // measured height (text can wrap to any number of lines) drives the containment math,
 // never a text-shrinking fallback.
 const BUBBLE_W = 168;
+const PIGEON_BUBBLE_W = 176;
 const BUBBLE_MARGIN = 10; // safe margin kept from every screen edge
 const BUBBLE_GAP = 8;     // gap kept between the bubble and its window anchor
 const TAIL_HALF = 7;

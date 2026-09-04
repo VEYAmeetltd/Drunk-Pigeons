@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FONT } from '../ui/theme';
-import { pickBillboardAd, recordImpression } from '../ads/sponsorCampaigns';
+import { pickBillboardAd, recordImpression, resetIntiesRotation } from '../ads/sponsorCampaigns';
 
 // Per-map physical framing for the freestanding billboard structure.
 const FRAMES = {
@@ -50,6 +50,7 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
 
   useEffect(() => {
     slotRef.current = -1;
+    resetIntiesRotation();
     const id = setInterval(() => {
       let d = 0;
       try {
@@ -83,7 +84,12 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
   });
 
   if (!ad) return null;
+  const isInties = ad.kind === 'inties';
   const headSize = Math.round(BILL_W * 0.1);
+  const intiesBg = '#0a0d0f';
+  const intiesFg = '#eafff6';
+  const intiesAccent = '#3ef2c0';
+  const logoH = Math.round(faceH * (ad.headline ? 0.4 : 0.6));
 
   return (
     <Animated.View
@@ -95,21 +101,61 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
       <View style={{ position: 'absolute', top: 0, left: 0, width: BILL_W, height: faceH }}>
         <View style={{ flex: 1, backgroundColor: frame.frame, borderWidth: 4, borderColor: frame.frameEdge, borderRadius: 6, padding: 5 }}>
           {/* artwork panel — backing colour shows behind procedural artwork; content keeps its proportions */}
-          <View style={{ flex: 1, backgroundColor: ad.bg, borderRadius: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }}>
-            <Text
-              style={{ fontFamily: FONT, color: ad.fg, fontWeight: '700', fontSize: headSize, lineHeight: Math.round(headSize * 1.12), textAlign: 'center', letterSpacing: 0.5 }}
-              numberOfLines={3}
-              adjustsFontSizeToFit
-            >
-              {ad.headline}
-            </Text>
-            <View style={{ height: 3, width: '55%', backgroundColor: ad.accent, borderRadius: 2, marginVertical: 6 }} />
-            <Text
-              style={{ fontFamily: FONT, color: ad.fg, opacity: 0.92, fontSize: Math.round(BILL_W * 0.052), textAlign: 'center' }}
-              numberOfLines={2}
-            >
-              {ad.subline}
-            </Text>
+          <View style={{ flex: 1, backgroundColor: isInties ? intiesBg : ad.bg, borderRadius: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }}>
+            {isInties ? (
+              <React.Fragment>
+                {ad.headline && (
+                  <Text
+                    style={{ fontFamily: FONT, color: intiesFg, fontWeight: '800', fontSize: Math.round(BILL_W * 0.062), lineHeight: Math.round(BILL_W * 0.072), textAlign: 'center' }}
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                    testID="sponsor-billboard-headline"
+                  >
+                    {ad.headline}
+                  </Text>
+                )}
+                {ad.subline && (
+                  <Text
+                    style={{ fontFamily: FONT, color: intiesAccent, fontWeight: '700', fontSize: Math.round(BILL_W * 0.04), textAlign: 'center', marginTop: 2 }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {ad.subline}
+                  </Text>
+                )}
+                {/* official INTIES logo asset, rendered exactly as supplied — never redrawn, cropped or stretched */}
+                <Image
+                  source={ad.logo}
+                  resizeMode="contain"
+                  style={{ width: '88%', height: logoH, marginVertical: 4 }}
+                  testID="sponsor-billboard-inties-logo"
+                />
+                <Text
+                  style={{ fontFamily: FONT, color: intiesAccent, fontWeight: '700', fontSize: Math.round(BILL_W * 0.044), letterSpacing: 0.5, textAlign: 'center' }}
+                  numberOfLines={1}
+                  testID="sponsor-billboard-url"
+                >
+                  {ad.url}
+                </Text>
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <Text
+                  style={{ fontFamily: FONT, color: ad.fg, fontWeight: '700', fontSize: headSize, lineHeight: Math.round(headSize * 1.12), textAlign: 'center', letterSpacing: 0.5 }}
+                  numberOfLines={3}
+                  adjustsFontSizeToFit
+                >
+                  {ad.headline}
+                </Text>
+                <View style={{ height: 3, width: '55%', backgroundColor: ad.accent, borderRadius: 2, marginVertical: 6 }} />
+                <Text
+                  style={{ fontFamily: FONT, color: ad.fg, opacity: 0.92, fontSize: Math.round(BILL_W * 0.052), textAlign: 'center' }}
+                  numberOfLines={2}
+                >
+                  {ad.subline}
+                </Text>
+              </React.Fragment>
+            )}
             {/* small, readable advertising label */}
             <View style={{ position: 'absolute', top: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3 }}>
               <Text style={{ fontFamily: FONT, color: '#fff', fontSize: 8, fontWeight: '700', letterSpacing: 0.5 }}>{ad.label}</Text>

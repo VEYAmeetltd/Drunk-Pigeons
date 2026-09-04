@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only re-verification of BUG-1 fix from iteration_27. Fix in /app/frontend/src/ads/sponsorCampaigns.js: both demo campaigns now `exclusive:false`, new AD_MIX.nonExclusivePaidShare=0.5, pickBillboardAd() now filters campaigns into exclusive[] (always wins) vs shared[] (wins 50% of slots via hash(seed*13+31) roll), rest fall through to pickIntiesOrHouseAd. Independent 40k-slot combined-pipeline Node simulation (/app/test_reports/combined_mix_sim.js) reproduces the user's claimed distribution EXACTLY on day/night/dusk: 50.16% paid, 41.03% house, 8.82% INTIES (=17.69% of eligible non-paid slots), minGap between INTIES = 4, ZERO consecutive INTIES. LIVE verified in-app at 390x844 on all 3 maps (Sunny London day, Gritty Backstreets night, Chippy Sunset dusk) with removeAds OFF: a mix of house (YOUR AD COULD BE HERE, CHIPS: A COMPLETE BREAKFAST) AND INTIES creative-2 (headline 'GET PIGEONED.', subline 'DON'T WING YOUR SAFETY.', url INTIESLTD.COM, logo image mounted with testID sponsor-billboard-inties-logo) all appeared organically — INTIES is now REACHABLE without needing Remove Ads on all 3 maps. Live sampling used a temporary GAP_DISTPX=300 hack (reverted to 5600 after) because the naive auto-Space-flap heuristic only survives ~15m before splat, insufficient to cross the normal 5600px slot gap. Non-interactivity verified LIVE: mouse click on the airborne sponsor-billboard did not change URL, did not open a new tab, and did not affect game state (matches iteration_27 verification, unchanged code). All required testIDs still present: sponsor-billboard, sponsor-billboard-inties-logo, sponsor-billboard-url, sponsor-billboard-headline. /advertise flow regression check passes (page loads with all 4 packages including 'EXCLUSIVE PIGEON £250'). BUG-1 is FIXED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/combined_mix_sim.js",
+    "/app/test_reports/inties_sim.js"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pickBillboardAd() paid roll uses `seed*13+31` while the INTIES roll uses `seed*97+1013` and the paid weighted pick uses raw `seed`. Three independent per-slot rolls off the same seed — the correlation between the paid-vs-house decision and the INTIES-vs-house decision is effectively random which is fine, but it does mean the deterministic first-slot behaviour changes: the very first slot of a fresh run on day map (seed=17) always rolls a non-paid outcome (`.` in the sim first-40 preview), so a fresh install of a non-paying player will ALWAYS see 'YOUR AD COULD BE HERE' as their very first billboard, never a paid campaign. Not a bug, but worth knowing for QA.",
+    "AD_MIX.nonExclusivePaidShare=0.5 is a single central knob per the fix spec — good. Adding a per-campaign fillRate override would let advertisers pay more for a higher share without going Exclusive, if that's ever needed commercially (nice-to-have, not required).",
+    "Combined-pipeline math is exactly as user described (8.8% of ALL slots / 17.7% of eligible non-paid slots) — verified independently.",
+    "Remaining iteration-27 review comments (2.4MB logo bundle size, deterministic first-slot on every fresh run due to resetIntiesRotation on mount, low-contrast ADVERTISEMENT label on INTIES dark background) still stand — none blocking, all cosmetic/perf."
+  ],
+  "updated_files": [
+    "/app/test_reports/combined_mix_sim.js (new sim)",
+    "/app/frontend/src/components/SponsorBillboard.js (TEMP QA-only edit to GAP_DISTPX=300 for live sampling — REVERTED to 5600 before completion; verify diff = clean)"
+  ],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100% — BUG-1 fix verified live on all 3 maps + math matches spec + non-interactivity re-confirmed + regression clean"},
+  "test_credentials": "None needed.",
+  "seed_data_creation": "localStorage.dp_removeAdsOwned='1' still routes 100% of slots through pickIntiesOrHouseAd (fastest INTIES sampling); no longer required to see INTIES on day/night/dusk after this fix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "sponsorCampaigns.js BUG-1 fix from iteration_27 is verified end-to-end. If any future change touches pickBillboardAd() or AD_MIX, re-run /app/test_reports/combined_mix_sim.js — expected day/night/dusk output is exactly 50.16% campaign / 41.03% house / 8.82% inties (17.69% of non-paid), minGap=4, zero consecutive. Note that the SponsorBillboard.js interval is 120ms and slots cycle every GAP_DISTPX=5600 scrolled px, so a naive auto-Space-flap loop in Playwright will NOT survive long enough to reach slot 1 (needs ~5600 distPx ≈ well past 15m distM). To sample many billboards live in QA, temporarily lower GAP_DISTPX (I used 300, revert to 5600 after). Testids to watch: sponsor-billboard (always), sponsor-billboard-inties-logo (INTIES only), sponsor-billboard-url (INTIES only, always 'INTIESLTD.COM'), sponsor-billboard-headline (INTIES creatives 2 & 3 only, not creative-1).",
+  "rca_of_the_issue": "BUG-1 (iteration_27) root cause and fix confirmed: the previous pickBillboardAd() branched `if (activeCampaigns.length) return pickWeighted(camps, seed)` unconditionally, so any live paid campaign monopolised 100% of a map's slots, blocking pickIntiesOrHouseAd forever. Fix splits activeCampaigns into exclusive[] and shared[], only the exclusive branch retains the unconditional win. The shared branch now rolls (hash(seed*13+31)%1000)/1000 against AD_MIX.nonExclusivePaidShare=0.5, and if the roll fails the slot falls through to pickIntiesOrHouseAd exactly like an unsponsored map. Both demo campaigns are set exclusive:false, so on day/night/dusk ~50% of slots are still paid and ~50% enter the house/INTIES pool, of which ~17.7% resolve to INTIES creatives — matches the user's claimed 8.8% overall / 17.7% of eligible band exactly (verified via /app/test_reports/combined_mix_sim.js 40k-slot simulation and via live in-app sampling on all 3 maps)."
+}

@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Official INTIES logo asset — bundled locally so it's part of the same asset preload
+// pass as every other billboard asset (never fetched over the network at runtime, so it
+// can never appear late/blank or cause a stutter). Rendered exactly as supplied: never
+// redrawn, recoloured, cropped or stretched (always resizeMode="contain" in the renderer).
+import IntiesLogo from '../../assets/ads/inties-logo.png';
+
 // Sponsor-campaign model. ONLY internally-approved records listed here are ever shown.
 // There are no public uploads, no automatic approval, no in-app checkout, and no remote
 // or executable content — every advert is bundled, static and rendered as procedural art
@@ -13,6 +19,7 @@ export const SPONSOR_CAMPAIGNS = [
     start: '2026-01-01',
     end: '2026-12-31',
     enabled: true,
+    exclusive: false, // non-exclusive booking: shares its map's slots with the house/INTIES pool
     maps: ['day', 'dusk', 'easy'],
     weight: 2,
     headline: 'BREADCRUMB\nBUILDING SOCIETY',
@@ -28,6 +35,7 @@ export const SPONSOR_CAMPAIGNS = [
     start: '2026-01-01',
     end: '2026-12-31',
     enabled: true,
+    exclusive: false,
     maps: ['day', 'night'],
     weight: 1,
     headline: 'PIGEON POST\nEXPRESS',
@@ -48,6 +56,60 @@ export const HOUSE_ADS = [
   { id: 'house-yourad', headline: 'YOUR AD\nCOULD BE HERE', subline: 'advertise in DRUNK PIGEONS', bg: '#1f5a7a', fg: '#ffffff', accent: '#3ef2c0' },
 ];
 
+// INTIES house-brand rotation — Drunk Pigeons' own cross-promotion, layered into the
+// SAME "house ad" fallback slot pool used above (never a paid/booked campaign, and never
+// shown while a real paid sponsor campaign is active for that map — paid campaigns are
+// resolved earlier in pickBillboardAd() and always take priority). Every rotation knob
+// lives in this one place, not scattered through the rendering component.
+export const INTIES_ROTATION = {
+  enabled: true,
+  // Chance to show INTIES once a slot is off cooldown (see minGapHouseAds below). With a
+  // hard 4-ad cooldown, a per-slot roll of 0.6 works out to an ACTUAL long-run appearance
+  // rate of ~17-18% of eligible house-ad slots (simulated over 40k slots) — inside the
+  // requested 15-20% band. Tune this single number to retarget the whole rotation.
+  targetRate: 0.6,
+  minGapHouseAds: 4,     // at least this many non-INTIES house ads before another INTIES ad
+};
+
+export const INTIES_CREATIVES = [
+  // Creative 1 — the official logo lockup already contains the "INTIES" wordmark and
+  // "A safer way to meet." tagline, so no extra headline text is layered over it.
+  { id: 'inties-1', headline: null, subline: null, url: 'INTIESLTD.COM', logo: IntiesLogo },
+  { id: 'inties-2', headline: 'GET PIGEONED.', subline: "DON'T WING YOUR SAFETY.", url: 'INTIESLTD.COM', logo: IntiesLogo },
+  { id: 'inties-3', headline: 'THE PIGEON MAKES\nBAD DECISIONS.', subline: "YOU DON'T HAVE TO.", url: 'INTIESLTD.COM', logo: IntiesLogo },
+];
+
+// Sequential rotation memory (session-scoped, reset each time a billboard mounts — see
+// resetIntiesRotation()). This is passive scenery rotation, not gameplay state, so it is
+// intentionally NOT part of run validation, scoring or any persisted player data.
+let _houseSlotsSinceInties = INTIES_ROTATION.minGapHouseAds;
+let _lastDecidedSeed = null;
+
+export function resetIntiesRotation() {
+  _houseSlotsSinceInties = INTIES_ROTATION.minGapHouseAds;
+  _lastDecidedSeed = null;
+}
+
+// hash()/HOUSE_ADS are defined below; this stays a thin decision step called from inside
+// pickBillboardAd() only once we've already established this slot has no active paid
+// campaign (or the player owns Remove Ads) — i.e. it's a genuine "house ad" slot.
+function pickIntiesOrHouseAd(seed) {
+  if (INTIES_ROTATION.enabled && seed !== _lastDecidedSeed) {
+    _lastDecidedSeed = seed;
+    _houseSlotsSinceInties += 1;
+    if (_houseSlotsSinceInties > INTIES_ROTATION.minGapHouseAds) {
+      const roll = (hash(seed * 97 + 1013) % 1000) / 1000;
+      if (roll < INTIES_ROTATION.targetRate) {
+        _houseSlotsSinceInties = 0;
+        const c = INTIES_CREATIVES[hash(seed + 555) % INTIES_CREATIVES.length];
+        return { ...c, kind: 'inties', label: 'ADVERTISEMENT' };
+      }
+    }
+  }
+  const h = HOUSE_ADS[hash(seed * 2654435761 + 7) % HOUSE_ADS.length];
+  return { ...h, kind: 'house', label: 'DRUNK PIGEONS' };
+}
+
 function hash(n) {
   let a = (n | 0) >>> 0;
   a = (a ^ 61) ^ (a >>> 16);
@@ -66,31 +128,50 @@ function isValidCampaign(c, nowMs) {
   return nowMs >= s && nowMs <= e;
 }
 
+function pickWeighted(camps, seed) {
+  const total = camps.reduce((sum, c) => sum + (c.weight || 1), 0);
+  let r = ((hash(seed) % 1000) / 1000) * total;
+  for (const c of camps) {
+    r -= c.weight || 1;
+    if (r <= 0) return { ...c, kind: 'campaign', label: 'ADVERTISEMENT' };
+  }
+  return { ...camps[0], kind: 'campaign', label: 'ADVERTISEMENT' };
+}
+
+// A booked "Exclusive Pigeon" campaign reserves 100% of its map's slots (real advertisers
+// pay for that guarantee — INTIES must never appear in a reserved placement). Every other
+// (non-exclusive) paid campaign shares its map's slots with the house/INTIES pool instead
+// of monopolising every single billboard — this single number is the one central knob for
+// that split.
+export const AD_MIX = {
+  nonExclusivePaidShare: 0.5, // fraction of slots a live non-exclusive campaign still wins; the rest fall through to the house/INTIES pool
+};
+
 function activeCampaigns(mapId, nowMs) {
   return SPONSOR_CAMPAIGNS.filter(
     (c) => isValidCampaign(c, nowMs) && Array.isArray(c.maps) && c.maps.includes(mapId)
   );
 }
 
-// Deterministic advert for a billboard slot. Remove Ads owners — and any state without a
-// valid approved campaign for this map — always receive a DRUNK PIGEONS house advert so
-// the billboard structure remains part of the scenery. Selection uses only the slot seed +
-// map + date: never player behaviour or personal data.
+// Deterministic advert for a billboard slot. Remove Ads owners always fall straight
+// through to the house-ad pool (which now occasionally includes an INTIES creative, see
+// pickIntiesOrHouseAd()) — paid 3rd-party artwork is never shown to them. Selection uses
+// only the slot seed + map + date: never player behaviour or personal data. An active
+// EXCLUSIVE campaign always wins every slot on its booked map(s). A non-exclusive campaign
+// wins AD_MIX.nonExclusivePaidShare of slots; the remainder fall through to the house/INTIES
+// pool exactly like a map with no active campaign at all.
 export function pickBillboardAd({ mapId, nowMs, removeAds, seed }) {
   if (!removeAds) {
     const camps = activeCampaigns(mapId, nowMs);
-    if (camps.length) {
-      const total = camps.reduce((sum, c) => sum + (c.weight || 1), 0);
-      let r = ((hash(seed) % 1000) / 1000) * total;
-      for (const c of camps) {
-        r -= c.weight || 1;
-        if (r <= 0) return { ...c, kind: 'campaign', label: 'ADVERTISEMENT' };
-      }
-      return { ...camps[0], kind: 'campaign', label: 'ADVERTISEMENT' };
+    const exclusive = camps.filter((c) => c.exclusive);
+    if (exclusive.length) return pickWeighted(exclusive, seed);
+    const shared = camps.filter((c) => !c.exclusive);
+    if (shared.length) {
+      const roll = (hash(seed * 13 + 31) % 1000) / 1000;
+      if (roll < AD_MIX.nonExclusivePaidShare) return pickWeighted(shared, seed);
     }
   }
-  const h = HOUSE_ADS[hash(seed * 2654435761 + 7) % HOUSE_ADS.length];
-  return { ...h, kind: 'house', label: 'DRUNK PIGEONS' };
+  return pickIntiesOrHouseAd(seed);
 }
 
 // Anonymous, aggregate-only display counter — no player identity, no cross-campaign

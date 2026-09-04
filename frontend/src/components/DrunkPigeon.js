@@ -155,6 +155,10 @@ export default function DrunkPigeon({
   sound = false,      // play tiny character sound on signatures (gameplay only)
   deflateSignal = 0,  // increments on Skinny Jab -> quick squash-then-shrink
   active = true,      // false pauses the random event scheduler
+  suppressQuips = false, // true while a scripted priority line (e.g. Roadman intro/milestone
+                          // lines) is on screen — pauses ONLY the ordinary HIC/quip text so
+                          // it can never overlap the scripted bubble; resumes automatically
+                          // once the caller clears it. Physical wobble/animation is unaffected.
   testID,
 }) {
   const prof = PROFILES[pigeon && pigeon.id] || PROFILES.classic;
@@ -196,6 +200,10 @@ export default function DrunkPigeon({
   const timers = useRef([]);
   const mounted = useRef(true);
   const lastSig = useRef(0);
+  const suppressRef = useRef(suppressQuips);
+  useEffect(() => {
+    suppressRef.current = suppressQuips;
+  }, [suppressQuips]);
 
   const pushTimer = (fn, ms) => {
     const t = setTimeout(fn, ms);
@@ -217,13 +225,14 @@ export default function DrunkPigeon({
   };
   const doHic = () => {
     hic.value = withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 180 }));
-    setHicKey((k) => k + 1);
-    setHicShown(true);
-    pushTimer(() => mounted.current && setHicShown(false), 1000);
     // Gym: hiccup tenses the whole chest.
     if (prof.sig === 'rep') {
       sigSY.value = withSequence(withTiming(1.14, { duration: 100 }), withTiming(1, { duration: 220 }));
     }
+    if (suppressRef.current) return; // a scripted priority line owns the speech right now
+    setHicKey((k) => k + 1);
+    setHicShown(true);
+    pushTimer(() => mounted.current && setHicShown(false), 1000);
     // Fancy/King: a small dignified reaction bubble.
     if (prof.sig === 'gentleman' || prof.sig === 'salute') spawnBubbles(1, 'gold');
     else spawnBubbles(1);
@@ -361,6 +370,7 @@ export default function DrunkPigeon({
   };
 
   const showQuip = (text, color, sizeFactor) => {
+    if (suppressRef.current) return; // scripted priority line owns the speech right now
     setQuip({ key: Date.now(), text, color, sizeFactor });
     pushTimer(() => mounted.current && setQuip((q) => (q && q.text === text ? null : q)), 1100);
   };
