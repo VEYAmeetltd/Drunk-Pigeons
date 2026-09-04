@@ -14,27 +14,7 @@ export const FAMILIES = {
   BUNTING: 'bunting', // washing lines / bunting
 };
 
-// Per-map family pools (map id -> ordered list). Every family in the pool WILL appear
-// across a run because section selection walks the pool with a deterministic shuffle.
-const POOLS = {
-  day: [ // Sunny London — brighter, parks, scaffolding, cranes, colourful billboards
-    FAMILIES.BUILDING, FAMILIES.PARK, FAMILIES.SCAFFOLD, FAMILIES.CRANE,
-    FAMILIES.BILLBOARD, FAMILIES.ROOFTOP, FAMILIES.BUNTING,
-  ],
-  night: [ // Gritty Backstreet — tower blocks, industrial chimneys, railway, worn signs
-    FAMILIES.BUILDING, FAMILIES.RAILWAY, FAMILIES.ROOFTOP, FAMILIES.SCAFFOLD,
-    FAMILIES.BILLBOARD, FAMILIES.CRANE,
-  ],
-  dusk: [ // Chippy Sunset — takeaway/pub signs, rooftop vents, washing lines
-    FAMILIES.BUILDING, FAMILIES.BILLBOARD, FAMILIES.ROOFTOP, FAMILIES.BUNTING,
-    FAMILIES.PARK, FAMILIES.SCAFFOLD,
-  ],
-  easy: [ // gentle default
-    FAMILIES.BUILDING, FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.ROOFTOP,
-  ],
-};
-
-const SECTION_LEN = 3; // obstacles per environmental section before a transition
+// Per-map non-building family pools are defined below (NON_BUILDING).
 
 function hash(n) {
   let a = (n | 0) >>> 0;
@@ -46,21 +26,24 @@ function hash(n) {
   return a >>> 0;
 }
 
-// Deterministic family for an obstacle, contiguous within a section, then it changes.
-// Depends only on the obstacle's spawn order + map id => stable within a run and
-// fully compatible with run-validation (no wall-clock / no extra randomness stored).
+const NON_BUILDING = {
+  day: [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.RAILWAY],
+  night: [FAMILIES.ROOFTOP, FAMILIES.RAILWAY, FAMILIES.BILLBOARD, FAMILIES.SCAFFOLD, FAMILIES.CRANE],
+  dusk: [FAMILIES.BILLBOARD, FAMILIES.SCAFFOLD, FAMILIES.ROOFTOP, FAMILIES.BUNTING, FAMILIES.PARK],
+  easy: [FAMILIES.PARK, FAMILIES.BILLBOARD, FAMILIES.ROOFTOP],
+};
+
+// Deterministic family for an obstacle. ~40% are genuinely non-building. A forced
+// non-building backbone on every 5th pair guarantees: a non-building within the first
+// six pairs (index 2) and never more than four building-only pairs in a row. Depends
+// only on spawn order + map id => stable per run and run-validation compatible.
 export function familyForObstacle(spawnIndex, mapId) {
-  const pool = POOLS[mapId] || POOLS.day;
-  const section = Math.floor((spawnIndex || 0) / SECTION_LEN);
-  // Walk the pool in a shuffled order so every family shows up, avoiding immediate
-  // repeats between adjacent sections.
-  const idx = hash(section * 2654435761) % pool.length;
-  let fam = pool[idx];
-  if (section > 0) {
-    const prev = pool[hash((section - 1) * 2654435761) % pool.length];
-    if (fam === prev) fam = pool[(idx + 1) % pool.length];
-  }
-  return fam;
+  const i = spawnIndex || 0;
+  const nb = NON_BUILDING[mapId] || NON_BUILDING.day;
+  const forced = (i % 5) === 2; // backbone (caps consecutive buildings at 4, hits i=2)
+  const extra = (hash(i * 2654435761) % 5) === 0; // ~20% more => ~40% total
+  if (!(forced || extra)) return FAMILIES.BUILDING;
+  return nb[hash(i * 40503 + 7) % nb.length];
 }
 
 // A stable 0..1 variant value for within-family art variety (seeded per obstacle).

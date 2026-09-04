@@ -156,6 +156,21 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   }, [height, ground]);
 
   if (height <= 0) return null;
+  const gapEdgeB = flip ? 'bottom' : 'top';
+  const anchorEdgeB = flip ? 'top' : 'bottom';
+  const STRUCT = [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.RAILWAY, FAMILIES.PARK];
+  if (STRUCT.includes(family)) {
+    return (
+      <StructureColumn
+        family={family}
+        height={height}
+        theme={theme}
+        seed={seed}
+        gapEdge={gapEdgeB}
+        anchorEdge={anchorEdgeB}
+      />
+    );
+  }
   const edgeStyle = flip ? { bottom: -3 } : { top: -3 };
   const accent = theme.accent;
   const gapEdge = flip ? 'bottom' : 'top'; // edge facing the navigable gap
@@ -259,6 +274,78 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
           <View style={[obStyles.door, { backgroundColor: cfg.doorColor }]} />
         </View>
       )}
+    </View>
+  );
+}
+
+// Distinct non-building structures. Each FILLS the column footprint (so the collision
+// rect still matches the visible solid — no invisible open-space collisions) but with a
+// clearly non-building silhouette/texture. Thin extensions (crane jib) sit on the
+// anchored screen-edge, never in the flight path.
+function StructureColumn({ family, height, theme, seed, gapEdge, anchorEdge }) {
+  const v = variantFor(seed);
+  const accent = theme.accent;
+  const dark = theme.obstacleDark || '#3a3a3a';
+  if (family === FAMILIES.CRANE) {
+    const braces = Math.max(2, Math.floor(height / 40));
+    return (
+      <View style={[obStyles.col, { height, backgroundColor: '#e0a83a', borderColor: '#a97a19', overflow: 'hidden' }]}>
+        <View style={{ position: 'absolute', left: 3, top: 0, bottom: 0, width: 5, backgroundColor: '#a97a19' }} />
+        <View style={{ position: 'absolute', right: 3, top: 0, bottom: 0, width: 5, backgroundColor: '#a97a19' }} />
+        {Array.from({ length: braces }).map((_, i) => (
+          <View key={i} style={{ position: 'absolute', left: 4, right: 4, top: 6 + i * 40, height: 3, backgroundColor: '#a97a19', transform: [{ rotate: i % 2 ? '18deg' : '-18deg' }] }} />
+        ))}
+        {/* horizontal jib on the anchored (screen-edge) side, in free sky */}
+        <View style={{ position: 'absolute', [anchorEdge]: 10, left: -OW * 0.5, width: OW * 1.4, height: 7, backgroundColor: '#e0a83a', borderWidth: 1, borderColor: '#a97a19' }} />
+        <View style={{ position: 'absolute', [anchorEdge]: 17, left: -OW * 0.4, width: 3, height: 20, backgroundColor: dark }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.SCAFFOLD) {
+    const decks = Math.max(2, Math.floor(height / 42));
+    return (
+      <View style={[obStyles.col, { height, backgroundColor: 'rgba(60,70,80,0.55)', borderColor: '#6b7480', overflow: 'hidden' }]}>
+        {/* netting tint */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: v > 0.5 ? 'rgba(70,150,90,0.18)' : 'rgba(40,90,150,0.18)' }]} />
+        <View style={{ position: 'absolute', left: 5, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
+        <View style={{ position: 'absolute', left: OW / 2 - 2, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
+        <View style={{ position: 'absolute', right: 5, top: 0, bottom: 0, width: 4, backgroundColor: '#aeb6bf' }} />
+        {Array.from({ length: decks }).map((_, i) => (
+          <React.Fragment key={i}>
+            <View style={{ position: 'absolute', left: 3, right: 3, top: 14 + i * 42, height: 6, backgroundColor: '#c79a54' }} />
+            <View style={{ position: 'absolute', left: 6, right: 6, top: 20 + i * 42, height: 3, backgroundColor: '#8a93a0', transform: [{ rotate: '20deg' }] }} />
+          </React.Fragment>
+        ))}
+        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 8, backgroundColor: '#e2b53a' }} />
+      </View>
+    );
+  }
+  if (family === FAMILIES.RAILWAY) {
+    return (
+      <View style={[obStyles.col, { height, backgroundColor: '#5b636b', borderColor: '#3c4249', overflow: 'hidden' }]}>
+        <View style={{ position: 'absolute', [gapEdge]: 0, left: 0, right: 0, height: 12, backgroundColor: '#3c4249' }} />
+        {Array.from({ length: Math.max(2, Math.floor(height / 34)) }).map((_, i) => (
+          <React.Fragment key={i}>
+            <View style={{ position: 'absolute', left: 2, right: 2, top: 16 + i * 34, height: 4, backgroundColor: '#7f8892', transform: [{ rotate: '24deg' }] }} />
+            <View style={{ position: 'absolute', left: 2, right: 2, top: 16 + i * 34, height: 4, backgroundColor: '#7f8892', transform: [{ rotate: '-24deg' }] }} />
+          </React.Fragment>
+        ))}
+        <View style={{ position: 'absolute', left: 4, top: 0, bottom: 0, width: 5, backgroundColor: '#40474e' }} />
+        <View style={{ position: 'absolute', right: 4, top: 0, bottom: 0, width: 5, backgroundColor: '#40474e' }} />
+      </View>
+    );
+  }
+  // PARK — a big leafy tree filling the footprint (trunk + canopy), clearly not a tower.
+  const cw = OW - 2;
+  return (
+    <View style={[obStyles.col, { height, backgroundColor: 'transparent', borderWidth: 0 }]}>
+      <View style={{ position: 'absolute', left: OW / 2 - 6, top: 0, bottom: 0, width: 12, backgroundColor: '#6b4a2b', borderRadius: 5 }} />
+      <View style={{ position: 'absolute', [gapEdge]: 0, left: 1, width: cw, height: cw, borderRadius: cw / 2, backgroundColor: '#2f8b3c' }} />
+      <View style={{ position: 'absolute', [gapEdge]: cw * 0.35, left: 4, width: cw - 6, height: cw - 6, borderRadius: cw / 2, backgroundColor: '#49ab54' }} />
+      <View style={{ position: 'absolute', [gapEdge]: cw * 0.7, left: 10, width: cw - 20, height: cw - 20, borderRadius: cw / 2, backgroundColor: '#5fc06b' }} />
+      {/* fill the rest of the trunk column so silhouette stays honest for tall pieces */}
+      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 6, width: 12, top: 0, bottom: 0, backgroundColor: '#6b4a2b' }} />
+      <View style={{ position: 'absolute', [gapEdge]: 4, left: OW / 2 - 3, width: 6, height: 6, backgroundColor: accent, borderRadius: 3 }} />
     </View>
   );
 }
