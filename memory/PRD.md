@@ -403,3 +403,10 @@ restart instantly. Philosophy: FUN → RESPONSIVE → FUNNY → REPLAYABLE → P
 - testing_agent iteration_22.json: 100% backend + frontend. Full UI journey (validation, single-select packages w/ £250/£500, web upload, .txt rejection, terms overlay preserving form, happy-path submit -> success -> back to docs) and cookie admin flow (wrong pw generic error, login, list contains submitted enquiry, detail + artwork preview, status persist, logout invalidates session) all pass. Fixed a fragile session-expiry tz check.
 ### Remaining
 - Real email provider (Resend) not wired (email_notification_status=not_configured by design). Real malware scanning (ClamAV/managed) required pre-production before accepting public uploads (files remain quarantined until they pass). Native file picker (expo-document-picker) validated only on web preview here.
+
+## Update 50 (2026-06) — Instant /advertise open (removed package-fetch delay)
+- CAUSE: AdvertiseScreen started with packages=[] and fetched the catalogue from GET /api/advertise/packages on mount, so cards only appeared after a network round-trip.
+- FIX: New single bundled source of truth src/advertise/packages.js (AD_PACKAGES). AdvertiseScreen now renders from it synchronously (const packages = AD_PACKAGES) and the mount fetch + its inline fallback array were removed — no network request just to show the fixed catalogue, no spinner/blank/layout shift. Screen is statically imported (not lazy) so no preload needed.
+- No pricing duplicated in frontend anymore (one file). Backend allow-list (backend/advertising.py PACKAGES) unchanged and still validates exactly the 5 stable IDs (test-flight, city-run, full-pigeon, exclusive-14, exclusive-30).
+- Verified: fresh /advertise deep-link shows all 5 cards immediately with 0 calls to /advertise/packages; backend rejects unknown package (422) and accepts supported IDs; legal/doc pages and all other advertising functionality unchanged.
+- Files: NEW src/advertise/packages.js; changed src/screens/AdvertiseScreen.js only.

@@ -5,6 +5,7 @@ import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import { Audio } from '../audio/audio';
 import { AdvertiseAPI } from '../advertise/api';
+import { AD_PACKAGES } from '../advertise/packages';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
@@ -24,7 +25,7 @@ export default function AdvertiseScreen({ onBack, onOpenTerms }) {
     return () => sub.remove();
   }, [onBack]);
 
-  const [packages, setPackages] = useState([]);
+  const packages = AD_PACKAGES; // bundled source of truth — renders instantly, no fetch
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [business, setBusiness] = useState('');
@@ -37,16 +38,6 @@ export default function AdvertiseScreen({ onBack, onOpenTerms }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const webInputRef = useRef(null);
-
-  useEffect(() => {
-    AdvertiseAPI.packages().then((d) => setPackages(d.packages || [])).catch(() => setPackages([
-      { id: 'test-flight', name: 'TEST FLIGHT', scope: 'One map', days: 7, price: '£25' },
-      { id: 'city-run', name: 'CITY RUN', scope: 'All maps', days: 14, price: '£50' },
-      { id: 'full-pigeon', name: 'FULL PIGEON', scope: 'All maps', days: 30, price: '£90' },
-      { id: 'exclusive-14', name: 'EXCLUSIVE PIGEON', scope: 'Exclusive paid sponsor across all maps', days: 14, price: '£250' },
-      { id: 'exclusive-30', name: 'EXCLUSIVE PIGEON', scope: 'Exclusive paid sponsor across all maps', days: 30, price: '£500' },
-    ]));
-  }, []);
 
   const setFileFromWeb = useCallback((f) => {
     setSubmitError('');
