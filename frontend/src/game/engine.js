@@ -1,4 +1,6 @@
 import { CONFIG, fatLevelFor, pigeonRadiusFor } from '../config';
+import { FAMILIES, buildGeometry, hitTestSegment, projectionMargin } from './obstacleGeometry';
+import { pickEncounter, isNonBuildingEncounter } from './obstacleAppearance';
 
 const PPM = CONFIG.PIXELS_PER_METRE;
 const OW = CONFIG.OBSTACLE_WIDTH;
@@ -31,6 +33,8 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   let distance = 0;
   let running = false;
   let dead = false;
+  // guarantees a genuinely non-rectangular silhouette shows up early each run
+  let nonBuildingSeenEarly = false;
   let invincibleUntil = 0;
   let usedRevive = false;
   let flapPulse = 0;
@@ -95,6 +99,22 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     o.gap = gap;
     o.kind = Math.floor(Math.random() * 4);
     o.seed = Math.floor(Math.random() * 1000000);
+
+    // Decide the genuine geometry family for each side (either can be null =
+    // open sky). Guarantee at least one non-rectangular silhouette by the
+    // 4th spawn of the run, matching the verification requirement.
+    const curIdx = spawnIndex;
+    const mustVary = curIdx === 3 && !nonBuildingSeenEarly;
+    const enc = pickEncounter({ mustVary });
+    if (curIdx < 4 && isNonBuildingEncounter(enc)) nonBuildingSeenEarly = true;
+    o.topFamily = enc.topFamily;
+    o.bottomFamily = enc.bottomFamily;
+    const bottomH = groundY() - (topH + gap);
+    o.topGeo = o.topFamily && o.topFamily !== FAMILIES.BUILDING ? buildGeometry(o.topFamily, { H: topH, OW, seed: o.seed }) : null;
+    o.bottomGeo = o.bottomFamily && o.bottomFamily !== FAMILIES.BUILDING ? buildGeometry(o.bottomFamily, { H: bottomH, OW, seed: o.seed }) : null;
+    o.topMargin = o.topGeo ? projectionMargin(o.topGeo.segments, OW) : 0;
+    o.bottomMargin = o.bottomGeo ? projectionMargin(o.bottomGeo.segments, OW) : 0;
+
     o.spawnIndex = spawnIndex++;
     o.passed = false;
     dirtyObstacles.add(idx);
@@ -325,6 +345,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     dead = false;
     invincibleUntil = 0;
     usedRevive = false;
+    nonBuildingSeenEarly = false;
     eventTriggered = false;
     blackoutStartT = 0;
     blackoutEndT = 0;
@@ -365,21 +386,36 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     const py = pigeon.y;
     // ground
     if (py + r >= groundY()) return true;
-    // obstacles (circle vs top/bottom rect)
+    // obstacles: BUILDING sides stay a solid full-width rect (unchanged);
+    // every other family hit-tests its own real segments (pole/arm/mast/jib/
+    // plank/trunk/canopy/beam/cable/...) — never one rectangular wrapper.
     const px = pigeon.x;
     const w = CONFIG.OBSTACLE_WIDTH;
     for (const o of obstacles) {
       if (!o.active) continue;
-      if (px + r < o.x || px - r > o.x + w) continue;
-      // top rect [o.x,0]..[o.x+w,o.topH]; bottom [o.x, o.topH+o.gap]..ground
-      const nx = Math.max(o.x, Math.min(px, o.x + w));
-      // top
-      let ny = Math.max(0, Math.min(py, o.topH));
-      if ((px - nx) ** 2 + (py - ny) ** 2 < r * r) return true;
-      // bottom
+      const margin = Math.max(o.topMargin || 0, o.bottomMargin || 0);
+      if (px + r < o.x - margin || px - r > o.x + w + margin) continue;
+      // top side
+      if (o.topFamily === FAMILIES.BUILDING) {
+        const nx = Math.max(o.x, Math.min(px, o.x + w));
+        const ny = Math.max(0, Math.min(py, o.topH));
+        if ((px - nx) ** 2 + (py - ny) ** 2 < r * r) return true;
+      } else if (o.topGeo) {
+        for (const seg of o.topGeo.segments) {
+          if (hitTestSegment(px, py, r, seg, o.x, 0)) return true;
+        }
+      }
+      // bottom side
       const bTop = o.topH + o.gap;
-      ny = Math.max(bTop, Math.min(py, groundY()));
-      if (py + r > bTop && (px - nx) ** 2 + (py - ny) ** 2 < r * r) return true;
+      if (o.bottomFamily === FAMILIES.BUILDING) {
+        const nx = Math.max(o.x, Math.min(px, o.x + w));
+        const ny = Math.max(bTop, Math.min(py, groundY()));
+        if (py + r > bTop && (px - nx) ** 2 + (py - ny) ** 2 < r * r) return true;
+      } else if (o.bottomGeo) {
+        for (const seg of o.bottomGeo.segments) {
+          if (hitTestSegment(px, py, r, seg, o.x, bTop)) return true;
+        }
+      }
     }
     return false;
   }
@@ -627,6 +663,10 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       kind: o.kind,
       seed: o.seed,
       spawnIndex: o.spawnIndex,
+      topFamily: o.topFamily,
+      bottomFamily: o.bottomFamily,
+      topGeo: o.topGeo,
+      bottomGeo: o.bottomGeo,
     }));
   }
 

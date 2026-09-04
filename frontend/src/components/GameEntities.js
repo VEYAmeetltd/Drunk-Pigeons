@@ -5,7 +5,7 @@ import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
 import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
 import { FONT } from '../ui/theme';
-import { familyForObstacle, variantFor, FAMILIES } from '../game/obstacleAppearance';
+import { FAMILIES } from '../game/obstacleGeometry';
 
 const OW = CONFIG.OBSTACLE_WIDTH;
 
@@ -100,6 +100,11 @@ const skinnyStyles = StyleSheet.create({
 });
 
 /* ---------------- Obstacle ---------------- */
+// Each side (top/bottom) renders EXACTLY what the engine used for collision:
+// FAMILIES.BUILDING keeps the classic full-rect cartoon building (unchanged
+// hitbox); every other family (or null = open sky) draws the cached
+// segment/decor list (`geom.topGeo` / `geom.bottomGeo`) built once by the
+// engine — so the visible silhouette and the hitbox can never drift apart.
 export function ObstacleView({ world, index, geom, theme, screenH }) {
   const style = useAnimatedStyle(() => {
     const o = world.value.obs[index];
@@ -112,20 +117,31 @@ export function ObstacleView({ world, index, geom, theme, screenH }) {
   const topH = geom.topH;
   const bottomY = topH + geom.gap;
   const bottomH = Math.max(0, groundY - bottomY);
-  const family = familyForObstacle(geom.spawnIndex, theme.id);
   return (
     <Animated.View style={[styles.abs, { left: 0, top: 0, width: OW }, style]} pointerEvents="none">
-      <Building height={topH} theme={theme} seed={geom.seed} family={family} flip />
-      <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }}>
-        <Building height={bottomH} theme={theme} seed={geom.seed} family={family} ground />
-      </View>
+      {geom.topFamily === FAMILIES.BUILDING && <Building height={topH} theme={theme} seed={geom.seed} flip />}
+      {geom.topGeo && (
+        <View style={{ position: 'absolute', top: 0, height: topH, width: OW }} pointerEvents="none">
+          <StructureShape geo={geom.topGeo} boxW={OW} boxH={topH} />
+        </View>
+      )}
+      {geom.bottomFamily === FAMILIES.BUILDING && (
+        <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }}>
+          <Building height={bottomH} theme={theme} seed={geom.seed} ground />
+        </View>
+      )}
+      {geom.bottomGeo && (
+        <View style={{ position: 'absolute', top: bottomY, height: bottomH, width: OW }} pointerEvents="none">
+          <StructureShape geo={geom.bottomGeo} boxW={OW} boxH={bottomH} />
+        </View>
+      )}
     </Animated.View>
   );
 }
 
 // Procedurally varied cartoon building. Collision is unchanged (fixed OW column);
 // everything here is decorative and never intercepts touches.
-function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDING }) {
+function Building({ height, theme, seed, flip, ground }) {
   const cfg = useMemo(() => {
     const r = rngFrom((seed || 1) + (flip ? 7777 : 13));
     const bricks = theme.brickPalette && theme.brickPalette.length ? theme.brickPalette : [theme.obstacle];
@@ -156,24 +172,8 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   }, [height, ground]);
 
   if (height <= 0) return null;
-  const gapEdgeB = flip ? 'bottom' : 'top';
-  const anchorEdgeB = flip ? 'top' : 'bottom';
-  const STRUCT = [FAMILIES.CRANE, FAMILIES.SCAFFOLD, FAMILIES.RAILWAY, FAMILIES.PARK, FAMILIES.BILLBOARD];
-  if (STRUCT.includes(family)) {
-    return (
-      <StructureColumn
-        family={family}
-        height={height}
-        theme={theme}
-        seed={seed}
-        gapEdge={gapEdgeB}
-        anchorEdge={anchorEdgeB}
-      />
-    );
-  }
   const edgeStyle = flip ? { bottom: -3 } : { top: -3 };
   const accent = theme.accent;
-  // Only genuine buildings reach here (non-building families render as StructureColumn).
   const showWindows = true;
 
   return (
@@ -265,192 +265,71 @@ function Building({ height, theme, seed, flip, ground, family = FAMILIES.BUILDIN
   );
 }
 
-// Distinct non-building structures with BOLD, unmistakable silhouettes.
-//
-// Fairness/collision: the engine's hitbox is a solid rect spanning the full OW column
-// from the screen edge to the gap edge (same as buildings) — difficulty is unchanged.
-// So the OPAQUE solid body of every structure fills that exact column (visible solid ==
-// hitbox — you never die on empty air). The recognisable "signature" parts (crane jib,
-// billboard panel, tree canopy bumps, scaffold poles) project OUTWARD on the anchored
-// screen-edge side into genuinely free sky and carry NO hidden hitbox, so they can only
-// ever be forgiving, never unfair. The wrapper does NOT clip, so those signatures show.
-function StructureColumn({ family, height, theme, seed, gapEdge, anchorEdge }) {
-  if (family === FAMILIES.CRANE) return <CraneStruct height={height} anchorEdge={anchorEdge} />;
-  if (family === FAMILIES.SCAFFOLD) return <ScaffoldStruct height={height} seed={seed} anchorEdge={anchorEdge} />;
-  if (family === FAMILIES.RAILWAY) return <RailwayStruct height={height} anchorEdge={anchorEdge} />;
-  if (family === FAMILIES.BILLBOARD) return <BillboardStruct height={height} theme={theme} seed={seed} anchorEdge={anchorEdge} />;
-  return <TreeStruct height={height} gapEdge={gapEdge} anchorEdge={anchorEdge} />;
+// Renders a non-BUILDING obstacle side from the engine's cached { segments,
+// decor } — the exact same list the engine hit-tests against. `segments` are
+// real solid pieces (pole/arm/mast/jib/plank/trunk/canopy/beam/cable/sign);
+// `decor` (cross-braces, rivets, base plates) is drawn but never collidable.
+// The SVG canvas grows to the geometry's own bounding box so pieces that
+// genuinely project outside the OW lane (a crane jib, a hanging beam) are
+// never clipped — nothing here is a rectangular wrapper standing in for the
+// real silhouette.
+function segBounds(seg) {
+  if (seg.type === 'rect') return { x0: seg.x, y0: seg.y, x1: seg.x + seg.w, y1: seg.y + seg.h };
+  const half = (seg.t || 4) / 2;
+  return {
+    x0: Math.min(seg.x1, seg.x2) - half,
+    y0: Math.min(seg.y1, seg.y2) - half,
+    x1: Math.max(seg.x1, seg.x2) + half,
+    y1: Math.max(seg.y1, seg.y2) + half,
+  };
 }
 
-const structStyles = StyleSheet.create({
-  wrap: { width: OW, height: '100%' },
-  body: { position: 'absolute', left: 0, top: 0, width: OW, borderRadius: 4, overflow: 'hidden' },
-});
-
-// Yellow tower crane: opaque lattice mast (full column) + projecting jib + hook in free sky.
-function CraneStruct({ height, anchorEdge }) {
-  const dark = '#8a6410';
-  const yellow = '#f2b41c';
-  const jibY = 8; // distance from the anchored screen edge to the jib beam
-  const rungs = Math.max(3, Math.floor(height / 26));
+function StructureShape({ geo, boxW, boxH }) {
+  const box = useMemo(() => {
+    let minX = 0, minY = 0, maxX = boxW, maxY = boxH;
+    for (const seg of [...geo.segments, ...(geo.decor || [])]) {
+      const b = segBounds(seg);
+      minX = Math.min(minX, b.x0); maxX = Math.max(maxX, b.x1);
+      minY = Math.min(minY, b.y0); maxY = Math.max(maxY, b.y1);
+    }
+    return { minX, minY, w: maxX - minX, h: maxY - minY };
+  }, [geo, boxW, boxH]);
   return (
-    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
-      {/* opaque mast body = the hitbox */}
-      <View style={[structStyles.body, { height, backgroundColor: yellow, borderWidth: 2, borderColor: dark }]}>
-        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
-          <SvgRect x="3" y="0" width="4" height={height} fill={dark} />
-          <SvgRect x={OW - 7} y="0" width="4" height={height} fill={dark} />
-          {Array.from({ length: rungs }).map((_, i) => {
-            const y = 4 + i * 26;
-            return (
-              <G key={i}>
-                <Line x1="5" y1={y} x2={OW - 5} y2={y + 20} stroke={dark} strokeWidth="3" />
-                <Line x1={OW - 5} y1={y} x2="5" y2={y + 20} stroke={dark} strokeWidth="3" />
-                <Line x1="5" y1={y} x2={OW - 5} y2={y} stroke={dark} strokeWidth="2.5" />
-              </G>
-            );
-          })}
-        </Svg>
-      </View>
-      {/* operator cab at the anchored end */}
-      <View style={{ position: 'absolute', [anchorEdge]: jibY - 2, left: OW / 2 - 9, width: 18, height: 16, backgroundColor: '#e9e2c9', borderWidth: 2, borderColor: dark, borderRadius: 2 }} />
-      {/* long horizontal jib projecting into free sky (no hitbox) */}
-      <View style={{ position: 'absolute', [anchorEdge]: jibY, left: -OW * 0.95, width: OW * 1.9, height: 9, backgroundColor: yellow, borderWidth: 2, borderColor: dark }} />
-      {/* short counter-jib block */}
-      <View style={{ position: 'absolute', [anchorEdge]: jibY - 6, right: -OW * 0.35, width: 14, height: 12, backgroundColor: dark, borderRadius: 2 }} />
-      {/* hook cable + hook hanging from the far end of the jib */}
-      <View style={{ position: 'absolute', [anchorEdge]: jibY + 9, left: -OW * 0.75, width: 2, height: 22, backgroundColor: dark }} />
-      <View style={{ position: 'absolute', [anchorEdge]: jibY + 31, left: -OW * 0.75 - 3, width: 8, height: 6, backgroundColor: dark, borderRadius: 2 }} />
+    <View style={{ position: 'absolute', left: box.minX, top: box.minY, width: box.w, height: box.h }} pointerEvents="none">
+      <Svg width={box.w} height={box.h} viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`}>
+        {(geo.decor || []).map((seg, i) => <ShapePiece key={`d${i}`} seg={seg} muted />)}
+        {geo.segments.map((seg, i) => <ShapePiece key={`s${i}`} seg={seg} />)}
+      </Svg>
     </View>
   );
 }
 
-// Scaffolding-clad building: opaque muted body + dense pole/plank/brace frame + green net + poles jutting past the top.
-function ScaffoldStruct({ height, seed, anchorEdge }) {
-  const v = variantFor(seed);
-  const pole = '#c9ccd1';
-  const plankC = '#c79a54';
-  const decks = Math.max(2, Math.floor(height / 40));
-  const net = v > 0.5 ? 'rgba(78,168,102,0.30)' : 'rgba(64,132,196,0.28)';
+function ShapePiece({ seg, muted }) {
+  const opacity = muted ? 0.55 : 1;
+  if (seg.type === 'rect') {
+    return (
+      <SvgRect
+        x={seg.x} y={seg.y} width={seg.w} height={seg.h} rx={seg.radius || 0}
+        fill={seg.fill || '#888'} stroke={seg.stroke || 'transparent'} strokeWidth={seg.strokeW || 0}
+        opacity={opacity}
+      />
+    );
+  }
+  if (seg.x1 === seg.x2 && seg.y1 === seg.y2) {
+    return (
+      <Circle
+        cx={seg.x1} cy={seg.y1} r={(seg.t || 8) / 2}
+        fill={seg.fill || seg.stroke || '#888'} stroke={seg.stroke || 'transparent'} strokeWidth={seg.strokeW || 0}
+        opacity={opacity}
+      />
+    );
+  }
   return (
-    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
-      {/* opaque building carcass = the hitbox */}
-      <View style={[structStyles.body, { height, backgroundColor: '#8b8f96', borderWidth: 2, borderColor: '#5c6068' }]}>
-        {/* safety netting panel */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: net }]} />
-        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
-          {/* vertical standards */}
-          <SvgRect x="5" y="0" width="4" height={height} fill={pole} />
-          <SvgRect x={OW / 2 - 2} y="0" width="4" height={height} fill={pole} />
-          <SvgRect x={OW - 9} y="0" width="4" height={height} fill={pole} />
-          {Array.from({ length: decks }).map((_, i) => {
-            const y = 12 + i * 40;
-            return (
-              <G key={i}>
-                {/* ledger + wooden plank deck */}
-                <SvgRect x="4" y={y} width={OW - 8} height="3" fill={pole} />
-                <SvgRect x="4" y={y + 4} width={OW - 8} height="6" fill={plankC} />
-                {/* cross brace */}
-                <Line x1="7" y1={y + 10} x2={OW - 7} y2={y + 40} stroke={pole} strokeWidth="2.5" />
-                <Line x1={OW - 7} y1={y + 10} x2="7" y2={y + 40} stroke={pole} strokeWidth="2.5" />
-              </G>
-            );
-          })}
-        </Svg>
-      </View>
-      {/* poles + a warning banner jutting past the anchored edge */}
-      <View style={{ position: 'absolute', [anchorEdge]: -10, left: 5, width: 4, height: 14, backgroundColor: pole }} />
-      <View style={{ position: 'absolute', [anchorEdge]: -10, left: OW / 2 - 2, width: 4, height: 14, backgroundColor: pole }} />
-      <View style={{ position: 'absolute', [anchorEdge]: -10, left: OW - 9, width: 4, height: 14, backgroundColor: pole }} />
-      <View style={{ position: 'absolute', [anchorEdge]: -6, left: 3, right: 3, height: 6, backgroundColor: '#e2b53a' }} />
-    </View>
-  );
-}
-
-// Railway steel gantry / girder bridge: opaque steel body + triangulated truss + rivets + signal gantry beam.
-function RailwayStruct({ height, anchorEdge }) {
-  const steel = '#5f6870';
-  const dk = '#363c42';
-  const lt = '#828b94';
-  const bays = Math.max(3, Math.floor(height / 30));
-  return (
-    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
-      <View style={[structStyles.body, { height, backgroundColor: steel, borderWidth: 2, borderColor: dk }]}>
-        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
-          {/* flange chords */}
-          <SvgRect x="4" y="0" width="6" height={height} fill={dk} />
-          <SvgRect x={OW - 10} y="0" width="6" height={height} fill={dk} />
-          {Array.from({ length: bays }).map((_, i) => {
-            const y = i * 30;
-            return (
-              <G key={i}>
-                <Line x1="8" y1={y} x2={OW - 8} y2={y + 30} stroke={lt} strokeWidth="4" />
-                <Line x1={OW - 8} y1={y} x2="8" y2={y + 30} stroke={lt} strokeWidth="4" />
-                <Line x1="6" y1={y} x2={OW - 6} y2={y} stroke={dk} strokeWidth="3" />
-                <Circle cx="7" cy={y} r="1.6" fill={lt} />
-                <Circle cx={OW - 7} cy={y} r="1.6" fill={lt} />
-              </G>
-            );
-          })}
-        </Svg>
-      </View>
-      {/* signal gantry cross-beam projecting past both edges into free sky */}
-      <View style={{ position: 'absolute', [anchorEdge]: 6, left: -OW * 0.35, width: OW * 1.7, height: 8, backgroundColor: dk }} />
-      <View style={{ position: 'absolute', [anchorEdge]: 0, left: -OW * 0.28, width: 6, height: 6, borderRadius: 3, backgroundColor: '#e0483a' }} />
-      <View style={{ position: 'absolute', [anchorEdge]: 0, right: -OW * 0.28, width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ad06a' }} />
-    </View>
-  );
-}
-
-// Roadside billboard / sign gantry: opaque support leg (full column) + big ad panel projecting into free sky.
-function BillboardStruct({ height, theme, seed, anchorEdge }) {
-  const v = variantFor(seed);
-  const accent = theme.accent;
-  const dark = theme.obstacleDark || '#333';
-  const post = '#6a6f77';
-  const panelH = 46;
-  const panelW = OW * 1.7;
-  return (
-    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
-      {/* opaque support structure = the hitbox */}
-      <View style={[structStyles.body, { height, backgroundColor: post, borderWidth: 2, borderColor: '#464b52' }]}>
-        <Svg width={OW} height={height} viewBox={`0 0 ${OW} ${height}`}>
-          <SvgRect x={OW / 2 - 8} y="0" width="6" height={height} fill="#4d525a" />
-          <SvgRect x={OW / 2 + 2} y="0" width="6" height={height} fill="#4d525a" />
-          {Array.from({ length: Math.max(2, Math.floor(height / 34)) }).map((_, i) => (
-            <Line key={i} x1={OW / 2 - 6} y1={10 + i * 34} x2={OW / 2 + 8} y2={30 + i * 34} stroke="#3b3f45" strokeWidth="3" />
-          ))}
-        </Svg>
-      </View>
-      {/* the big billboard panel projecting into free sky on the anchored edge */}
-      <View style={{ position: 'absolute', [anchorEdge]: 4, left: (OW - panelW) / 2, width: panelW, height: panelH, backgroundColor: '#ffffff', borderWidth: 3, borderColor: dark, borderRadius: 4, padding: 6, justifyContent: 'center' }}>
-        <View style={{ height: 8, width: '85%', backgroundColor: accent, marginBottom: 5, borderRadius: 2 }} />
-        <View style={{ height: 7, width: '60%', backgroundColor: v > 0.5 ? theme.window : '#e0483a', marginBottom: 5, borderRadius: 2 }} />
-        <View style={{ height: 7, width: '72%', backgroundColor: dark, borderRadius: 2 }} />
-      </View>
-    </View>
-  );
-}
-
-// Big leafy tree / topiary: the OPAQUE full-width green foliage fills the whole column
-// (so the solid hitbox stays honest — no dying on empty air beside a thin trunk), with a
-// bushy rounded canopy at the gap edge and a brown trunk detail drawn on top at the base.
-function TreeStruct({ height, gapEdge, anchorEdge }) {
-  const trunk = '#7a5330';
-  const cw = OW;
-  const canopyH = Math.min(height, OW + 22);
-  return (
-    <View style={[structStyles.wrap, { height }]} pointerEvents="none">
-      {/* full-width foliage body = the honest hitbox */}
-      <View style={{ position: 'absolute', left: 0, top: 0, width: cw, height, backgroundColor: '#2f8b3c', borderTopLeftRadius: 8, borderTopRightRadius: 8, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
-      {/* brown trunk detail on the anchored (screen-edge) base, drawn over the foliage */}
-      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 7, width: 14, height: Math.min(height, height * 0.5), backgroundColor: trunk }} />
-      <View style={{ position: 'absolute', [anchorEdge]: 0, left: OW / 2 - 7, width: 5, height: Math.min(height, height * 0.5), backgroundColor: '#5f4025' }} />
-      {/* bushy rounded leaf layers near the gap edge (never poke past the gap edge line) */}
-      <View style={{ position: 'absolute', [gapEdge]: 0, left: -4, width: cw + 8, height: canopyH, borderRadius: cw, backgroundColor: '#3fa24c' }} />
-      <View style={{ position: 'absolute', [gapEdge]: canopyH * 0.22, left: 4, width: cw - 8, height: canopyH * 0.66, borderRadius: cw, backgroundColor: '#57bd62' }} />
-      <View style={{ position: 'absolute', [gapEdge]: canopyH * 0.4, left: 12, width: cw - 26, height: canopyH * 0.38, borderRadius: cw, backgroundColor: '#74d17e', opacity: 0.92 }} />
-    </View>
+    <Line
+      x1={seg.x1} y1={seg.y1} x2={seg.x2} y2={seg.y2}
+      stroke={seg.stroke || seg.fill || '#888'} strokeWidth={seg.t || 3} strokeLinecap="round"
+      opacity={opacity}
+    />
   );
 }
 
