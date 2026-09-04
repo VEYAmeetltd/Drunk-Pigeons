@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#1b1030",
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
@@ -17,7 +18,8 @@
     "android": {
       "package": "com.drunkpigeons.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1b1030"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#070B35"
       }
     },
     "web": {
