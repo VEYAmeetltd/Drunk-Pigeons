@@ -71,19 +71,6 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     feathers.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, rot: 0, vr: 0, life: 0 });
   }
 
-  // Perf: getSnapshot() is called every rendered frame (~60/s). These output
-  // containers are allocated ONCE and mutated in place every call instead of
-  // being rebuilt with .map()/object-literals each frame — removes ~55
-  // allocations/frame (GC pressure) while the TOP-LEVEL snapshot object
-  // returned by getSnapshot() is still a fresh reference every call, which
-  // Reanimated's shared-value setter requires to notify UI-thread listeners
-  // (it bails out on `newValue === previousValue` referential equality).
-  const outObs = obstacles.map(() => ({ x: -999, active: 0 }));
-  const outChips = chips.map(() => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 }));
-  const outFeathers = feathers.map(() => ({ x: -999, y: 0, rot: 0, active: 0, life: 0 }));
-  const outHeckler = { x: -999, y: 0, w: 0, h: 0, active: 0, life: 0 };
-  const outJab = { x: -999, y: 0, active: 0, anim: 0 };
-  const outPint = { x: -999, y: 0, active: 0, anim: 0 };
 
   function groundY() {
     return H - CONFIG.GROUND_H;
@@ -658,50 +645,6 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     const fat = fatLevelFor(fatChips);
     const inv = now < invincibleUntil ? 1 : 0;
     const tilt = Math.max(-28, Math.min(70, pigeon.vy * 0.06));
-
-    // mutate the persistent per-slot output objects in place (no new objects/
-    // arrays this frame) — see outObs/outChips/... allocation comment above.
-    for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i];
-      const out = outObs[i];
-      out.x = o.x;
-      out.active = o.active ? 1 : 0;
-    }
-    for (let i = 0; i < chips.length; i++) {
-      const c = chips[i];
-      const out = outChips[i];
-      out.x = c.x;
-      out.y = c.y;
-      out.active = c.active ? 1 : 0;
-      out.anim = c.anim;
-      out.eaten = c.eaten ? 1 : 0;
-    }
-    for (let i = 0; i < feathers.length; i++) {
-      const f = feathers[i];
-      const out = outFeathers[i];
-      out.x = f.x;
-      out.y = f.y;
-      out.rot = f.rot;
-      out.active = f.active ? 1 : 0;
-      out.life = Math.max(0, f.life);
-    }
-    const ho = heckler.active ? obstacles[heckler.obsIndex] : null;
-    const hOn = ho && ho.active;
-    outHeckler.x = hOn ? ho.x + heckler.wx : -999;
-    outHeckler.y = heckler.wy;
-    outHeckler.w = WIN_W;
-    outHeckler.h = WIN_H;
-    outHeckler.active = hOn ? 1 : 0;
-    outHeckler.life = Math.max(0, heckler.life);
-    outJab.x = jab.x;
-    outJab.y = jab.y;
-    outJab.active = jab.active ? 1 : 0;
-    outJab.anim = jab.anim;
-    outPint.x = pint.x;
-    outPint.y = pint.y;
-    outPint.active = pint.active ? 1 : 0;
-    outPint.anim = pint.anim;
-
     return {
       px: pigeon.x,
       py: pigeon.y,
@@ -714,12 +657,35 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       distM: Math.floor(distance / PPM),
       distPx: distance,
       dead: dead ? 1 : 0,
-      heckler: outHeckler,
-      obs: outObs,
-      chips: outChips,
-      feathers: outFeathers,
-      jab: outJab,
-      pint: outPint,
+      heckler: (() => {
+        const o = heckler.active ? obstacles[heckler.obsIndex] : null;
+        const on = o && o.active;
+        return {
+          x: on ? o.x + heckler.wx : -999,
+          y: heckler.wy,
+          w: WIN_W,
+          h: WIN_H,
+          active: on ? 1 : 0,
+          life: Math.max(0, heckler.life),
+        };
+      })(),
+      obs: obstacles.map((o) => ({ x: o.x, active: o.active ? 1 : 0 })),
+      chips: chips.map((c) => ({
+        x: c.x,
+        y: c.y,
+        active: c.active ? 1 : 0,
+        anim: c.anim,
+        eaten: c.eaten ? 1 : 0,
+      })),
+      feathers: feathers.map((f) => ({
+        x: f.x,
+        y: f.y,
+        rot: f.rot,
+        active: f.active ? 1 : 0,
+        life: Math.max(0, f.life),
+      })),
+      jab: { x: jab.x, y: jab.y, active: jab.active ? 1 : 0, anim: jab.anim },
+      pint: { x: pint.x, y: pint.y, active: pint.active ? 1 : 0, anim: pint.anim },
       boost: pintT > 0 && now < pintT + CONFIG.PINT_BOOST_MS ? 1 : 0,
       pop: popT,
     };

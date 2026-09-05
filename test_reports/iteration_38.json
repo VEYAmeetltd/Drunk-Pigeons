@@ -1,0 +1,28 @@
+{
+  "summary": "Verified the getSnapshot() hotfix (fresh nested obs/chips/feathers/heckler/jab/pint references every call) in Drunk Pigeons on web preview. All 4 maps launch and play; obstacles are visible and moving; SPLAT/Play-Again cycles work; dev HUD confirms pool:9, mountsSinceStart building:0 structureShape:0 obstacleView:0, and recycles:21 after ~10 restart cycles. Node regression test 'yarn test:engine' passes. IMPORTANT LIMITATION: the specific native-only Reanimated shareable-caching bug being fixed CANNOT be reproduced in this web-preview/Playwright environment - Reanimated's web fallback does not exhibit the object-identity caching behavior. True confirmation of the fix requires the user's physical Android APK. This report only certifies functional/visual regression on web preview - obstacles visible+moving in all scenarios and none of the earlier fixes (SPAWN_LOOKAHEAD, pool sizes, mount-count, timer cleanup) have regressed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/game/__tests__/getSnapshot.regression.mjs"
+  ],
+  "action_items": [
+    "USER MUST VERIFY on physical Android APK (versionCode 4) that obstacles are visible and moving from the very first obstacle of every run - this is the ONLY environment where the original native-shareable-caching bug manifests."
+  ],
+  "critical_code_review_comments": [
+    "getSnapshot() (engine.js ~L644-692) now correctly builds fresh arrays/objects via .map()/object-literals every call for obs/chips/feathers/heckler/jab/pint - matches Node regression test expectations.",
+    "Dev HUD reports pool:9 and mountsSinceStart building:0 structureShape:0 obstacleView:0 after extensive play, confirming OBSTACLE_POOL=9 and the ObstacleView dual-mount fix are intact.",
+    "recycles counter increased to 21 over ~10 restart cycles, confirming obstacle recycling flow is healthy.",
+    "Minor: engine.js is now ~770 lines; approaching maintainability threshold - consider splitting spawn/obstacle/collision logic into submodules in a future pass (informational, not blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100% on web preview"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "This iteration verified engine.js getSnapshot() hotfix. Web preview tests all pass but the underlying bug is native-Android-only (Reanimated shareable clone caching by JS object identity). Node regression test at frontend/src/game/__tests__/getSnapshot.regression.mjs (run via 'yarn test:engine') is the strongest available proof in this environment - it directly asserts every snapshot.obs/chips/feathers/heckler/jab/pint and every element inside obs/chips/feathers is a fresh reference every call, and passes. Dev HUD (data-testid=dev-perf-stats) is a great signal - watch for pool:9 and mountsSinceStart *:0 to prove pool sizing + dual-mount fix are intact.",
+  "rca of the issue": "Original bug (pass #2/#3): getSnapshot() reused persistent outObs/outChips/etc. buffers, mutating same nested objects each frame. Reanimated on native Android caches nested worklet values as shareable clones keyed by JS object identity - since references never changed, UI thread kept reading the first-ever-transferred stale positions, freezing obstacles off-screen. Fix (this hotfix): reverted to fresh .map()/object-literal allocation every getSnapshot() call. Not reproducible on web because Reanimated web fallback does not use shareable-clone identity caching. Mitigation: Node regression test now guards against re-introduction; recommend adding a comment in getSnapshot() warning future optimizers not to reuse nested object references."
+}
