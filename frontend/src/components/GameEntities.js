@@ -464,11 +464,6 @@ export function ChipView({ world, index }) {
       ],
     };
   });
-  // shimmer highlight pulses subtly
-  const shimmer = useAnimatedStyle(() => {
-    const t = world.value.t || 0;
-    return { opacity: 0.55 + 0.35 * Math.abs(Math.sin(t / 220 + index)) };
-  });
   return (
     <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
       <Svg width={S} height={S} viewBox="0 0 32 32">
@@ -487,8 +482,11 @@ export function ChipView({ world, index }) {
         <Circle cx="20" cy="16" r="1" fill="#c9861a" opacity="0.5" />
         <Circle cx="16" cy="22" r="0.9" fill="#c9861a" opacity="0.5" />
       </Svg>
-      {/* shimmer highlight */}
-      <Animated.View style={[chipStyles.shine, shimmer]} pointerEvents="none" />
+      {/* static shine highlight — was a per-chip pulsing worklet (36 pooled
+          instances = 36 extra worklet evaluations every world update); a
+          fixed-opacity highlight reads identically at a glance without
+          costing a second subscription per chip. */}
+      <View style={[chipStyles.shine, { opacity: 0.75 }]} pointerEvents="none" />
     </Animated.View>
   );
 }
@@ -506,10 +504,6 @@ export function JabView({ world }) {
       opacity: 1,
       transform: [{ translateX: j.x - S / 2 }, { translateY: j.y - S / 2 + bob }, { rotate: `${rot}deg` }],
     };
-  });
-  const sparkle = useAnimatedStyle(() => {
-    const t = world.value.t || 0;
-    return { opacity: 0.4 + 0.6 * Math.abs(Math.sin(t / 180)) };
   });
   return (
     <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
@@ -530,8 +524,8 @@ export function JabView({ world }) {
           <Line x1="24" y1="16" x2="30" y2="10" stroke="#eef7f5" strokeWidth="5.2" strokeLinecap="round" />
         </G>
       </Svg>
-      {/* rare-item sparkle */}
-      <Animated.View style={[jabStyles.sparkle, sparkle]} pointerEvents="none" />
+      {/* static rare-item sparkle (was a continuously subscribing worklet) */}
+      <View style={[jabStyles.sparkle, { opacity: 0.7 }]} pointerEvents="none" />
     </Animated.View>
   );
 }
@@ -554,10 +548,6 @@ export function PintView({ world }) {
       transform: [{ translateX: pt.x - S / 2 }, { translateY: pt.y - S / 2 + bob }, { rotate: `${rot}deg` }],
     };
   });
-  const foam = useAnimatedStyle(() => {
-    const t = world.value.t || 0;
-    return { opacity: 0.5 + 0.5 * Math.abs(Math.sin(t / 200)) };
-  });
   return (
     <Animated.View style={[styles.abs, { width: S, height: S }, style]} pointerEvents="none">
       <Svg width={S} height={S} viewBox="0 0 40 40">
@@ -574,7 +564,8 @@ export function PintView({ world }) {
         <Circle cx="18.5" cy="11.5" r="4.8" fill="#fffdf3" />
         <Circle cx="23.5" cy="13" r="4.2" fill="#fffdf3" />
       </Svg>
-      <Animated.View style={[jabStyles.sparkle, { backgroundColor: '#fffdf3' }, foam]} pointerEvents="none" />
+      {/* static foam highlight (was a continuously subscribing worklet) */}
+      <View style={[jabStyles.sparkle, { backgroundColor: '#fffdf3', opacity: 0.85 }]} pointerEvents="none" />
     </Animated.View>
   );
 }

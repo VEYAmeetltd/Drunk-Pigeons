@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only regression test after refactor of GameScreen.js rAF loop into standalone frameScheduler.js module. All 7 requested gameplay flows verified against the web preview. No regressions detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "PLAY_starts_run_and_flap_responsive": "PASS - PLAY button loads game screen; TAP TO FLAP hint visible; bird responds immediately on click (moved from ~y=350 up to y<20 after taps).",
+    "distance_HUD_smooth_and_monotonic": "PASS - Sampled distance every 200ms over 6s: 0,2,3,4,6,6,8,9,11,11,13,14,15,16,18,19,20,21,23,24,25,26,28,28,29,31,32,33,34,35. Strictly non-decreasing, no freezes, no jumps, ~5-6m/s consistent (matches expected 60Hz fixed-step cadence). Refactor confirmed regression-free.",
+    "obstacles_and_chips_render": "PASS - Buildings/scaffolding/billboards/chips visible scrolling right-to-left in Gritty Backstreets. Chip HUD present (0 in this short run as bird was flown high to avoid crashes).",
+    "game_over_overlay": "PASS - After letting bird fall (~2s) SPLAT! overlay appears with DISTANCE (10m), BEST DISTANCE, CHIPS EATEN, PLAY AGAIN, REVIVE ('Watch an ad to continue'), MAIN MENU. All testids present: game-over-overlay, death-message, new-best-badge, go-distance, go-best-distance, go-chips, play-again-button, revive-button, menu-button.",
+    "restart_confirm_cancel_resumes_same_run": "PASS - Clicking restart-button during active run opened restart-confirm-overlay. Distance was 2m at open; after clicking restart-cancel distance was 5m (game kept ticking, state preserved, NOT reset). Confirms the schedulerRef reset was NOT triggered on cancel - the key refactor invariant.",
+    "restart_confirm_yes_starts_new_run": "PASS - Clicking restart-confirm-yes reset distance to 0m; new run began cleanly (scheduler.reset(performance.now()) working).",
+    "map_selection_gritty_backstreets": "PASS - Selecting map-night then PLAY loaded dark purple night-city theme with pink-lit buildings, scaffolding tower, purple billboards. Distinct from default Sunny London theme.",
+    "menu_exit_returns_home": "PASS - Clicking exit-button (MENU) returned to home screen with play-button visible."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "frameScheduler.js is clean, pure, dependency-free, well-commented (49 lines). Good separation of concerns. Testable in isolation as intended.",
+    "MAX_FRAME_DT=1/30 correctly caps single-frame catch-up to 2 steps max, preventing burst catch-up after tab-switch/stall.",
+    "reset(now) correctly zeroes accumulator - used by cancelRestart/confirmRestartNow via schedulerRef.current.reset(performance.now()) per problem statement."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "GameScreen loop refactor (rAF + frameScheduler.js) is regression-clean in web preview. Distance HUD increments smoothly and monotonically ~5-6m/s. Restart-cancel preserves run state (distance keeps advancing during confirm modal); restart-yes resets to 0m. Game over overlay + all HUD testids working. Physical Android 90/120Hz stutter fix is explicitly out of scope for web testing per user."
+}

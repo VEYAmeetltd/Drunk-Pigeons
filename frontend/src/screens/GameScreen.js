@@ -7,6 +7,7 @@ import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintVi
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
+import { createFixedStepScheduler, SIM_STEP } from '../game/frameScheduler';
 import { CONFIG, EASY_TUNING, fatLevelFor, FAT_LABELS, EXTRA_FAT_LABELS, extraFatLevelFor, formatInt } from '../config';
 import { getMapForSelection, modeForSelection } from '../data/maps';
 import { randomDeathMessage } from '../data/deathMessages';
@@ -152,7 +153,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
 
   const engineRef = useRef(null);
   const rafRef = useRef(0);
-  const lastRef = useRef(0);
+  const schedulerRef = useRef(null); // fixed-timestep scheduler (60Hz sim cap, decoupled from display Hz)
   const cbRef = useRef({});
   const shieldTimer = useRef(null);
   const pausedRef = useRef(false);
@@ -251,42 +252,56 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     Ads.init();
     engineRef.current = buildEngine();
     startRun();
-    lastRef.current = performance.now();
+    schedulerRef.current = createFixedStepScheduler();
+    schedulerRef.current.reset(performance.now());
 
     const loop = (now) => {
       const eng = engineRef.current;
       if (pausedRef.current) {
-        lastRef.current = now;
+        schedulerRef.current.reset(now); // don't let a pause build up a step backlog for resume
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
-      let dt = (now - lastRef.current) / 1000;
-      lastRef.current = now;
-      if (dt > 1 / 30) dt = 1 / 30;
-      eng.step(dt, now);
-      const snap = eng.getSnapshot(now);
-      world.value = snap;
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        const p = eng.getPerfStats();
-        const stats = perfStatsRef.current;
-        stats.stepMs = p.stepMs;
-        stats.chunkMs = p.placeObstacleMs;
-        stats.maxChunkMs = Math.max(stats.maxChunkMs, p.placeObstacleMs);
+
+      // Fixed 60Hz simulation/publish cadence: on a 90Hz/120Hz display, rAF
+      // fires more often than this loop actually steps the engine or
+      // publishes a new world.value — this is what was producing thousands
+      // of fresh getSnapshot() allocations/transfers per second and the
+      // reported whole-world stalls. requestAnimationFrame itself is still
+      // scheduled at native refresh rate (kept for lowest-latency touch
+      // pickup on the NEXT frame), only the sim/publish work is capped.
+      const steps = schedulerRef.current.consume(now);
+      let stepped = false;
+      for (let i = 0; i < steps; i++) {
+        eng.step(SIM_STEP, now);
+        stepped = true;
       }
-      if (pigeon.id === 'roadman') {
-        const flags = roadmanFlagsRef.current;
-        if (!flags.wargwarn50 && snap.distM >= 50) {
-          flags.wargwarn50 = true;
-          showScriptedLine('I said wargwarn fam?');
-        } else if (!flags.wargwarn100 && snap.distM >= 100) {
-          flags.wargwarn100 = true;
-          showScriptedLine("A'ight say less, deekhed");
+
+      if (stepped) {
+        const snap = eng.getSnapshot(now);
+        world.value = snap;
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          const p = eng.getPerfStats();
+          const stats = perfStatsRef.current;
+          stats.stepMs = p.stepMs;
+          stats.chunkMs = p.placeObstacleMs;
+          stats.maxChunkMs = Math.max(stats.maxChunkMs, p.placeObstacleMs);
         }
+        if (pigeon.id === 'roadman') {
+          const flags = roadmanFlagsRef.current;
+          if (!flags.wargwarn50 && snap.distM >= 50) {
+            flags.wargwarn50 = true;
+            showScriptedLine('I said wargwarn fam?');
+          } else if (!flags.wargwarn100 && snap.distM >= 100) {
+            flags.wargwarn100 = true;
+            showScriptedLine("A'ight say less, deekhed");
+          }
+        }
+        const dirty = eng.consumeDirty();
+        if (dirty) setObsGeom(eng.getObstacleGeom());
+        const hk = eng.consumeHeckler();
+        if (hk) setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
       }
-      const dirty = eng.consumeDirty();
-      if (dirty) setObsGeom(eng.getObstacleGeom());
-      const hk = eng.consumeHeckler();
-      if (hk) setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -412,7 +427,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const cancelRestart = useCallback(() => {
     Audio.ui();
     setConfirmRestart(false);
-    lastRef.current = performance.now();
+    schedulerRef.current.reset(performance.now());
     pausedRef.current = false;
   }, []);
 
@@ -420,7 +435,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     Audio.ui();
     setConfirmRestart(false);
     pausedRef.current = false;
-    lastRef.current = performance.now();
+    schedulerRef.current.reset(performance.now());
     startRun();
   }, [startRun]);
 
