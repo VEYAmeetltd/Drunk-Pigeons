@@ -1,5 +1,5 @@
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform, AppState } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Background from '../components/Background';
@@ -15,7 +15,8 @@ import { pickInsult, pickReaction } from '../data/insults';
 import { generateRunId } from '../leaderboard/api';
 import { Audio } from '../audio/audio';
 import { Ads } from '../ads/ads';
-import { DEV_AD_STATS } from '../ads/sponsorCampaigns';
+import { DEV_AD_STATS, flushImpressions } from '../ads/sponsorCampaigns';
+import { DIAGNOSTICS_ENABLED, logFrameGap, printDiagnosticsReport } from '../diagnostics';
 import { FONT, COLORS } from '../ui/theme';
 
 // GameScreen owns a few low-frequency UI states (restart, game over, pigeon
@@ -253,6 +254,8 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     const isNewBest = dist > bestDistance;
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
     setOver({ message: randomDeathMessage(), chips: ch, distance: dist, isNewBest });
+    flushImpressions(); // game over is a natural pause point — persist queued sponsor impressions
+    printDiagnosticsReport(`game over @ ${dist}m`); // preview-build-visible (adb logcat), see diagnostics.js
     Ads.registerDeath();
     if (onCrash)
       onCrash({
@@ -319,10 +322,10 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
 
     const loop = (now) => {
       const eng = engineRef.current;
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        // DEV-only bounded frame-gap log: records the RAW wall-clock gap between
+      if (DIAGNOSTICS_ENABLED) {
+        // Bounded frame-gap log: records the RAW wall-clock gap between
         // consecutive rAF callbacks (before any 60Hz scheduler capping), so a
-        // physical-device profile build can see exactly when/where a real frame
+        // physical-device preview build can see exactly when/where a real frame
         // stall happened (native Android jank shows up here even though the sim
         // itself is correctly capped at 60Hz). Ring buffer, bounded to 40
         // entries — never grows unbounded, never causes a re-render.
@@ -331,9 +334,11 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
         if (last != null) {
           const rawGapMs = now - last;
           if (rawGapMs > 25) {
+            const distM = Math.floor(world.value.distM || 0);
             const log = frameGapLogRef.current;
-            log.push({ gapMs: Math.round(rawGapMs), distM: Math.floor((world.value.distM) || 0), t: Math.round(now) });
+            log.push({ gapMs: Math.round(rawGapMs), distM, t: Math.round(now) });
             if (log.length > 40) log.shift();
+            logFrameGap(rawGapMs, distM, now);
           }
         }
       }
@@ -400,8 +405,20 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       if (shieldTimer.current) clearTimeout(shieldTimer.current);
       if (boostTimer.current) clearTimeout(boostTimer.current);
       if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+      flushImpressions(); // leaving GameScreen — persist any queued sponsor impressions now
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sponsor impressions are queued in memory only (see sponsorCampaigns.js);
+  // the one AsyncStorage write they eventually need must never land on a live
+  // gameplay frame. Backgrounding/inactivating the app is a natural, already-paused
+  // moment to persist them (also covers the OS killing the app shortly after).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') flushImpressions();
+    });
+    return () => sub.remove();
   }, []);
 
   // DEV-only: low-cadence poll of the perf ref into state so the on-screen
@@ -519,6 +536,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     Audio.ui();
     pausedRef.current = true;
     setConfirmRestart(true);
+    flushImpressions(); // gameplay is now paused — a safe moment to persist queued impressions
   }, []);
 
   const cancelRestart = useCallback(() => {
@@ -535,6 +553,11 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     schedulerRef.current.reset(performance.now());
     startRun();
   }, [startRun]);
+
+  const handleExit = useCallback(() => {
+    flushImpressions(); // leaving the game screen for the menu — persist queued impressions
+    onExit();
+  }, [onExit]);
 
   const fatLevel = fatLevelFor(fatChipsCur);
 
@@ -599,7 +622,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
             <Pressable testID="restart-button" onPress={openRestartConfirm} style={styles.restartBtn}>
               <Text style={styles.restartIcon}>↻</Text>
             </Pressable>
-            <Pressable testID="exit-button" onPress={onExit} style={styles.exit}>
+            <Pressable testID="exit-button" onPress={handleExit} style={styles.exit}>
               <Text style={styles.exitTxt}>‹ MENU</Text>
             </Pressable>
           </View>
@@ -675,7 +698,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
             startRun();
           }}
           onRevive={doRevive}
-          onMenu={onExit}
+          onMenu={handleExit}
         />
       )}
     </View>

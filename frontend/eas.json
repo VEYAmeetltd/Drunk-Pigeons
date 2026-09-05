@@ -20,6 +20,9 @@
       },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_DP_DIAGNOSTICS": "1"
       }
     },
     "production": {

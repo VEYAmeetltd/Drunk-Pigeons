@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logBillboardRotation, logStorageFlush } from '../diagnostics';
+import { CONFIG } from '../config';
 
 // Official INTIES logo asset — bundled locally so it's part of the same asset preload
 // pass as every other billboard asset (never fetched over the network at runtime, so it
@@ -177,7 +179,7 @@ export function pickBillboardAd({ mapId, nowMs, removeAds, seed }) {
 // Anonymous, aggregate-only display counter — no player identity, no cross-campaign
 // tracking, no advertising identifiers. Best-effort local persistence.
 const IMPR_KEY = 'dp.ad.impressions.v1';
-let _impr = null;
+let _impr = null; // last-loaded on-disk snapshot (lazily fetched, cached after)
 async function loadImpr() {
   if (_impr) return _impr;
   try {
@@ -187,34 +189,76 @@ async function loadImpr() {
   }
   return _impr;
 }
-// DEV-only, bounded (two integers) counters so a profile build can correlate a
+// DEV-only, bounded (small integers) counters so a profile build can correlate a
 // reported frame stall against an actual billboard rotation/storage write.
-export const DEV_AD_STATS = { rotations: 0, storageWrites: 0 };
+export const DEV_AD_STATS = { rotations: 0, flushAttempts: 0, storageWrites: 0, flushFailures: 0 };
 
-// The native AsyncStorage bridge write previously fired synchronously with every
-// single ad rotation (~every 233m of distance) — landing on the SAME frame as the
-// billboard's own re-render/mount and producing a visible, repeatable stutter.
-// Impression counts are still updated in memory immediately; the actual persisted
-// write is coalesced to a single trailing-edge flush so it never lands on the
-// rotation's own frame, and rapid rotations (e.g. app restart) don't queue N writes.
-let _writeTimer = null;
-function scheduleFlush() {
-  if (_writeTimer) clearTimeout(_writeTimer);
-  _writeTimer = setTimeout(() => {
-    _writeTimer = null;
-    if (!_impr) return;
-    if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.storageWrites += 1;
-    AsyncStorage.setItem(IMPR_KEY, JSON.stringify(_impr)).catch(() => {});
-  }, 1500);
-}
-export function recordImpression(adId) {
+// Bounded in-memory delta queue (at most one counter per distinct ad id — a
+// handful of entries for the lifetime of the app). recordImpression() ONLY
+// ever touches this object; it never calls AsyncStorage itself, so a billboard
+// rotation mid-gameplay can never trigger a native bridge write, no matter how
+// often it fires.
+let _pending = {};
+let _dirty = false;
+let _flushing = null; // in-flight flush promise — guards against duplicate concurrent flushes
+
+// Called from the billboard-rotation callback ONLY. Fully synchronous JS —
+// increments an in-memory counter and returns. No promise, no bridge call.
+export function recordImpression(adId, distPx) {
   if (!adId) return;
   if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.rotations += 1;
-  loadImpr().then((m) => {
-    m[adId] = (m[adId] || 0) + 1;
-    scheduleFlush();
-  });
+  logBillboardRotation(typeof distPx === 'number' ? Math.floor(distPx / CONFIG.PIXELS_PER_METRE) : null, Date.now());
+  _pending[adId] = (_pending[adId] || 0) + 1;
+  _dirty = true;
 }
+
+// Persists any queued impressions. Intended to be called ONLY from natural
+// pause points: game paused (restart-confirm), game over, leaving GameScreen,
+// AppState backgrounding/inactivating, or on unmount — see GameScreen.js.
+// Never called on a timer and never called from the rotation callback itself.
+//
+// On "synchronous" vs "asynchronous": everything up to and including the
+// `AsyncStorage.setItem(...)` CALL below runs synchronously on the JS thread
+// (merging the queued delta into the loaded snapshot, JSON.stringify). That
+// call itself returns a Promise immediately — it does not block the JS
+// thread waiting for the result. What happens after that point (the bridge
+// message dispatch to native, and the native-side disk write) is genuinely
+// asynchronous and completes later, off of whichever frame called this
+// function. This file has NOT measured that native-side duration on a
+// physical device, so no claim is made about its real wall-clock cost —
+// only that it can no longer be triggered by, or block, a live gameplay frame,
+// since it is now solely caller-triggered from the pause points above.
+export async function flushImpressions() {
+  if (_flushing) return _flushing; // already flushing — don't start a duplicate write
+  if (!_dirty) return;
+  const delta = _pending;
+  _pending = {};
+  _dirty = false;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.flushAttempts += 1;
+  _flushing = (async () => {
+    try {
+      const m = await loadImpr();
+      for (const id of Object.keys(delta)) m[id] = (m[id] || 0) + delta[id];
+      await AsyncStorage.setItem(IMPR_KEY, JSON.stringify(m));
+      if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.storageWrites += 1;
+      logStorageFlush(true, Date.now());
+    } catch (e) {
+      // Requeue the delta so impression totals are never lost — the next
+      // pause-point trigger will retry this exact flush.
+      for (const id of Object.keys(delta)) _pending[id] = (_pending[id] || 0) + delta[id];
+      _dirty = true;
+      if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.flushFailures += 1;
+      logStorageFlush(false, Date.now());
+    } finally {
+      _flushing = null;
+    }
+  })();
+  return _flushing;
+}
+
 export async function getImpressionCounts() {
-  return { ...(await loadImpr()) };
+  const m = await loadImpr();
+  const merged = { ...m };
+  for (const id of Object.keys(_pending)) merged[id] = (merged[id] || 0) + _pending[id];
+  return merged;
 }

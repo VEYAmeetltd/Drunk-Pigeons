@@ -5,16 +5,21 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FONT } from '../ui/theme';
 import { pickBillboardAd, recordImpression, resetIntiesRotation } from '../ads/sponsorCampaigns';
 import { DEV_MOUNT_STATS } from './GameEntities';
+import { logAssetPreload } from '../diagnostics';
 // Same bundled asset sponsorCampaigns.js attaches to every INTIES creative — imported
 // again here only to pre-warm its native decode cost (see LOGO_WARMUP below).
 import IntiesLogo from '../../assets/ads/inties-logo.png';
 
-// Hidden, 1x1, permanently-mounted — pays the INTIES logo's native image
-// decode/GPU-texture-upload cost once at Background mount instead of the first
-// time a real INTIES creative is randomly rolled mid-run (that cold-decode,
-// landing on the same frame as a billboard rotation, was a concrete contributor
-// to the reported native lag spike).
-const LOGO_WARMUP_STYLE = { position: 'absolute', width: 1, height: 1, opacity: 0 };
+// Pays the INTIES logo's native decode cost once at Background mount, sized to
+// (the largest realistic on-screen render — see logoH below) rather than the
+// billboard's own real position, instead of paying that cost the first time a
+// real INTIES creative is randomly rolled mid-run. Deliberately NOT sized 1x1:
+// Android's image pipeline (Fresco) downsamples/caches a decoded bitmap to
+// roughly match the REQUESTED view size, so a 1x1 request would only ever
+// warm a near-useless 1x1 decode, not the ~260x110 size the real billboard
+// actually displays it at. `position: absolute` keeps it out of layout; it
+// never affects anything else on screen.
+const LOGO_WARMUP_STYLE = { position: 'absolute', width: 264, height: 110, opacity: 0 };
 
 // Per-map physical framing for the freestanding billboard structure.
 const FRAMES = {
@@ -58,9 +63,23 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
 
   const [ad, setAd] = useState(null);
   const slotRef = useRef(-1);
+  const warmupMountT = useRef(0);
 
   useEffect(() => {
+    warmupMountT.current = Date.now();
     if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_MOUNT_STATS.sponsorImageMount += 1;
+    // Supplementary hint alongside the real-sized hidden <Image> below: for a
+    // LOCAL bundled asset (this is not a remote/network image — see
+    // sponsorCampaigns.js's `require('.../inties-logo.png')`) there is nothing
+    // to download, so this mainly nudges the image pipeline to touch the asset
+    // early. The hidden Image render above is what actually requests a
+    // real-size decode; prefetch alone is not documented to guarantee that.
+    try {
+      const resolved = Image.resolveAssetSource(IntiesLogo);
+      if (resolved && resolved.uri) Image.prefetch(resolved.uri).catch(() => {});
+    } catch (e) {
+      // best-effort only
+    }
   }, []);
 
   useEffect(() => {
@@ -78,7 +97,7 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
         slotRef.current = k;
         const picked = pickBillboardAd({ mapId: theme.id, nowMs: Date.now(), removeAds: !!removeAds, seed: k * 101 + 17 });
         setAd(picked);
-        recordImpression(picked.id);
+        recordImpression(picked.id, d);
       }
     }, 120);
     return () => clearInterval(id);
@@ -99,7 +118,14 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
   });
 
   const warmup = (
-    <Image source={IntiesLogo} resizeMode="contain" style={LOGO_WARMUP_STYLE} pointerEvents="none" testID="sponsor-billboard-logo-warmup" />
+    <Image
+      source={IntiesLogo}
+      resizeMode="contain"
+      style={LOGO_WARMUP_STYLE}
+      pointerEvents="none"
+      testID="sponsor-billboard-logo-warmup"
+      onLoadEnd={() => logAssetPreload(Date.now() - warmupMountT.current, Date.now())}
+    />
   );
 
   if (!ad) return warmup;
