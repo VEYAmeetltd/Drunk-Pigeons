@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.intiesltd.drunkpigeons",
-      "versionCode": 5,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#070B35"

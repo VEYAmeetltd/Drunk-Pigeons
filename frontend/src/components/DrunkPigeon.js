@@ -166,6 +166,12 @@ export default function DrunkPigeon({
   const diag = DRUNK_DIAG;
   const fatF = 1 + Math.min(fatLevel, 6) * 0.14; // fatter => bigger + slower personality
   const amp = (calm ? 0.62 : 1) * fatF * (boost ? 1.5 : 1) * strength * (diag ? 2.2 : 1);
+  // Read current fatness inside the long-lived event scheduler. A Skinny Jab
+  // can then resize the pigeon without tearing down/restarting that scheduler.
+  const fatFRef = useRef(fatF);
+  const ampRef = useRef(amp);
+  fatFRef.current = fatF;
+  ampRef.current = amp;
   const swayA = amp * prof.sway;
   const wobA = amp * prof.wob;
   const bobA = amp * prof.bob;
@@ -266,7 +272,7 @@ export default function DrunkPigeon({
 
   // ---- signature animations (visual only) ----
   const runSignature = (fs) => {
-    const A = amp;
+    const A = ampRef.current;
     if (sound) Audio.drunkSig(prof.sig);
     const T = (ms) => Math.round(ms * fs); // fatter/slower
     switch (prof.sig) {
@@ -391,7 +397,6 @@ export default function DrunkPigeon({
   useEffect(() => {
     if (!active) return undefined;
     let stopped = false;
-    const fs = Math.min(fatF, 1.7);
     // higher Drunkness => events fire more often (SOBER sparse, PIGEONED frequent)
     const gapMul = Math.max(0.5, 1.4 - Math.min(strength, 1.7) * 0.55);
 
@@ -407,6 +412,7 @@ export default function DrunkPigeon({
       );
     };
     const doRoll = () => {
+      const fs = Math.min(fatFRef.current, 1.7);
       // barrel-roll flavour per personality (speed only; still visual-only + safe)
       const ms = Math.round(prof.rollMs * fs);
       const ease = prof.sig === 'gentleman' || prof.sig === 'salute' ? Easing.inOut(Easing.sin) : Easing.inOut(Easing.cubic);
@@ -415,6 +421,7 @@ export default function DrunkPigeon({
     };
 
     const runEvent = (kind) => {
+      const fs = Math.min(fatFRef.current, 1.7);
       if (kind === 'sig') {
         const now = Date.now();
         const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boost ? 0.6 : 1) * gapMul;
@@ -454,7 +461,7 @@ export default function DrunkPigeon({
       stopped = true;
       clearInterval(amb);
     };
-  }, [active, calm, diag, boost, fatLevel, strength, pigeon && pigeon.id]);
+  }, [active, calm, diag, boost, strength, pigeon && pigeon.id]);
 
   // occasional blink (larger sprites only)
   useEffect(() => {

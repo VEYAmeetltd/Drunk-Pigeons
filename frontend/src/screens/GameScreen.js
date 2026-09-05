@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +15,21 @@ import { pickInsult, pickReaction } from '../data/insults';
 import { generateRunId } from '../leaderboard/api';
 import { Audio } from '../audio/audio';
 import { Ads } from '../ads/ads';
+import { DEV_AD_STATS } from '../ads/sponsorCampaigns';
 import { FONT, COLORS } from '../ui/theme';
+
+// GameScreen owns a few low-frequency UI states (restart, game over, pigeon
+// size tiers, etc.). Memoized entity wrappers ensure those state changes do
+// not re-run every pooled renderer when its props are unchanged.
+const StableBackground = memo(Background);
+const StableObstacleView = memo(ObstacleView);
+const StableChipView = memo(ChipView);
+const StableJabView = memo(JabView);
+const StablePintView = memo(PintView);
+const StableFeatherView = memo(FeatherView);
+const StableHecklerView = memo(HecklerView);
+const StablePigeonView = memo(PigeonView);
+const StableDrunkScreenFX = memo(DrunkScreenFX);
 
 function emptySnapshot() {
   return {
@@ -78,6 +92,20 @@ function DistanceHUD({ world }) {
   );
 }
 
+// The chip count changes far more often than any other React-rendered game
+// state. Keep that update inside this tiny leaf instead of invalidating the
+// whole GameScreen (background, obstacle pool, 36 chips and 16 feathers).
+const ChipHUD = memo(forwardRef(function ChipHUD(_, ref) {
+  const [count, setCount] = useState(0);
+  useImperativeHandle(ref, () => ({ setCount }), []);
+  return (
+    <View style={styles.chipHud} testID="chip-hud">
+      <View style={styles.chipIcon} />
+      <Text style={styles.chipTxt}>{count}</Text>
+    </View>
+  );
+}));
+
 // Comic "POP!" that floats up from the pigeon when a Skinny Jab deflates it.
 function PopText({ world }) {
   const style = useAnimatedStyle(() => {
@@ -122,10 +150,10 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
   const [activeMap, setActiveMap] = useState(() => getMapForSelection(mapSelection));
 
-  const [chips, setChips] = useState(0);
   const [fatChipsCur, setFatChipsCur] = useState(0); // currentFatness (resets on Skinny Jab); drives visible size
+  const [extraLevel, setExtraLevel] = useState(0);
   const [deflateN, setDeflateN] = useState(0); // increments on jab -> squash animation
-  const [skinnyKey, setSkinnyKey] = useState(0); // remounts the SKINNY AGAIN! toast
+  const [skinnySignal, setSkinnySignal] = useState(0); // retriggers the permanently-mounted Skinny Jab toast
   const [obsGeom, setObsGeom] = useState(() =>
     Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ active: false, topH: 0, gap: CONFIG.GAP_BASE, kind: 0 }))
   );
@@ -139,16 +167,24 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const [heckler, setHeckler] = useState({ id: 0, text: '', reaction: 'fist' });
   const [pintBoost, setPintBoost] = useState(false); // temporary extra-drunk visual after a pint
   const boostTimer = useRef(null);
+  const chipHudRef = useRef(null);
+  const fatLevelRef = useRef(0);
+  const extraLevelRef = useRef(0);
   // Roadman-only one-time scripted lines (intro flap / 50m / 100m). A priority speech
   // bubble anchored to the player pigeon — independent of, and takes priority over, his
   // ordinary HIC/quip dialogue (see suppressQuips on PigeonView/DrunkPigeon below).
-  const [scriptedLine, setScriptedLine] = useState(null); // { key, text } | null
+  // Keep the bubble subtree mounted (hidden) so the first Roadman line never
+  // creates native text/layout/Reanimated nodes on a live gameplay frame.
+  const [scriptedLine, setScriptedLine] = useState({ text: 'Wargwarn?', visible: false });
   const roadmanFlagsRef = useRef({ wargwarn: false, wargwarn50: false, wargwarn100: false });
   const scriptedTimerRef = useRef(null);
   const showScriptedLine = useCallback((text) => {
     if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
-    setScriptedLine({ key: Date.now(), text });
-    scriptedTimerRef.current = setTimeout(() => setScriptedLine(null), 2200);
+    setScriptedLine({ text, visible: true });
+    scriptedTimerRef.current = setTimeout(
+      () => setScriptedLine((line) => ({ ...line, visible: false })),
+      2200,
+    );
   }, []);
 
   const engineRef = useRef(null);
@@ -172,18 +208,37 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const perfStatsRef = useRef({ stepMs: 0, chunkMs: 0, maxChunkMs: 0 });
   const [perfHud, setPerfHud] = useState(null);
   const mountBaselineRef = useRef(null);
+  // DEV-only: raw rAF timestamp of the previous callback + a bounded ring
+  // buffer of frame gaps > 25ms (distance/timestamp at each gap), so a
+  // physical-device profile build can pinpoint exactly when a real stall
+  // happened (e.g. correlating it against a SponsorBillboard rotation).
+  const lastRafNowRef = useRef(null);
+  const frameGapLogRef = useRef([]);
 
   // keep latest callbacks
   cbRef.current.onChip = (c, fatCur) => {
-    setChips(c);
-    setFatChipsCur(fatCur); // currentFatness (== total until a Skinny Jab resets it)
+    // Updating parent-owned state for every chip used to re-render the entire
+    // gameplay tree. The counter now updates only its small leaf component;
+    // parent state changes only when a visible fatness/callout tier changes.
+    if (chipHudRef.current) chipHudRef.current.setCount(c);
+    const nextFatLevel = fatLevelFor(fatCur);
+    if (nextFatLevel !== fatLevelRef.current) {
+      fatLevelRef.current = nextFatLevel;
+      setFatChipsCur(fatCur);
+    }
+    const nextExtraLevel = extraFatLevelFor(c);
+    if (nextExtraLevel !== extraLevelRef.current) {
+      extraLevelRef.current = nextExtraLevel;
+      setExtraLevel(nextExtraLevel);
+    }
     Audio.chip();
   };
   cbRef.current.onSkinnyJab = () => {
     Audio.pop();
+    fatLevelRef.current = 0;
     setFatChipsCur(0); // instant fatness reset; squash + toast add the comedic beat
     setDeflateN((n) => n + 1);
-    setSkinnyKey((k) => k + 1);
+    setSkinnySignal((n) => n + 1);
   };
   cbRef.current.onPint = () => {
     Audio.pint();
@@ -232,19 +287,26 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     runStartRef.current = 0;
     startedRef.current = false;
     setStarted(false);
-    setChips(0);
+    if (chipHudRef.current) chipHudRef.current.setCount(0);
+    fatLevelRef.current = 0;
+    extraLevelRef.current = 0;
     setFatChipsCur(0);
+    setExtraLevel(0);
     setOver(null);
     setCanRevive(true);
     setReviveBusy(false);
     setReviveMsg('');
     setShield(false);
     setObsGeom(eng.getObstacleGeom());
+    // reset() marks its initially seeded slots dirty; their geometry was just
+    // copied above, so consume that marker instead of repeating the same
+    // React update on the first running frame.
+    eng.consumeDirty();
     world.value = eng.getSnapshot(performance.now());
     // A brand-new run resets the Roadman scripted-line triggers (revive must NOT).
     roadmanFlagsRef.current = { wargwarn: false, wargwarn50: false, wargwarn100: false };
     if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
-    setScriptedLine(null);
+    setScriptedLine((line) => ({ ...line, visible: false }));
   }, [width, height, mapSelection, mode]);
 
   // init engine + loop
@@ -257,6 +319,24 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
 
     const loop = (now) => {
       const eng = engineRef.current;
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        // DEV-only bounded frame-gap log: records the RAW wall-clock gap between
+        // consecutive rAF callbacks (before any 60Hz scheduler capping), so a
+        // physical-device profile build can see exactly when/where a real frame
+        // stall happened (native Android jank shows up here even though the sim
+        // itself is correctly capped at 60Hz). Ring buffer, bounded to 40
+        // entries — never grows unbounded, never causes a re-render.
+        const last = lastRafNowRef.current;
+        lastRafNowRef.current = now;
+        if (last != null) {
+          const rawGapMs = now - last;
+          if (rawGapMs > 25) {
+            const log = frameGapLogRef.current;
+            log.push({ gapMs: Math.round(rawGapMs), distM: Math.floor((world.value.distM) || 0), t: Math.round(now) });
+            if (log.length > 40) log.shift();
+          }
+        }
+      }
       if (pausedRef.current) {
         schedulerRef.current.reset(now); // don't let a pause build up a step backlog for resume
         rafRef.current = requestAnimationFrame(loop);
@@ -298,7 +378,17 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
           }
         }
         const dirty = eng.consumeDirty();
-        if (dirty) setObsGeom(eng.getObstacleGeom());
+        if (dirty) {
+          // Preserve object identity for every unchanged pool slot so the
+          // memoized obstacle renderer skips it. Previously one recycled slot
+          // replaced all nine geometry objects and re-rendered the full pool.
+          const latest = eng.getObstacleGeom();
+          setObsGeom((previous) => {
+            const next = previous.slice();
+            for (const index of dirty) next[index] = latest[index];
+            return next;
+          });
+        }
         const hk = eng.consumeHeckler();
         if (hk) setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
       }
@@ -327,7 +417,14 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
             obstacleView: DEV_MOUNT_STATS.obstacleView - base.obstacleView,
           }
         : null;
-      setPerfHud({ ...perfStatsRef.current, mountsSinceStart, recycles: engineRef.current ? engineRef.current.getPerfStats().recycleCount : 0 });
+      setPerfHud({
+        ...perfStatsRef.current,
+        mountsSinceStart,
+        recycles: engineRef.current ? engineRef.current.getPerfStats().recycleCount : 0,
+        frameGaps: frameGapLogRef.current.slice(-3),
+        adRotations: DEV_AD_STATS.rotations,
+        adStorageWrites: DEV_AD_STATS.storageWrites,
+      });
     }, 250);
     return () => clearInterval(id);
   }, []);
@@ -440,51 +537,48 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   }, [startRun]);
 
   const fatLevel = fatLevelFor(fatChipsCur);
-  // Beyond ABSOLUTE UNIT, wording keeps progressing off TOTAL chips this run (chips),
-  // independent of fatChipsCur (which a Skinny Jab resets) — see config.js.
-  const extraLevel = extraFatLevelFor(chips);
 
   return (
     <View style={styles.root}>
-      <Background theme={activeMap} width={width} height={height} world={world} removeAds={removeAdsOwned} />
+      <StableBackground theme={activeMap} width={width} height={height} world={world} removeAds={removeAdsOwned} />
 
       {/* obstacles */}
       {obsGeom.map((g, i) => (
-        <ObstacleView key={i} world={world} index={i} geom={g} theme={activeMap} screenH={height} />
+        <StableObstacleView key={i} world={world} index={i} geom={g} theme={activeMap} screenH={height} />
       ))}
 
       {/* window heckler (environmental comedy) */}
-      <HecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} screenW={width} screenH={height} topInset={insets.top} />
+      <StableHecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} screenW={width} screenH={height} topInset={insets.top} />
 
       {/* chips */}
       {Array.from({ length: CONFIG.CHIP_POOL }).map((_, i) => (
-        <ChipView key={i} world={world} index={i} />
+        <StableChipView key={i} world={world} index={i} />
       ))}
 
       {/* Skinny Jab rare pickup */}
-      <JabView world={world} />
+      <StableJabView world={world} />
       {/* Pub pint pickup */}
-      <PintView world={world} />
+      <StablePintView world={world} />
       <PopText world={world} />
 
       {/* feathers */}
       {Array.from({ length: CONFIG.FEATHER_POOL }).map((_, i) => (
-        <FeatherView key={i} world={world} index={i} color={activeMap.feather} />
+        <StableFeatherView key={i} world={world} index={i} color={activeMap.feather} />
       ))}
 
       {/* pigeon */}
-      <PigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} suppressQuips={!!scriptedLine} />
+      <StablePigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} suppressQuips={scriptedLine.visible} />
 
       {/* Roadman-only one-time scripted lines — priority speech bubble, safe-area clamped */}
-      {scriptedLine && (
-        <PigeonSpeechBubble world={world} text={scriptedLine.text} textKey={scriptedLine.key} screenW={width} screenH={height} topInset={insets.top} />
+      {pigeon.id === 'roadman' && (
+        <PigeonSpeechBubble world={world} text={scriptedLine.text} visible={scriptedLine.visible} screenW={width} screenH={height} topInset={insets.top} />
       )}
 
       {/* Drunk soft-focus over the WORLD only (never moves it) — below the HUD */}
-      <DrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />
+      <StableDrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />
 
       {/* "SKINNY AGAIN!" toast on jab pickup — above the blur so it stays crisp */}
-      {skinnyKey > 0 && <SkinnyToast key={skinnyKey} />}
+      <SkinnyToast signal={skinnySignal} />
 
       {/* flap input layer (below HUD buttons). Single authoritative handler on the
           gesture-responder touch-DOWN event so a valid tap is captured immediately
@@ -510,17 +604,15 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
             </Pressable>
           </View>
           <DistanceHUD world={world} />
-          <View style={styles.chipHud} testID="chip-hud">
-            <View style={styles.chipIcon} />
-            <Text style={styles.chipTxt}>{chips}</Text>
-          </View>
+          <ChipHUD ref={chipHudRef} />
         </View>
         <View style={styles.fatMsgWrap} pointerEvents="none">
-          {extraLevel > 0 ? (
-            <Text style={styles.fatLabel} testID="fat-label">{EXTRA_FAT_LABELS[extraLevel - 1]}</Text>
-          ) : (
-            fatLevel > 0 && <Text style={styles.fatLabel} testID="fat-label">{FAT_LABELS[fatLevel]}</Text>
-          )}
+          <Text
+            style={[styles.fatLabel, { opacity: extraLevel > 0 || fatLevel > 0 ? 1 : 0 }]}
+            testID="fat-label"
+          >
+            {extraLevel > 0 ? EXTRA_FAT_LABELS[extraLevel - 1] : FAT_LABELS[fatLevel] || FAT_LABELS[0]}
+          </Text>
         </View>
       </SafeAreaView>
 
@@ -545,7 +637,8 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
         <View style={styles.perfHud} pointerEvents="none" testID="dev-perf-stats">
           <Text style={styles.devStatsTxt}>
             step:{perfHud.stepMs.toFixed(3)}ms chunk:{perfHud.chunkMs.toFixed(3)}ms maxChunk:{perfHud.maxChunkMs.toFixed(3)}ms pool:{CONFIG.OBSTACLE_POOL} recycles:{perfHud.recycles}{'\n'}
-            mountsSinceStart building:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.building : '-'} structureShape:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.structureShape : '-'} obstacleView:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.obstacleView : '-'}
+            mountsSinceStart building:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.building : '-'} structureShape:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.structureShape : '-'} obstacleView:{perfHud.mountsSinceStart ? perfHud.mountsSinceStart.obstacleView : '-'}{'\n'}
+            adRotations:{perfHud.adRotations} adStorageWrites:{perfHud.adStorageWrites} gaps25ms+:{perfHud.frameGaps.map((g) => `${g.gapMs}ms@${g.distM}m`).join(',') || 'none'}
           </Text>
         </View>
       )}

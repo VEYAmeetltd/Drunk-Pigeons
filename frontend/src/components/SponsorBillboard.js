@@ -4,6 +4,17 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FONT } from '../ui/theme';
 import { pickBillboardAd, recordImpression, resetIntiesRotation } from '../ads/sponsorCampaigns';
+import { DEV_MOUNT_STATS } from './GameEntities';
+// Same bundled asset sponsorCampaigns.js attaches to every INTIES creative — imported
+// again here only to pre-warm its native decode cost (see LOGO_WARMUP below).
+import IntiesLogo from '../../assets/ads/inties-logo.png';
+
+// Hidden, 1x1, permanently-mounted — pays the INTIES logo's native image
+// decode/GPU-texture-upload cost once at Background mount instead of the first
+// time a real INTIES creative is randomly rolled mid-run (that cold-decode,
+// landing on the same frame as a billboard rotation, was a concrete contributor
+// to the reported native lag spike).
+const LOGO_WARMUP_STYLE = { position: 'absolute', width: 1, height: 1, opacity: 0 };
 
 // Per-map physical framing for the freestanding billboard structure.
 const FRAMES = {
@@ -16,7 +27,7 @@ const FRAMES = {
 // How often (in scrolled pixels) a new billboard cycles through. Sized so, across the
 // game's speed range, one appears roughly every 15-25s. Kept fully separate from
 // collision, scoring and validated-run logic — this is scenery only.
-const GAP_DISTPX = 5600;
+export const GAP_DISTPX = 5600;
 // Mid-ground parallax factor (matches the decorative prop layer): billboards sit in
 // front of the skyline but scroll slower than foreground obstacles.
 const SCROLL_F = 0.52;
@@ -47,6 +58,10 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
 
   const [ad, setAd] = useState(null);
   const slotRef = useRef(-1);
+
+  useEffect(() => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_MOUNT_STATS.sponsorImageMount += 1;
+  }, []);
 
   useEffect(() => {
     slotRef.current = -1;
@@ -83,7 +98,11 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
     return { transform: [{ translateX: x }], opacity: on ? 1 : 0 };
   });
 
-  if (!ad) return null;
+  const warmup = (
+    <Image source={IntiesLogo} resizeMode="contain" style={LOGO_WARMUP_STYLE} pointerEvents="none" testID="sponsor-billboard-logo-warmup" />
+  );
+
+  if (!ad) return warmup;
   const isInties = ad.kind === 'inties';
   const headSize = Math.round(BILL_W * 0.1);
   const intiesBg = '#0a0d0f';
@@ -92,7 +111,9 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
   const logoH = Math.round(faceH * (ad.headline ? 0.4 : 0.6));
 
   return (
-    <Animated.View
+    <React.Fragment>
+      {warmup}
+      <Animated.View
       pointerEvents="none"
       testID="sponsor-billboard"
       style={[{ position: 'absolute', left: 0, top: topY, width: BILL_W, height: structureH }, style]}
@@ -184,5 +205,6 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
         </Svg>
       </View>
     </Animated.View>
+    </React.Fragment>
   );
 }

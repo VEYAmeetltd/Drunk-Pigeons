@@ -187,11 +187,32 @@ async function loadImpr() {
   }
   return _impr;
 }
+// DEV-only, bounded (two integers) counters so a profile build can correlate a
+// reported frame stall against an actual billboard rotation/storage write.
+export const DEV_AD_STATS = { rotations: 0, storageWrites: 0 };
+
+// The native AsyncStorage bridge write previously fired synchronously with every
+// single ad rotation (~every 233m of distance) — landing on the SAME frame as the
+// billboard's own re-render/mount and producing a visible, repeatable stutter.
+// Impression counts are still updated in memory immediately; the actual persisted
+// write is coalesced to a single trailing-edge flush so it never lands on the
+// rotation's own frame, and rapid rotations (e.g. app restart) don't queue N writes.
+let _writeTimer = null;
+function scheduleFlush() {
+  if (_writeTimer) clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(() => {
+    _writeTimer = null;
+    if (!_impr) return;
+    if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.storageWrites += 1;
+    AsyncStorage.setItem(IMPR_KEY, JSON.stringify(_impr)).catch(() => {});
+  }, 1500);
+}
 export function recordImpression(adId) {
   if (!adId) return;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_AD_STATS.rotations += 1;
   loadImpr().then((m) => {
     m[adId] = (m[adId] || 0) + 1;
-    AsyncStorage.setItem(IMPR_KEY, JSON.stringify(m)).catch(() => {});
+    scheduleFlush();
   });
 }
 export async function getImpressionCounts() {

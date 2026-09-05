@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web --port 3000",
-    "test:engine": "node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/getSnapshot.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/frameScheduler.regression.mjs"
+    "test:engine": "node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/getSnapshot.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/frameScheduler.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/eventEffects.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/billboardTiming.regression.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

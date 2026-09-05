@@ -17,7 +17,7 @@ const EMPTY_GEO = { segments: [], decor: [] };
 // never rendered). Each counter increments exactly once per REAL React mount
 // (empty-deps effect) so a test/dev build can confirm the obstacle pool's
 // subtrees mount ONCE at screen-open and never again during gameplay.
-export const DEV_MOUNT_STATS = { building: 0, structureShape: 0, obstacleView: 0 };
+export const DEV_MOUNT_STATS = { building: 0, structureShape: 0, obstacleView: 0, sponsorImageMount: 0 };
 const DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
 function shade(hex, f) {
@@ -80,13 +80,12 @@ export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 
  * DrunkPigeon — tracks the pigeon's live world.px/py every frame and reuses the SAME
  * flip/clamp containment recipe as HecklerView so it can never clip off any screen edge,
  * including the top safe-area inset on notch/Dynamic-Island devices. */
-export function PigeonSpeechBubble({ world, text, textKey, screenW = 400, screenH = 800, topInset = 0 }) {
-  const bubbleH = useSharedValue(46);
+export function PigeonSpeechBubble({ world, text = 'Wargwarn?', visible = false, screenW = 400, screenH = 800, topInset = 0 }) {
   const anchorHalf = 26; // approx pigeon radius, purely for bubble placement (not physics)
 
   const layout = useDerivedValue(() => {
     const w = world.value;
-    const bh = bubbleH.value;
+    const bh = PIGEON_BUBBLE_H;
     const safeTop = topInset + BUBBLE_MARGIN;
     const safeBottom = screenH - BUBBLE_MARGIN;
     const safeLeft = BUBBLE_MARGIN;
@@ -109,6 +108,7 @@ export function PigeonSpeechBubble({ world, text, textKey, screenW = 400, screen
   });
 
   const bubbleStyle = useAnimatedStyle(() => ({
+    opacity: visible ? 1 : 0,
     transform: [{ translateX: layout.value.bubX }, { translateY: layout.value.bubY }],
   }));
   const tailStyle = useAnimatedStyle(() => {
@@ -119,9 +119,14 @@ export function PigeonSpeechBubble({ world, text, textKey, screenW = 400, screen
   });
 
   return (
-    <Animated.View style={[styles.abs, hkStyles.bubble, { width: PIGEON_BUBBLE_W }, bubbleStyle]} pointerEvents="none" testID="roadman-script-bubble">
-      <View onLayout={(e) => { bubbleH.value = e.nativeEvent.layout.height; }}>
-        <Text key={textKey} style={hkStyles.bubbleTxt} testID="roadman-script-text">{text}</Text>
+    <Animated.View style={[styles.abs, hkStyles.bubble, { width: PIGEON_BUBBLE_W, height: PIGEON_BUBBLE_H }, bubbleStyle]} pointerEvents="none" testID="roadman-script-bubble">
+      <View style={hkStyles.fixedBubbleContent}>
+        <Text style={hkStyles.bubbleTxt} testID="roadman-script-text">{text}</Text>
+        {/* Shape/rasterise every scripted line while the initially-hidden bubble
+            is mounted, instead of paying that native text cost during play. */}
+        <Text accessible={false} style={[hkStyles.bubbleTxt, hkStyles.warmText]}>
+          Wargwarn? I said wargwarn fam? A'ight say less, deekhed
+        </Text>
       </View>
       <Animated.View style={[hkStyles.bubbleTail, tailStyle]} />
     </Animated.View>
@@ -129,11 +134,14 @@ export function PigeonSpeechBubble({ world, text, textKey, screenW = 400, screen
 }
 
 /* "SKINNY AGAIN!" toast — flashes on Skinny Jab pickup, then fades. */
-export function SkinnyToast() {
+export function SkinnyToast({ signal = 0 }) {
   const p = useSharedValue(0);
   useEffect(() => {
+    if (!signal) return;
+    cancelAnimation(p);
+    p.value = 0;
     p.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.quad) });
-  }, []);
+  }, [signal]);
   const st = useAnimatedStyle(() => {
     const inA = Math.min(p.value / 0.14, 1);
     const outA = p.value < 0.6 ? 1 : 1 - (p.value - 0.6) / 0.4;
@@ -574,7 +582,13 @@ export function PintView({ world }) {
    Fair by design: this NEVER moves the world (no camera tilt/translate) so on-screen
    obstacle positions always match their hitboxes. It only breathes a soft-focus haze
    + (web) a light backdrop blur, scaling with the Drunkness level (0..~1.4 with Pub
-   boost). Rendered BELOW the HUD so distance/chips/buttons remain sharp. */
+   boost). Rendered BELOW the HUD so distance/chips/buttons remain sharp.
+   Native has no CSS backdropFilter, so it previously rendered NOTHING but a faint
+   colour wash — the Pub Pint boost was invisible on Android. Below, two low-opacity
+   colour-fringed "ghost" layers drift in slow opposing loops on native only: a cheap,
+   compositor-only (opacity + transform, no blur/filter) soft-focus/double-vision
+   imitation that reads as hazy/drunk without a real blur pass or a new GPU bottleneck.
+   All three layers are permanently mounted here; only their opacity/transform change. */
 export function DrunkScreenFX({ level = 0 }) {
   const lv = Math.max(0, Math.min(1.4, level));
   const focus = useSharedValue(0);
@@ -591,7 +605,33 @@ export function DrunkScreenFX({ level = 0 }) {
     const web = Platform.OS === 'web' ? { backdropFilter: `blur(${blurPx}px)`, WebkitBackdropFilter: `blur(${blurPx}px)` } : {};
     return { opacity: 1, ...web, backgroundColor: `rgba(245,240,255,${opacity})` };
   });
-  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID="drunk-screen-fx" />;
+  const ghostA = useAnimatedStyle(() => {
+    if (Platform.OS === 'web' || lv <= 0.02) return { opacity: 0 };
+    const s = focus.value;
+    const o = Math.min(0.11, lv * 0.08);
+    return {
+      opacity: o,
+      backgroundColor: 'rgba(255,120,190,1)',
+      transform: [{ translateX: Math.sin(s * Math.PI * 2) * (2 + lv * 5) }, { translateY: Math.cos(s * Math.PI * 2) * (1 + lv * 2) }],
+    };
+  });
+  const ghostB = useAnimatedStyle(() => {
+    if (Platform.OS === 'web' || lv <= 0.02) return { opacity: 0 };
+    const s = focus.value;
+    const o = Math.min(0.11, lv * 0.08);
+    return {
+      opacity: o,
+      backgroundColor: 'rgba(110,210,255,1)',
+      transform: [{ translateX: Math.sin(s * Math.PI * 2 + Math.PI) * (2 + lv * 5) }, { translateY: Math.cos(s * Math.PI * 2 + Math.PI) * (1 + lv * 2) }],
+    };
+  });
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="drunk-screen-fx">
+      <Animated.View style={[StyleSheet.absoluteFill, ghostA]} />
+      <Animated.View style={[StyleSheet.absoluteFill, ghostB]} />
+      <Animated.View style={[StyleSheet.absoluteFill, style]} />
+    </View>
+  );
 }
 
 
@@ -620,6 +660,7 @@ export function FeatherView({ world, index, color }) {
 // never a text-shrinking fallback.
 const BUBBLE_W = 168;
 const PIGEON_BUBBLE_W = 176;
+const PIGEON_BUBBLE_H = 46;
 const BUBBLE_MARGIN = 10; // safe margin kept from every screen edge
 const BUBBLE_GAP = 8;     // gap kept between the bubble and its window anchor
 const TAIL_HALF = 7;
@@ -770,6 +811,8 @@ const hkStyles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   bubbleTxt: { fontFamily: FONT, color: '#20232b', fontWeight: '700', fontSize: 12, textAlign: 'center' },
+  fixedBubbleContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  warmText: { position: 'absolute', opacity: 0 },
   bubbleTail: {
     position: 'absolute',
     width: 14,
