@@ -22,6 +22,7 @@ import { modeForSelection } from './src/data/maps';
 import { Billing } from './src/store/billing';
 import { PRODUCTS, DEFAULT_PRICES } from './src/store/products';
 import { Ads } from './src/ads/ads';
+import { RevenueCat } from './src/store/revenuecat';
 
 // Drunkness slider (0=SOBER, 0.5=TIPSY, 1=ABSOLUTELY PIGEONED) → amplitude multiplier.
 const drunkStrengthFor = (level) => 0.2 + Math.max(0, Math.min(1, level)) * 1.5;
@@ -125,6 +126,34 @@ export default function App() {
       setReady(true);
       // App content is now mounted and ready to render — safe to reveal it.
       SplashScreen.hideAsync().catch(() => {});
+
+      // Real Google Play Billing (Android release builds only — see
+      // revenuecat.js). Configure once, then reconcile RevenueCat's
+      // authoritative ownership over the entitlements just loaded above.
+      // Unreachable/dev/unsupported-platform responses (null) intentionally
+      // leave the `loaded` cache above completely untouched. Defensive
+      // try/catch + .catch(): the app is already visible by this point
+      // (setReady/SplashScreen above), so this must never be able to affect
+      // boot even if the native module fails to load.
+      try {
+        RevenueCat.init();
+        RevenueCat.getOwnedProductIds().then((owned) => {
+          if (owned == null) return;
+          const purchasedPigeons = Object.entries(PRODUCTS.pigeons)
+            .filter(([, pid]) => owned.includes(pid))
+            .map(([id]) => id);
+          const bundleOwned = owned.includes(PRODUCTS.bundle);
+          const easyModeOwned = owned.includes(PRODUCTS.mode.easy);
+          const removeAdsOwned = owned.includes(PRODUCTS.removeads);
+          Persistence.setPurchased(purchasedPigeons);
+          Persistence.setBundle(bundleOwned);
+          Persistence.setEasyMode(easyModeOwned);
+          Persistence.setRemoveAds(removeAdsOwned);
+          setState((s) => ({ ...s, purchasedPigeons, bundleOwned, easyModeOwned, removeAdsOwned }));
+        }).catch(() => {});
+      } catch (e) {
+        // never let a native-module failure affect an already-visible app
+      }
     }).catch(() => {
       // Never leave the splash frozen: fall back to defaults and reveal the app
       // rather than hanging forever on a startup/storage error.

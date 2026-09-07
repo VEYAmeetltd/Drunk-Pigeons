@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web --port 3000",
-    "test:engine": "node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/getSnapshot.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/frameScheduler.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/eventEffects.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/billboardTiming.regression.mjs && node src/game/__tests__/nativeReadback.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/beerRenderer.regression.mjs && node src/ads/__tests__/admobLifecycle.regression.mjs && node src/audio/__tests__/androidAudio.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/heckler.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/powerDownAndSpeech.regression.mjs && node src/ads/__tests__/billboardBranding.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/leaderboardProduction.regression.mjs"
+    "test:engine": "node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/getSnapshot.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/frameScheduler.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/eventEffects.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/billboardTiming.regression.mjs && node src/game/__tests__/nativeReadback.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/beerRenderer.regression.mjs && node src/ads/__tests__/admobLifecycle.regression.mjs && node src/audio/__tests__/androidAudio.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/heckler.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/powerDownAndSpeech.regression.mjs && node src/ads/__tests__/billboardBranding.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/game/__tests__/leaderboardProduction.regression.mjs && node --experimental-loader ./src/game/__tests__/esm-loader.mjs src/store/__tests__/revenuecat.regression.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -15,15 +15,16 @@
     "expo": "~54.0.0",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
+    "expo-video": "~3.0.16",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-google-mobile-ads": "16.0.1",
+    "react-native-purchases": "9.4.2",
     "react-native-reanimated": "~3.19.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-svg": "15.12.1",
-    "react-native-web": "^0.21.0",
-    "expo-video": "~3.0.16"
+    "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
