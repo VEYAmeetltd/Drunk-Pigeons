@@ -1,6 +1,15 @@
 // Leaderboard API client. All calls are best-effort and fail silently so the game
 // stays fully playable offline. Never blocks gameplay.
-const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+// Public, non-secret production endpoint. Release builds deliberately ignore a
+// shell/.env override so a missing or stale PC environment cannot silently ship
+// another APK with a dead leaderboard. Local Expo development may still point
+// at a test backend with EXPO_PUBLIC_BACKEND_URL.
+export const PRODUCTION_BACKEND_URL = 'https://chip-pigeon.emergent.host';
+const DEV_BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').trim();
+const MAY_USE_DEV_OVERRIDE = typeof __DEV__ !== 'undefined' && __DEV__;
+const BASE = (MAY_USE_DEV_OVERRIDE && DEV_BACKEND_URL
+  ? DEV_BACKEND_URL
+  : PRODUCTION_BACKEND_URL).replace(/\/$/, '');
 const API = `${BASE}/api/leaderboard`;
 export const GAME_VERSION = '1.0.0';
 

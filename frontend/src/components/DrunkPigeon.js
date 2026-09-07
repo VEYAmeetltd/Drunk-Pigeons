@@ -165,13 +165,16 @@ export default function DrunkPigeon({
   const calm = intensity === 'calm';
   const diag = DRUNK_DIAG;
   const fatF = 1 + Math.min(fatLevel, 6) * 0.14; // fatter => bigger + slower personality
-  const amp = (calm ? 0.62 : 1) * fatF * (boost ? 1.5 : 1) * strength * (diag ? 2.2 : 1);
+  // Make the short Pub Pint window unmistakable without moving the world.
+  const amp = (calm ? 0.62 : 1) * fatF * (boost ? 2.8 : 1) * strength * (diag ? 2.2 : 1);
   // Read current fatness inside the long-lived event scheduler. A Skinny Jab
   // can then resize the pigeon without tearing down/restarting that scheduler.
   const fatFRef = useRef(fatF);
   const ampRef = useRef(amp);
   fatFRef.current = fatF;
   ampRef.current = amp;
+  const boostRef = useRef(boost);
+  boostRef.current = boost;
   const swayA = amp * prof.sway;
   const wobA = amp * prof.wob;
   const bobA = amp * prof.bob;
@@ -186,6 +189,7 @@ export default function DrunkPigeon({
   const hic = useSharedValue(0);
   const flail = useSharedValue(0);
   const bigWob = useSharedValue(0);
+  const pintWob = useSharedValue(0);
   // signature drivers (added on top of everything)
   const sigRot = useSharedValue(0);
   const sigY = useSharedValue(0);
@@ -264,11 +268,31 @@ export default function DrunkPigeon({
     bob.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => {
       mounted.current = false;
-      [sway, wob, bob, roll, hic, flail, bigWob, sigRot, sigY, sigSX, sigSY, defSX, defSY].forEach(cancelAnimation);
+      [sway, wob, bob, roll, hic, flail, bigWob, pintWob, sigRot, sigY, sigSX, sigSY, defSX, defSY].forEach(cancelAnimation);
       timers.current.forEach(clearTimeout);
       timers.current = [];
     };
   }, []);
+
+  // One finite lurch on the rising edge of a Pub Pint. This only drives the
+  // pigeon's existing small transforms—never a full-screen animated surface.
+  const wasBoosted = useRef(false);
+  useEffect(() => {
+    if (boost && !wasBoosted.current) {
+      pintWob.value = withSequence(
+        withTiming(1.35, { duration: 180, easing: Easing.out(Easing.quad) }),
+        withTiming(-1.2, { duration: 420, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.0, { duration: 520, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-0.8, { duration: 620, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0.55, { duration: 720, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-0.3, { duration: 760, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 700, easing: Easing.out(Easing.quad) }),
+      );
+    } else if (!boost && wasBoosted.current) {
+      pintWob.value = withTiming(0, { duration: 180 });
+    }
+    wasBoosted.current = boost;
+  }, [boost]);
 
   // ---- signature animations (visual only) ----
   const runSignature = (fs) => {
@@ -424,7 +448,7 @@ export default function DrunkPigeon({
       const fs = Math.min(fatFRef.current, 1.7);
       if (kind === 'sig') {
         const now = Date.now();
-        const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boost ? 0.6 : 1) * gapMul;
+        const cd = (diag ? 1200 : prof.sigCd * 0.5) * (boostRef.current ? 0.6 : 1) * gapMul;
         if (now - lastSig.current < cd) { spawnBubbles(2); return 700; }
         lastSig.current = now;
         return runSignature(fs);
@@ -452,7 +476,7 @@ export default function DrunkPigeon({
       const [lo, hi] = prof.cadence;
       // Keep personality lively so it is unmistakable even in short runs.
       const gapBase = diag ? rand(400, 800) : calm ? rand(lo * 0.9, hi * 0.9) : rand(lo * 0.5, hi * 0.5);
-      const gap = gapBase * (boost ? 0.55 : 1) * gapMul;
+      const gap = gapBase * (boostRef.current ? 0.55 : 1) * gapMul;
       pushTimer(tick, dur + gap);
     };
     pushTimer(tick, diag ? 400 : 650);
@@ -461,7 +485,7 @@ export default function DrunkPigeon({
       stopped = true;
       clearInterval(amb);
     };
-  }, [active, calm, diag, boost, strength, pigeon && pigeon.id]);
+  }, [active, calm, diag, strength, pigeon && pigeon.id]);
 
   // occasional blink (larger sprites only)
   useEffect(() => {
@@ -507,7 +531,7 @@ export default function DrunkPigeon({
     return {
       transform: [
         { translateY: bobPx + hicY + sigY.value },
-        { rotate: `${leanDeg + swayDeg + wobDeg + rollDeg + flailDeg + bigDeg + sigRot.value}deg` },
+        { rotate: `${leanDeg + swayDeg + wobDeg + rollDeg + flailDeg + bigDeg + sigRot.value + pintWob.value * 22}deg` },
         { scaleX: (2 - flailScaleY) * hicScale * sigSX.value * defSX.value },
         { scaleY: flailScaleY * hicScale * sigSY.value * defSY.value },
       ],

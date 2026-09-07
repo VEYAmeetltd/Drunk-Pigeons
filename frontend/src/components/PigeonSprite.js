@@ -71,6 +71,18 @@ export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66, droopy =
       <Line x1={cx - 6} y1={cy + ry} x2={cx - 6} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />
       <Line x1={cx + 8} y1={cy + ry} x2={cx + 8} y2={cy + ry + 10} stroke={p.beak} strokeWidth={3} />
 
+      {p.id === 'fancy' && (
+        <G>
+          {/* Two pointed pumps with visible stiletto heels, within the sprite bounds. */}
+          {[cx - 6, cx + 8].map((x) => (
+            <G key={x} transform={`translate(${x - 5} ${cy + ry + 3})`}>
+              <Path d="M 0 0 L 4 0 L 8 5 L 16 6 Q 18 9 14 9 L 6 9 L 3 5 L 2 10 L 0 10 Z" fill="#da246b" stroke="#71113d" strokeWidth={1} strokeLinejoin="round" />
+              <Path d="M 5 5 L 9 7 L 14 7" fill="none" stroke="#ff9bc6" strokeWidth={1.3} strokeLinecap="round" />
+            </G>
+          ))}
+        </G>
+      )}
+
       {/* Gym pigeon carries dumbbells (curl with the body during "One More Rep") */}
       {p.id === 'gym' && (
         <G>
@@ -82,7 +94,7 @@ export default function PigeonSprite({ pigeon, fatLevel = 0, size = 66, droopy =
       )}
 
       {/* accessories */}
-      <Accessory type={p.accessory} cx={cx} cy={cy} rx={rx} ry={ry} grow={grow} color="#e23b3b" />
+      <Accessory type={p.id === 'fancy' ? 'cocktail' : p.accessory} cx={cx} cy={cy} rx={rx} ry={ry} grow={grow} color="#e23b3b" />
     </Svg>
   );
 }
@@ -123,6 +135,19 @@ function Accessory({ type, cx, cy, rx, ry, grow }) {
           <Line x1={cx - 8} y1={cy - 18} x2={cx + 18} y2={cy + 6} stroke="#333" strokeWidth={2} />
           <Rect x={cx + 2} y={cy + 2} width={20} height={13} rx={2} fill="#333" />
           <Circle cx={cx + 12} cy={cy + 8} r={4} fill="#88d" />
+        </G>
+      );
+    case 'cocktail':
+      return (
+        <G transform={`translate(${cx - 26} ${cy - 14})`}>
+          {/* Held beside her wing; part of the same rotating sprite. */}
+          <Path d="M 12 26 Q 20 29 26 23" fill="none" stroke="#b9861f" strokeWidth={5} strokeLinecap="round" />
+          <Path d="M 0 0 L 26 0 L 13 16 Z" fill="#d5f6ff" stroke="#fff7ef" strokeWidth={2} strokeLinejoin="round" />
+          <Path d="M 4 4 L 22 4 L 13 14 Z" fill="#ed438a" />
+          <Line x1={13} y1={16} x2={13} y2={30} stroke="#fff7ef" strokeWidth={2.5} />
+          <Line x1={6} y1={31} x2={20} y2={31} stroke="#fff7ef" strokeWidth={2.5} strokeLinecap="round" />
+          <Circle cx={23} cy={0} r={5} fill="#77bf43" stroke="#dbf59a" strokeWidth={1.5} />
+          <Line x1={23} y1={-4} x2={23} y2={4} stroke="#dbf59a" strokeWidth={1} />
         </G>
       );
     case 'monocle':

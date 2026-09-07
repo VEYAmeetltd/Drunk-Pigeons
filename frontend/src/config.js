@@ -73,10 +73,12 @@ export const CONFIG = {
   SKINNY_JAB_MIN_FAT: 10, // only rolls once the pigeon carries >=10 chips of fatness
   SKINNY_JAB_SIZE: 34,
 
-  // PUB PINT — collectible pint that briefly boosts the pigeon's own drunk visuals
-  PINT_CHANCE: 0.06, // fairly common (fun pickup, not rare)
+  // PUB PINT — avoidable power-down: blurred vision, full roll and weaker lift
+  PINT_CHANCE: 0.06, // existing spawn chance; this is a hazard
   PINT_SIZE: 34,
-  PINT_BOOST_MS: 4200, // duration of the temporary extra-drunk visual boost
+  PINT_BOOST_MS: 4500, // 4.5 seconds of active gameplay; pauses freeze the effect
+  PINT_ROLL_MS: 750, // a full 360-degree turn for every pickup
+  PINT_FLAP_SCALE: 0.8, // immediate taps, but 20% less upward velocity
 };
 
 // Integer with thousands separators (no decimals). Safe on web + native (no Intl needed).

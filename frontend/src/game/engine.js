@@ -1,4 +1,5 @@
 import { CONFIG, fatLevelFor, pigeonRadiusFor } from '../config';
+import { createPintEffect } from './pintEffect';
 import { FAMILIES, buildGeometry, hitTestSegment, projectionMargin } from './obstacleGeometry';
 import { pickEncounter, isNonBuildingEncounter } from './obstacleAppearance';
 
@@ -7,7 +8,7 @@ const OW = CONFIG.OBSTACLE_WIDTH;
 
 // Pure(ish) game simulation. No rendering. Mutates internal state each step.
 // Rendering layer reads getSnapshot(). Collision/scoring use plain JS state.
-export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) {
+export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint, onPintEffectChange }) {
   let W = 400;
   let H = 800;
 
@@ -29,7 +30,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   const jab = { active: false, x: 0, y: 0, anim: 0 };
   const pint = { active: false, x: 0, y: 0, anim: 0 };
   let pintChance = CONFIG.PINT_CHANCE; // dev-overridable
-  let pintT = 0; // timestamp of the last pint collection (drives the visual boost window)
+  const beer = createPintEffect(onPintEffectChange);
   let distance = 0;
   let running = false;
   let dead = false;
@@ -147,10 +148,10 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   const WIN_W = 36;
   const WIN_H = 36;
   const ROOF_CLEARANCE = 24;    // keep clear of the roof/chimney/antenna cluster at the gap-facing edge
-  const CEILING_CLEARANCE = 22; // keep clear of the ceiling edge on a hanging (top) building
+  let ceilingClearance = 96; // visual safe area, independent of physics/difficulty
   const FRONT_CLEARANCE = 46;   // keep clear of the shop/pub/door signage at street level
   function trySpawnHeckler() {
-    if (heckler.active) return;
+    if (heckler.active) return false;
     const gY = groundY();
     // Every candidate is a concrete, valid window slot: {idx, side, lo, hi} where
     // lo/hi bound the window's top-y within that specific BUILDING side's own bounds.
@@ -160,7 +161,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       // building must be fully on-screen (window can fit completely on screen)
       if (!o.active || o.x < W * 0.45 || o.x + OW > W - 4) continue;
       if (o.topFamily === FAMILIES.BUILDING) {
-        const lo = CEILING_CLEARANCE;
+        const lo = ceilingClearance;
         const hi = o.topH - ROOF_CLEARANCE - WIN_H;
         if (hi > lo) cands.push({ idx: i, side: 'top', lo, hi });
       }
@@ -171,7 +172,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         if (hi > lo) cands.push({ idx: i, side: 'bottom', lo, hi });
       }
     }
-    if (cands.length === 0) return; // no valid anchor anywhere on screen -> do not spawn
+    if (cands.length === 0) return false; // retry shortly when an eligible building arrives
     const pick = cands[Math.floor(Math.random() * cands.length)];
     const top = pick.lo + Math.random() * (pick.hi - pick.lo);
     heckler.active = true;
@@ -184,6 +185,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     heckler.reactionR = Math.random();
     heckler.id += 1;
     hecklerPending = true;
+    return true;
   }
 
   function spawnChip(x, y) {
@@ -255,7 +257,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   }
 
   // Pub pint: fairly common, one at a time, validated safe placement (reuses the
-  // same bounds check as the jab since sizes match). Purely a visual-boost pickup.
+  // same bounds check as the jab since sizes match). Avoidable drunkenness hazard.
   function maybeSpawnPint(B) {
     if (pint.active) return;
     if (Math.random() >= pintChance) return;
@@ -341,10 +343,11 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     }
   }
 
-  function reset(width, height, tuning) {
+  function reset(width, height, tuning, hecklerSafeTop = 96) {
     T = tuning ? { ...CONFIG, ...tuning } : CONFIG;
     W = width;
     H = height;
+    ceilingClearance = Number.isFinite(hecklerSafeTop) ? Math.max(22, hecklerSafeTop) : 96;
     pigeon.x = W * CONFIG.PIGEON_X_RATIO;
     pigeon.y = H * 0.4;
     pigeon.vy = 0;
@@ -356,7 +359,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     popT = 0;
     jab.active = false;
     pint.active = false;
-    pintT = 0;
+    beer.reset();
     distance = 0;
     running = false;
     spawnIndex = 0;
@@ -386,7 +389,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
 
   function flap() {
     if (!running || dead) return;
-    pigeon.vy = CONFIG.FLAP_VELOCITY;
+    pigeon.vy = CONFIG.FLAP_VELOCITY * beer.flapScale;
     flapPulse = 1;
   }
 
@@ -460,6 +463,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
 
     if (!running || dead) return;
 
+    beer.step(dt);
     const { speed, spacing } = difficulty();
     scrollSpeed = speed;
 
@@ -548,7 +552,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       }
     }
 
-    // Skinny Jab: rare pickup movement + collection (fatness reset only)
+    // Skinny Jab power-up: instant fatness reset and clear the beer penalty.
     if (jab.active) {
       jab.anim += dt;
       jab.x -= speed * dt;
@@ -561,6 +565,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         if (jdx * jdx + jdy * jdy < jpick * jpick) {
           jab.active = false;
           fatChips = 0; // instant deflation to original size (total chips untouched)
+          beer.sober(); // restore vision and full flap strength immediately
           skinnyJabCount += 1;
           popT = now;
           explodeFeathers(pigeon.x, pigeon.y - 8);
@@ -569,7 +574,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       }
     }
 
-    // Pub pint: movement + collection (triggers a temporary visual drunk boost only)
+    // Pub pint: vision/flight penalty and a full barrel roll on every collection.
     if (pint.active) {
       pint.anim += dt;
       pint.x -= speed * dt;
@@ -581,7 +586,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         const bpick = rr + CONFIG.PINT_SIZE * 0.5;
         if (bdx * bdx + bdy * bdy < bpick * bpick) {
           pint.active = false;
-          pintT = now;
+          beer.collect();
           if (onPint) onPint();
         }
       }
@@ -589,6 +594,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
 
     // collision
     if (collides(now)) {
+      beer.reset();
       dead = true;
       running = false;
       explodeFeathers(pigeon.x, pigeon.y);
@@ -607,14 +613,16 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
     }
     hecklerTimer -= dt;
     if (hecklerTimer <= 0) {
-      hecklerTimer = 3.5 + Math.random() * 4.5;
-      trySpawnHeckler();
+      // A pole or an off-screen building is not a successful comedy event.
+      // Retry that missed opportunity instead of skipping another 3.5–8 seconds.
+      hecklerTimer = trySpawnHeckler() ? 3.5 + Math.random() * 4.5 : 0.25;
     }
   }
 
   // Revive: reposition to safe spot, grant temporary invincibility, keep score/chips.
   function revive(now) {
     if (usedRevive) return false;
+    beer.reset();
     usedRevive = true;
     dead = false;
     running = true;
@@ -661,6 +669,7 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
         const o = heckler.active ? obstacles[heckler.obsIndex] : null;
         const on = o && o.active;
         return {
+          id: heckler.id,
           x: on ? o.x + heckler.wx : -999,
           y: heckler.wy,
           w: WIN_W,
@@ -686,7 +695,9 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
       })),
       jab: { x: jab.x, y: jab.y, active: jab.active ? 1 : 0, anim: jab.anim },
       pint: { x: pint.x, y: pint.y, active: pint.active ? 1 : 0, anim: pint.anim },
-      boost: pintT > 0 && now < pintT + CONFIG.PINT_BOOST_MS ? 1 : 0,
+      boost: beer.active ? 1 : 0,
+      beerRoll: beer.rollDegrees,
+      beerRemainingMs: beer.remainingMs,
       pop: popT,
     };
   }
@@ -708,7 +719,12 @@ export function createEngine({ onScore, onChip, onCrash, onSkinnyJab, onPint }) 
   function consumeHeckler() {
     if (!hecklerPending) return null;
     hecklerPending = false;
-    return { id: heckler.id, insultR: heckler.insultR, reactionR: heckler.reactionR };
+    return {
+      id: heckler.id,
+      insultR: heckler.insultR,
+      reactionR: heckler.reactionR,
+      lifeMs: Math.round(heckler.life * 1000),
+    };
   }
 
   function consumeDirty() {

@@ -1,12 +1,14 @@
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform, AppState } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Background from '../components/Background';
+import BeerWorld from '../components/BeerWorld';
 import { PigeonView, PigeonSpeechBubble, ObstacleView, ChipView, JabView, PintView, FeatherView, HecklerView, DrunkScreenFX, SkinnyToast, DEV_MOUNT_STATS } from '../components/GameEntities';
 import GameOverOverlay from './GameOverOverlay';
 import Button from '../ui/Button';
 import { createEngine } from '../game/engine';
+import { advanceScriptedSpeech, SCRIPTED_SPEECH_MS } from '../game/pigeonSpeech';
 import { createFixedStepScheduler, SIM_STEP } from '../game/frameScheduler';
 import { CONFIG, EASY_TUNING, fatLevelFor, FAT_LABELS, EXTRA_FAT_LABELS, extraFatLevelFor, formatInt } from '../config';
 import { getMapForSelection, modeForSelection } from '../data/maps';
@@ -30,14 +32,15 @@ const StablePintView = memo(PintView);
 const StableFeatherView = memo(FeatherView);
 const StableHecklerView = memo(HecklerView);
 const StablePigeonView = memo(PigeonView);
+const StablePigeonSpeechBubble = memo(PigeonSpeechBubble);
 const StableDrunkScreenFX = memo(DrunkScreenFX);
 
 function emptySnapshot() {
   return {
     px: -999, py: 0, t: 0, tilt: 0, flap: 0, fat: 0, inv: 0, dead: 0, distM: 0, distPx: 0, blackout: 0,
     jab: { x: -999, y: 0, active: 0, anim: 0 },
-    pop: 0,
-    heckler: { x: -999, y: 0, w: 36, h: 36, active: 0, life: 0 },
+    pop: 0, boost: 0, beerRoll: 0, beerRemainingMs: 0,
+    heckler: { id: 0, x: -999, y: 0, w: 36, h: 36, active: 0, life: 0 },
     obs: Array.from({ length: CONFIG.OBSTACLE_POOL }, () => ({ x: -999, active: 0 })),
     chips: Array.from({ length: CONFIG.CHIP_POOL }, () => ({ x: -999, y: 0, active: 0, anim: 0, eaten: 0 })),
     feathers: Array.from({ length: CONFIG.FEATHER_POOL }, () => ({ x: -999, y: 0, rot: 0, active: 0, life: 0 })),
@@ -45,20 +48,20 @@ function emptySnapshot() {
 }
 
 // Full-screen fade-to-black for the 1000m "pigeon closes its eyes" Easter egg.
-// Polls the shared world value (no React re-render on the hot path) and never
+// Polls the JS-owned snapshot (no UI-thread readback) and never
 // blocks touch input, so the pigeon keeps flapping through the blind stretch.
-function BlackoutOverlay({ world }) {
+function BlackoutOverlay({ telemetry }) {
   const [a, setA] = useState(0);
   useEffect(() => {
     const id = setInterval(() => {
       try {
-        setA(world.value.blackout || 0);
+        setA(telemetry.current.blackout || 0);
       } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameScreen] blackout HUD read failed', e);
       }
     }, 50);
     return () => clearInterval(id);
-  }, [world]);
+  }, [telemetry]);
   if (a <= 0.001) return null;
   return (
     <View
@@ -74,18 +77,18 @@ function BlackoutOverlay({ world }) {
 }
 
 // Live distance readout — isolates re-renders to just this tiny component.
-function DistanceHUD({ world }) {
+function DistanceHUD({ telemetry }) {
   const [m, setM] = useState(0);
   useEffect(() => {
     const id = setInterval(() => {
       try {
-        setM(world.value.distM || 0);
+        setM(telemetry.current.distM || 0);
       } catch (e) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameScreen] distance HUD read failed', e);
       }
     }, 60);
     return () => clearInterval(id);
-  }, [world]);
+  }, [telemetry]);
   return (
     <View style={styles.distHud} testID="distance-hud" pointerEvents="none">
       <Text style={styles.distTxt}>{formatInt(m)}m</Text>
@@ -107,39 +110,41 @@ const ChipHUD = memo(forwardRef(function ChipHUD(_, ref) {
   );
 }));
 
-// Comic "POP!" that floats up from the pigeon when a Skinny Jab deflates it.
-function PopText({ world }) {
-  const style = useAnimatedStyle(() => {
-    const w = world.value;
-    const pop = w.pop || 0;
-    const dtp = pop ? w.t - pop : 99999;
-    if (!pop || dtp < 0 || dtp > 1100) return { opacity: 0, transform: [{ translateX: -999 }] };
-    const p = dtp / 1100;
-    const s = 0.5 + Math.min(1, p * 5) * 0.7;
-    return {
-      opacity: 1 - p,
-      transform: [{ translateX: w.px - 50 }, { translateY: w.py - 74 - p * 46 }, { scale: s }],
-    };
-  });
+// Comic "POP!" for Skinny Jab. Kept fixed and driven by the low-frequency pickup
+// signal: moving native Text with every world snapshot caused an Android frame spike.
+function PopText({ signal = 0 }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!signal) return undefined;
+    setVisible(true);
+    const id = setTimeout(() => setVisible(false), 900);
+    return () => clearTimeout(id);
+  }, [signal]);
   return (
-    <Animated.View style={[styles.pop, style]} pointerEvents="none" testID="skinny-jab-pop">
+    <View style={[styles.pop, visible ? styles.calloutShown : styles.calloutHidden]} pointerEvents="none" testID="skinny-jab-pop">
       <Text style={styles.popTxt}>POP!</Text>
-    </Animated.View>
+    </View>
   );
 }
 
 // READY-state "TAP TO FLAP" prompt with a subtle pulse. Never intercepts touches
 // (pointerEvents none) — the full-screen flap layer beneath handles the tap.
-function ReadyHint() {
+function ReadyHint({ visible, preparing = false }) {
   const p = useSharedValue(1);
   useEffect(() => {
+    if (!visible) {
+      cancelAnimation(p);
+      p.value = 1;
+      return undefined;
+    }
     p.value = withRepeat(withTiming(1.08, { duration: 620, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, [p]);
+    return () => cancelAnimation(p);
+  }, [p, visible]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: p.value }], opacity: 0.9 + (p.value - 1) }));
   return (
-    <View style={styles.hint} pointerEvents="none" testID="tap-to-flap-hint">
-      <Animated.Text style={[styles.hintTxt, style]}>TAP TO FLAP</Animated.Text>
-      <Text style={styles.hintSub}>keep the drunk pigeon airborne</Text>
+    <View style={[styles.hint, visible ? styles.calloutShown : styles.calloutHidden]} pointerEvents="none" testID="tap-to-flap-hint">
+      <Animated.Text style={[styles.hintTxt, style]}>{preparing ? 'PREPARING THE MANOR' : 'TAP TO FLAP'}</Animated.Text>
+      <Text style={styles.hintSub}>{preparing ? 'getting your pigeon ready' : 'keep the drunk pigeon airborne'}</Text>
     </View>
   );
 }
@@ -148,6 +153,9 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const world = useSharedValue(emptySnapshot());
+  // JS-only mirror. HUD and ad timers must never synchronously fetch world
+  // from the UI thread: the engine already produced these values on JS.
+  const telemetry = useRef({ distM: 0, distPx: 0, blackout: 0 });
   const mode = modeForSelection(mapSelection); // 'normal' | 'easy' (stable for this instance)
   const [activeMap, setActiveMap] = useState(() => getMapForSelection(mapSelection));
 
@@ -166,26 +174,27 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const [started, setStarted] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [heckler, setHeckler] = useState({ id: 0, text: '', reaction: 'fist' });
-  const [pintBoost, setPintBoost] = useState(false); // temporary extra-drunk visual after a pint
-  const boostTimer = useRef(null);
+  const [pintBoost, setPintBoost] = useState(false); // mirrors simulation-owned beer penalty transitions
+  const rendererReadyRef = useRef(false);
+  const [rendererReady, setRendererReady] = useState(false);
+  const onRendererPrepared = useCallback(() => {
+    rendererReadyRef.current = true;
+    setRendererReady(true);
+  }, []);
   const chipHudRef = useRef(null);
   const fatLevelRef = useRef(0);
   const extraLevelRef = useRef(0);
-  // Roadman-only one-time scripted lines (intro flap / 50m / 100m). A priority speech
-  // bubble anchored to the player pigeon — independent of, and takes priority over, his
-  // ordinary HIC/quip dialogue (see suppressQuips on PigeonView/DrunkPigeon below).
-  // Keep the bubble subtree mounted (hidden) so the first Roadman line never
-  // creates native text/layout/Reanimated nodes on a live gameplay frame.
+  // Roadman's one-time lines follow his pigeon in a small static SVG bubble.
+  // They take priority over ordinary quips and use active simulation time.
   const [scriptedLine, setScriptedLine] = useState({ text: 'Wargwarn?', visible: false });
   const roadmanFlagsRef = useRef({ wargwarn: false, wargwarn50: false, wargwarn100: false });
-  const scriptedTimerRef = useRef(null);
+  const scriptedRemainingRef = useRef(0);
+  const hideScriptedLine = useCallback(() => {
+    setScriptedLine((line) => ({ ...line, visible: false }));
+  }, []);
   const showScriptedLine = useCallback((text) => {
-    if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+    scriptedRemainingRef.current = SCRIPTED_SPEECH_MS;
     setScriptedLine({ text, visible: true });
-    scriptedTimerRef.current = setTimeout(
-      () => setScriptedLine((line) => ({ ...line, visible: false })),
-      2200,
-    );
   }, []);
 
   const engineRef = useRef(null);
@@ -243,16 +252,21 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   };
   cbRef.current.onPint = () => {
     Audio.pint();
-    setPintBoost(true);
-    if (boostTimer.current) clearTimeout(boostTimer.current);
-    boostTimer.current = setTimeout(() => setPintBoost(false), CONFIG.PINT_BOOST_MS);
   };
+  cbRef.current.onPintEffectChange = (active) => setPintBoost(active);
   cbRef.current.onCrash = ({ score: sc, chips: ch, distance: dist }) => {
+    // Freeze the screen-owned simulation clock immediately. The engine already
+    // marks itself dead, but without this gate the rAF publisher and independent
+    // character-event scheduler could keep working behind the Game Over card.
+    pausedRef.current = true;
     Audio.crash();
+    setPintBoost(false);
     // Best Score = longest distance travelled, in meters. This is the ONLY source of
     // truth for "best" — never obstacle-pass counts, chips, or fatness tiers.
     const isNewBest = dist > bestDistance;
     if (isNewBest) setTimeout(() => Audio.highscore(), 250);
+    scriptedRemainingRef.current = 0;
+    hideScriptedLine();
     setOver({ message: randomDeathMessage(), chips: ch, distance: dist, isNewBest });
     flushImpressions(); // game over is a natural pause point — persist queued sponsor impressions
     printDiagnosticsReport(`game over @ ${dist}m`); // preview-build-visible (adb logcat), see diagnostics.js
@@ -275,15 +289,22 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       onCrash: (info) => cbRef.current.onCrash(info),
       onSkinnyJab: () => cbRef.current.onSkinnyJab(),
       onPint: () => cbRef.current.onPint(),
+      onPintEffectChange: (active) => cbRef.current.onPintEffectChange(active),
     });
   }, []);
 
   const startRun = useCallback(() => {
     const eng = engineRef.current;
+    // Every brand-new run explicitly re-opens the same clock gate that Game Over
+    // closes. Resetting the scheduler prevents the overlay/ad wait from becoming
+    // a simulation catch-up burst on the first frame of the next run.
+    pausedRef.current = false;
+    if (schedulerRef.current) schedulerRef.current.reset(performance.now());
+    setPintBoost(false);
     // RANDOM MANOR re-picks one of the 3 standard maps for every brand-new run.
     const m = getMapForSelection(mapSelection);
     setActiveMap(m);
-    eng.reset(width, height, mode === 'easy' ? EASY_TUNING : undefined);
+    eng.reset(width, height, mode === 'easy' ? EASY_TUNING : undefined, insets.top + 74);
     runIdRef.current = generateRunId();
     // Anti-cheat run timing starts on the FIRST gameplay tap (READY->RUNNING),
     // not when PLAY was pressed. Seeded here only to avoid a stale value.
@@ -305,16 +326,18 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     // copied above, so consume that marker instead of repeating the same
     // React update on the first running frame.
     eng.consumeDirty();
-    world.value = eng.getSnapshot(performance.now());
+    const initialSnapshot = eng.getSnapshot(performance.now());
+    telemetry.current = initialSnapshot;
+    world.value = initialSnapshot;
     // A brand-new run resets the Roadman scripted-line triggers (revive must NOT).
     roadmanFlagsRef.current = { wargwarn: false, wargwarn50: false, wargwarn100: false };
-    if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+    scriptedRemainingRef.current = 0;
     setScriptedLine((line) => ({ ...line, visible: false }));
-  }, [width, height, mapSelection, mode]);
+    setHeckler((current) => ({ ...current, id: 0 }));
+  }, [width, height, mapSelection, mode, insets.top]);
 
   // init engine + loop
   useEffect(() => {
-    Ads.init();
     engineRef.current = buildEngine();
     startRun();
     schedulerRef.current = createFixedStepScheduler();
@@ -334,7 +357,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
         if (last != null) {
           const rawGapMs = now - last;
           if (rawGapMs > 25) {
-            const distM = Math.floor(world.value.distM || 0);
+            const distM = Math.floor(telemetry.current.distM || 0);
             const log = frameGapLogRef.current;
             log.push({ gapMs: Math.round(rawGapMs), distM, t: Math.round(now) });
             if (log.length > 40) log.shift();
@@ -358,12 +381,16 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       const steps = schedulerRef.current.consume(now);
       let stepped = false;
       for (let i = 0; i < steps; i++) {
+        if (startedRef.current && !eng.dead) {
+          advanceScriptedSpeech(scriptedRemainingRef, SIM_STEP, hideScriptedLine);
+        }
         eng.step(SIM_STEP, now);
         stepped = true;
       }
 
       if (stepped) {
         const snap = eng.getSnapshot(now);
+        telemetry.current = snap;
         world.value = snap;
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const p = eng.getPerfStats();
@@ -395,7 +422,9 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
           });
         }
         const hk = eng.consumeHeckler();
-        if (hk) setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
+        if (hk) {
+          setHeckler({ id: hk.id, text: pickInsult(hk.insultR), reaction: pickReaction(hk.reactionR) });
+        }
       }
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -403,8 +432,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     return () => {
       cancelAnimationFrame(rafRef.current);
       if (shieldTimer.current) clearTimeout(shieldTimer.current);
-      if (boostTimer.current) clearTimeout(boostTimer.current);
-      if (scriptedTimerRef.current) clearTimeout(scriptedTimerRef.current);
+      scriptedRemainingRef.current = 0;
       flushImpressions(); // leaving GameScreen — persist any queued sponsor impressions now
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -466,6 +494,11 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
   const doFlap = useCallback(() => {
     const st = inputStatsRef.current;
     st.raw += 1;
+    if (!rendererReadyRef.current) {
+      st.ignored += 1;
+      st.lastReason = 'preparing';
+      return;
+    }
     Audio.unlock();
     const eng = engineRef.current;
     if (!eng || eng.dead) {
@@ -513,7 +546,10 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
     Ads.showRewardedRevive(
       () => {
         // verified reward callback — grant the revive, continue the SAME run
-        eng.revive(performance.now());
+        const now = performance.now();
+        eng.revive(now);
+        schedulerRef.current.reset(now);
+        pausedRef.current = false;
         Audio.revive();
         setOver(null);
         setCanRevive(false);
@@ -563,7 +599,8 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
 
   return (
     <View style={styles.root}>
-      <StableBackground theme={activeMap} width={width} height={height} world={world} removeAds={removeAdsOwned} />
+      <BeerWorld boosted={pintBoost} drunkLevel={drunkLevel} onPrepared={onRendererPrepared}>
+      <StableBackground theme={activeMap} width={width} height={height} world={world} telemetry={telemetry} removeAds={removeAdsOwned} />
 
       {/* obstacles */}
       {obsGeom.map((g, i) => (
@@ -571,7 +608,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       ))}
 
       {/* window heckler (environmental comedy) */}
-      <StableHecklerView world={world} text={heckler.text} reaction={heckler.reaction} theme={activeMap} screenW={width} screenH={height} topInset={insets.top} />
+      <StableHecklerView world={world} eventId={heckler.id} text={heckler.text} reaction={heckler.reaction} theme={activeMap} screenW={width} topInset={insets.top} />
 
       {/* chips */}
       {Array.from({ length: CONFIG.CHIP_POOL }).map((_, i) => (
@@ -582,7 +619,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       <StableJabView world={world} />
       {/* Pub pint pickup */}
       <StablePintView world={world} />
-      <PopText world={world} />
+      <PopText signal={skinnySignal} />
 
       {/* feathers */}
       {Array.from({ length: CONFIG.FEATHER_POOL }).map((_, i) => (
@@ -590,15 +627,19 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       ))}
 
       {/* pigeon */}
-      <StablePigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} suppressQuips={scriptedLine.visible} />
+      <StablePigeonView world={world} pigeon={pigeon} fatLevel={fatLevel} boost={pintBoost} strength={drunkStrength} deflateSignal={deflateN} active={!over && !confirmRestart} suppressQuips={scriptedLine.visible} />
+      </BeerWorld>
 
-      {/* Roadman-only one-time scripted lines — priority speech bubble, safe-area clamped */}
+      {/* Roadman-only speech follows the pigeon, upright and clear of screen edges. */}
       {pigeon.id === 'roadman' && (
-        <PigeonSpeechBubble world={world} text={scriptedLine.text} visible={scriptedLine.visible} screenW={width} screenH={height} topInset={insets.top} />
+        <StablePigeonSpeechBubble world={world} text={scriptedLine.text} visible={scriptedLine.visible} screenW={width} screenH={height} fatLevel={fatLevel} topInset={insets.top} bottomInset={insets.bottom} />
       )}
 
-      {/* Drunk soft-focus over the WORLD only (never moves it) — below the HUD */}
-      <StableDrunkScreenFX level={Math.min(1.4, drunkLevel + (pintBoost ? 0.4 : 0))} />
+      {/* Web soft-focus overlay. Android's real beer blur is on BeerWorld above. */}
+      <StableDrunkScreenFX
+        level={Math.min(1.4, drunkLevel + (pintBoost ? 0.9 : 0))}
+        boosted={pintBoost}
+      />
 
       {/* "SKINNY AGAIN!" toast on jab pickup — above the blur so it stays crisp */}
       <SkinnyToast signal={skinnySignal} />
@@ -626,7 +667,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
               <Text style={styles.exitTxt}>‹ MENU</Text>
             </Pressable>
           </View>
-          <DistanceHUD world={world} />
+          <DistanceHUD telemetry={telemetry} />
           <ChipHUD ref={chipHudRef} />
         </View>
         <View style={styles.fatMsgWrap} pointerEvents="none">
@@ -645,7 +686,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
         </View>
       )}
 
-      {!started && !over && <ReadyHint />}
+      <ReadyHint visible={!started && !over} preparing={!rendererReady} />
 
       {typeof __DEV__ !== 'undefined' && __DEV__ && devStats && (
         <View style={styles.devStats} pointerEvents="none" testID="dev-input-stats">
@@ -678,7 +719,7 @@ export default function GameScreen({ pigeon, mapSelection, bestDistance = 0, dru
       )}
 
       {/* 1000m blackout Easter egg — covers everything, never blocks flaps */}
-      <BlackoutOverlay world={world} />
+      <BlackoutOverlay telemetry={telemetry} />
 
       {over && (
         <GameOverOverlay
@@ -736,6 +777,8 @@ const styles = StyleSheet.create({
   confirmBtn: { width: '100%', marginTop: 12 },
   blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, zIndex: 50 },
   blackoutTxt: { fontFamily: FONT, color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', lineHeight: 30, letterSpacing: 0.5 },
-  pop: { position: 'absolute', left: 0, top: 0, width: 100, alignItems: 'center', zIndex: 40 },
+  pop: { position: 'absolute', top: '25%', left: 0, right: 0, alignItems: 'center', zIndex: 40 },
   popTxt: { fontFamily: FONT, color: '#fff', fontSize: 34, fontWeight: '700', letterSpacing: 1, textShadowColor: '#ff3b8d', textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
+  calloutShown: { opacity: 1 },
+  calloutHidden: { opacity: 0 },
 });

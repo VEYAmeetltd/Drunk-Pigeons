@@ -32,6 +32,7 @@ export default function PigeonsScreen({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [restoreMsg, setRestoreMsg] = useState('');
+  const [profile, setProfile] = useState(null);
 
   const ent = { purchased: purchasedPigeons, bundleOwned, leetUnlock };
   const ownedBundle = allPremiumUnlocked(PIGEONS, ent);
@@ -149,6 +150,20 @@ export default function PigeonsScreen({
               }}
               style={[styles.card, active && styles.cardActive, preview === p.id && styles.cardPreview]}
             >
+              <Pressable
+                testID={`pigeon-info-${p.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`About ${p.name}`}
+                hitSlop={6}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  Audio.ui();
+                  setProfile(p);
+                }}
+                style={styles.cardInfo}
+              >
+                <Text style={styles.cardInfoTxt}>i</Text>
+              </Pressable>
               <View style={styles.cardSprite}>
                 <DrunkPigeon pigeon={p} fatLevel={0} size={70} intensity="calm" eyes={false} strength={drunkStrength} testID={`grid-pigeon-${p.id}`} />
                 {!e.canUse && (
@@ -223,6 +238,39 @@ export default function PigeonsScreen({
           </View>
         </View>
       )}
+
+      {/* Character profile — informational only; locked pigeons remain locked. */}
+      {profile && (
+        <View style={styles.profileOverlay} testID="pigeon-profile-overlay">
+          <View style={styles.profileCard} onStartShouldSetResponder={() => true}>
+            <View style={styles.profileSprite}>
+              <DrunkPigeon pigeon={profile} fatLevel={0} size={105} intensity="calm" eyes strength={drunkStrength} testID={`profile-pigeon-${profile.id}`} />
+            </View>
+            <Text style={styles.profileType}>{profile.name.toUpperCase()}</Text>
+            <Text style={styles.profileName} testID="pigeon-profile-name">{profile.profileName}</Text>
+            <Text style={styles.profileStory} testID="pigeon-profile-story">{profile.profileStory}</Text>
+            {!!profile.profileAliases?.length && (
+              <View style={styles.profileAliases} testID="pigeon-profile-aliases">
+                <Text style={styles.profileAliasesLabel}>GOES BY:</Text>
+                {profile.profileAliases.map((alias) => (
+                  <Text key={alias} style={styles.profileAlias}>• {alias}</Text>
+                ))}
+              </View>
+            )}
+            <Button
+              testID="pigeon-profile-close"
+              label="CLOSE"
+              variant="teal"
+              small
+              onPress={() => {
+                Audio.ui();
+                setProfile(null);
+              }}
+              style={styles.profileClose}
+            />
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -252,6 +300,8 @@ const styles = StyleSheet.create({
   cardName: { fontFamily: FONT, color: COLORS.text, fontSize: 12, fontWeight: '600', marginTop: 2 },
   cardPrice: { fontFamily: FONT, color: COLORS.yellow, fontSize: 13, fontWeight: '700', marginTop: 2 },
   cardBadge: { position: 'absolute', top: 6, right: 8, color: COLORS.teal, fontWeight: '700', fontSize: 16 },
+  cardInfo: { position: 'absolute', top: 7, left: 7, zIndex: 5, width: 23, height: 23, borderRadius: 12, borderWidth: 2, borderColor: COLORS.textDim, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' },
+  cardInfoTxt: { fontFamily: FONT, color: COLORS.text, fontSize: 14, fontWeight: '700', lineHeight: 17 },
   restore: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginBottom: 6, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   restoreTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 2, textDecorationLine: 'underline' },
   restoreMsg: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', letterSpacing: 1, textAlign: 'center', marginTop: -2, marginBottom: 8 },
@@ -270,4 +320,14 @@ const styles = StyleSheet.create({
   simRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
   termsLink: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 },
   termsLinkTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 1, textDecorationLine: 'underline' },
+  profileOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,8,30,0.88)', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 70 },
+  profileCard: { width: '100%', maxWidth: 350, backgroundColor: COLORS.card, borderRadius: 26, borderWidth: 2, borderColor: COLORS.teal, paddingHorizontal: 24, paddingTop: 18, paddingBottom: 22, alignItems: 'center' },
+  profileSprite: { height: 108, alignItems: 'center', justifyContent: 'center' },
+  profileType: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
+  profileName: { fontFamily: FONT, color: COLORS.yellow, fontSize: 28, fontWeight: '700', textAlign: 'center', marginTop: 3 },
+  profileStory: { fontFamily: FONT, color: COLORS.text, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 12 },
+  profileAliases: { width: '100%', backgroundColor: COLORS.bgAlt, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 16, marginTop: 14 },
+  profileAliasesLabel: { fontFamily: FONT, color: COLORS.teal, fontSize: 12, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  profileAlias: { fontFamily: FONT, color: COLORS.text, fontSize: 14, lineHeight: 21 },
+  profileClose: { width: '100%', marginTop: 18 },
 });

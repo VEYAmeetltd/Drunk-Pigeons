@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
@@ -12,6 +12,7 @@ import { getPigeon } from '../data/pigeons';
 import { MAPS } from '../data/maps';
 import { Billing } from '../store/billing';
 import { Audio } from '../audio/audio';
+import { Ads } from '../ads/ads';
 import { Ionicons } from '@expo/vector-icons';
 import { formatInt } from '../config';
 
@@ -40,6 +41,9 @@ export default function MainMenu({
   onCommitDrunk,
 }) {
   const pigeon = getPigeon(selectedPigeon);
+  // Start native ad preparation from the menu. The provider keeps a single
+  // initialization and a single in-flight request per format across remounts.
+  React.useEffect(() => { Ads.init(); }, []);
   const { width } = useWindowDimensions();
   // Responsive menu pigeon size: slightly smaller than before (was 150) so BEST | PIGEON | INJURED
   // fits on one row across common widths; scales down on narrow phones before anything clips.
@@ -51,7 +55,8 @@ export default function MainMenu({
   const bob = useSharedValue(0);
   React.useEffect(() => {
     bob.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, []);
+    return () => cancelAnimation(bob);
+  }, [bob]);
   const pigeonStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -10 + bob.value * 20 }, { rotate: `${-6 + bob.value * 12}deg` }],
   }));

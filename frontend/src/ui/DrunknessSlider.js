@@ -13,22 +13,35 @@ export default function DrunknessSlider({ value = 0.5, onChange, onCommit }) {
   const wRef = useRef(0);
   const clamp = (v) => Math.max(0, Math.min(1, v));
 
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        if (wRef.current > 0) onChange && onChange(clamp(e.nativeEvent.locationX / wRef.current));
-      },
-      onPanResponderMove: (e) => {
-        if (wRef.current > 0) onChange && onChange(clamp(e.nativeEvent.locationX / wRef.current));
-      },
-      onPanResponderRelease: () => {
-        Audio.ui();
-        onCommit && onCommit();
-      },
-    })
-  ).current;
+  const callbacks = useRef({ onChange, onCommit });
+  callbacks.current = { onChange, onCommit };
+  const startX = useRef(0);
+  const currentValue = useRef(value);
+  currentValue.current = value;
+  const publish = (x) => {
+    if (wRef.current <= 0 || !Number.isFinite(x)) return;
+    const next = clamp(x / wRef.current);
+    if (next === currentValue.current) return;
+    currentValue.current = next;
+    callbacks.current.onChange?.(next);
+  };
+  const panRef = useRef(null);
+  if (!panRef.current) panRef.current = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => {
+      startX.current = e.nativeEvent.locationX;
+      publish(startX.current);
+    },
+    // dx is relative to the gesture start, never to the moving thumb/fill.
+    onPanResponderMove: (_e, gesture) => publish(startX.current + gesture.dx),
+    onPanResponderRelease: () => {
+      Audio.ui();
+      callbacks.current.onCommit?.(currentValue.current);
+    },
+    onPanResponderTerminate: () => callbacks.current.onCommit?.(currentValue.current),
+  });
+  const pan = panRef.current;
 
   const pct = clamp(value);
   const near = (t) => Math.abs(pct - t) < 0.12;
@@ -41,9 +54,9 @@ export default function DrunknessSlider({ value = 0.5, onChange, onCommit }) {
         onLayout={(ev) => { const width = ev.nativeEvent.layout.width; wRef.current = width; setW(width); }}
         {...pan.panHandlers}
       >
-        <View style={styles.track} />
-        <View style={[styles.fill, { width: `${pct * 100}%` }]} />
-        <View style={[styles.thumb, { left: w ? Math.max(0, Math.min(w - 22, pct * w - 11)) : 0 }]} testID="drunkness-thumb" />
+        <View pointerEvents="none" style={styles.track} />
+        <View pointerEvents="none" style={[styles.fill, { width: `${pct * 100}%` }]} />
+        <View pointerEvents="none" style={[styles.thumb, { left: w ? Math.max(0, Math.min(w - 22, pct * w - 11)) : 0 }]} testID="drunkness-thumb" />
       </View>
       {/* Labels centred directly under 0% / 50% / 100% of the track */}
       <View style={styles.labels}>

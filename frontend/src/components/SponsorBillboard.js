@@ -1,26 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image } from 'react-native';
-import Svg, { Line, Rect } from 'react-native-svg';
+import { View, Text } from 'react-native';
+import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { FONT } from '../ui/theme';
 import { pickBillboardAd, recordImpression, resetIntiesRotation } from '../ads/sponsorCampaigns';
-import { DEV_MOUNT_STATS } from './GameEntities';
-import { logAssetPreload } from '../diagnostics';
-// Same bundled asset sponsorCampaigns.js attaches to every INTIES creative — imported
-// again here only to pre-warm its native decode cost (see LOGO_WARMUP below).
-import IntiesLogo from '../../assets/ads/inties-logo.png';
-
-// Pays the INTIES logo's native decode cost once at Background mount, sized to
-// (the largest realistic on-screen render — see logoH below) rather than the
-// billboard's own real position, instead of paying that cost the first time a
-// real INTIES creative is randomly rolled mid-run. Deliberately NOT sized 1x1:
-// Android's image pipeline (Fresco) downsamples/caches a decoded bitmap to
-// roughly match the REQUESTED view size, so a 1x1 request would only ever
-// warm a near-useless 1x1 decode, not the ~260x110 size the real billboard
-// actually displays it at. `position: absolute` keeps it out of layout; it
-// never affects anything else on screen.
-const LOGO_WARMUP_STYLE = { position: 'absolute', width: 264, height: 110, opacity: 0 };
-
 // Per-map physical framing for the freestanding billboard structure.
 const FRAMES = {
   day: { support: '#c9ccd1', supportDk: '#9aa1a8', frame: '#eef1f4', frameEdge: '#c2c7cd', lights: false },
@@ -48,11 +31,25 @@ function MarqueeLights({ width, color }) {
   );
 }
 
+// A prominent wordmark in INTIES ink, ivory and turquoise. The artwork is
+// static between slots; it adds no images, gradients, timers or animations.
+export function IntiesBillboardArtwork({ width, height }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 300 180" testID="sponsor-billboard-inties-wordmark">
+      <Rect x={4} y={4} width={292} height={172} rx={5} fill="#0b1012" stroke="#24504e" strokeWidth={1.5} />
+      <Line x1={108} y1={34} x2={192} y2={34} stroke="#00e5cf" strokeWidth={2} />
+      <SvgText x={150} y={94} textAnchor="middle" fontFamily="serif" fontWeight="700" fontSize={57} letterSpacing={3} fill="#f4f5ec">INTIES</SvgText>
+      <SvgText x={150} y={140} textAnchor="middle" fontFamily="sans-serif" fontWeight="700" fontSize={33} letterSpacing={2} fill="#00e5cf">LTD.com</SvgText>
+      <Line x1={126} y1={160} x2={174} y2={160} stroke="#00e5cf" strokeWidth={2} />
+    </Svg>
+  );
+}
+
 // Large freestanding sponsored billboard, rendered in the mid-ground scenery layer inside
 // Background (so it is always behind obstacles, coins, the pigeon and the interface, and —
 // as part of a pointerEvents="none" tree — can never intercept a tap). No collision, never
 // touches obstacle generation, scoring or run validation.
-export default function SponsorBillboard({ world, theme, width, groundY, removeAds }) {
+export default function SponsorBillboard({ world, telemetry, theme, width, groundY, removeAds }) {
   const BILL_W = Math.round(Math.min(300, Math.max(210, width * 0.56)));
   const faceH = Math.round(BILL_W * 0.6);
   const legH = 80;
@@ -61,48 +58,27 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
   const topY = feetY - structureH;
   const frame = FRAMES[theme.id] || FRAMES.day;
 
-  const [ad, setAd] = useState(null);
+  const [ad, setAd] = useState(() => ({ ...pickBillboardAd({ mapId: theme.id, nowMs: Date.now(), removeAds: !!removeAds, seed: 17, slotIndex: 0 }), slotIndex: 0 }));
   const slotRef = useRef(-1);
-  const warmupMountT = useRef(0);
-
-  useEffect(() => {
-    warmupMountT.current = Date.now();
-    if (typeof __DEV__ !== 'undefined' && __DEV__) DEV_MOUNT_STATS.sponsorImageMount += 1;
-    // Supplementary hint alongside the real-sized hidden <Image> below: for a
-    // LOCAL bundled asset (this is not a remote/network image — see
-    // sponsorCampaigns.js's `require('.../inties-logo.png')`) there is nothing
-    // to download, so this mainly nudges the image pipeline to touch the asset
-    // early. The hidden Image render above is what actually requests a
-    // real-size decode; prefetch alone is not documented to guarantee that.
-    try {
-      const resolved = Image.resolveAssetSource(IntiesLogo);
-      if (resolved && resolved.uri) Image.prefetch(resolved.uri).catch(() => {});
-    } catch (e) {
-      // best-effort only
-    }
-  }, []);
 
   useEffect(() => {
     slotRef.current = -1;
     resetIntiesRotation();
     const id = setInterval(() => {
-      let d = 0;
-      try {
-        d = (world.value && world.value.distPx) || 0;
-      } catch (e) {
-        d = 0;
-      }
+      // Read the engine's JS mirror, not a blocking UI-thread shared value.
+      const d = telemetry.current.distPx || 0;
       const k = Math.floor(d / GAP_DISTPX);
       if (k !== slotRef.current) {
         slotRef.current = k;
-        const picked = pickBillboardAd({ mapId: theme.id, nowMs: Date.now(), removeAds: !!removeAds, seed: k * 101 + 17 });
-        setAd(picked);
+        const picked = pickBillboardAd({ mapId: theme.id, nowMs: Date.now(), removeAds: !!removeAds, seed: k * 101 + 17, slotIndex: k });
+        setAd({ ...picked, slotIndex: k });
         recordImpression(picked.id, d);
       }
     }, 120);
     return () => clearInterval(id);
-  }, [world, theme.id, removeAds]);
+  }, [telemetry, theme.id, removeAds]);
 
+  const currentSlot = ad.slotIndex;
   const style = useAnimatedStyle(() => {
     let d = 0;
     try {
@@ -114,31 +90,15 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
     const prog = d - k * GAP_DISTPX; // 0..GAP_DISTPX
     const x = width - prog * SCROLL_F; // enters from the right edge, scrolls left
     const on = x > -BILL_W - 4 && x < width + 4;
-    return { transform: [{ translateX: x }], opacity: on ? 1 : 0 };
+    return { transform: [{ translateX: x }], opacity: on && k === currentSlot ? 1 : 0 };
   });
 
-  const warmup = (
-    <Image
-      source={IntiesLogo}
-      resizeMode="contain"
-      style={LOGO_WARMUP_STYLE}
-      pointerEvents="none"
-      testID="sponsor-billboard-logo-warmup"
-      onLoadEnd={() => logAssetPreload(Date.now() - warmupMountT.current, Date.now())}
-    />
-  );
-
-  if (!ad) return warmup;
   const isInties = ad.kind === 'inties';
   const headSize = Math.round(BILL_W * 0.1);
   const intiesBg = '#0a0d0f';
-  const intiesFg = '#eafff6';
-  const intiesAccent = '#3ef2c0';
-  const logoH = Math.round(faceH * (ad.headline ? 0.4 : 0.6));
 
   return (
     <React.Fragment>
-      {warmup}
       <Animated.View
       pointerEvents="none"
       testID="sponsor-billboard"
@@ -149,44 +109,11 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
         <View style={{ flex: 1, backgroundColor: frame.frame, borderWidth: 4, borderColor: frame.frameEdge, borderRadius: 6, padding: 5 }}>
           {/* artwork panel — backing colour shows behind procedural artwork; content keeps its proportions */}
           <View style={{ flex: 1, backgroundColor: isInties ? intiesBg : ad.bg, borderRadius: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }}>
-            {isInties ? (
-              <React.Fragment>
-                {ad.headline && (
-                  <Text
-                    style={{ fontFamily: FONT, color: intiesFg, fontWeight: '800', fontSize: Math.round(BILL_W * 0.062), lineHeight: Math.round(BILL_W * 0.072), textAlign: 'center' }}
-                    numberOfLines={2}
-                    adjustsFontSizeToFit
-                    testID="sponsor-billboard-headline"
-                  >
-                    {ad.headline}
-                  </Text>
-                )}
-                {ad.subline && (
-                  <Text
-                    style={{ fontFamily: FONT, color: intiesAccent, fontWeight: '700', fontSize: Math.round(BILL_W * 0.04), textAlign: 'center', marginTop: 2 }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                  >
-                    {ad.subline}
-                  </Text>
-                )}
-                {/* official INTIES logo asset, rendered exactly as supplied — never redrawn, cropped or stretched */}
-                <Image
-                  source={ad.logo}
-                  resizeMode="contain"
-                  style={{ width: '88%', height: logoH, marginVertical: 4 }}
-                  testID="sponsor-billboard-inties-logo"
-                />
-                <Text
-                  style={{ fontFamily: FONT, color: intiesAccent, fontWeight: '700', fontSize: Math.round(BILL_W * 0.044), letterSpacing: 0.5, textAlign: 'center' }}
-                  numberOfLines={1}
-                  testID="sponsor-billboard-url"
-                >
-                  {ad.url}
-                </Text>
-              </React.Fragment>
-            ) : (
-              <React.Fragment>
+            {/* Both small artwork trees mount in READY, before the first flap. */}
+            <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', opacity: isInties ? 1 : 0 }}>
+              <IntiesBillboardArtwork width={BILL_W - 36} height={faceH - 18} />
+            </View>
+            <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center', opacity: isInties ? 0 : 1 }}>
                 <Text
                   style={{ fontFamily: FONT, color: ad.fg, fontWeight: '700', fontSize: headSize, lineHeight: Math.round(headSize * 1.12), textAlign: 'center', letterSpacing: 0.5 }}
                   numberOfLines={3}
@@ -201,8 +128,7 @@ export default function SponsorBillboard({ world, theme, width, groundY, removeA
                 >
                   {ad.subline}
                 </Text>
-              </React.Fragment>
-            )}
+            </View>
             {/* small, readable advertising label */}
             <View style={{ position: 'absolute', top: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3 }}>
               <Text style={{ fontFamily: FONT, color: '#fff', fontSize: 8, fontWeight: '700', letterSpacing: 0.5 }}>{ad.label}</Text>

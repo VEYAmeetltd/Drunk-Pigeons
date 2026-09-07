@@ -2,12 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logBillboardRotation, logStorageFlush } from '../diagnostics';
 import { CONFIG } from '../config';
 
-// Official INTIES logo asset — bundled locally so it's part of the same asset preload
-// pass as every other billboard asset (never fetched over the network at runtime, so it
-// can never appear late/blank or cause a stutter). Rendered exactly as supplied: never
-// redrawn, recoloured, cropped or stretched (always resizeMode="contain" in the renderer).
-import IntiesLogo from '../../assets/ads/inties-logo.png';
-
 // Sponsor-campaign model. ONLY internally-approved records listed here are ever shown.
 // There are no public uploads, no automatic approval, no in-app checkout, and no remote
 // or executable content — every advert is bundled, static and rendered as procedural art
@@ -74,11 +68,9 @@ export const INTIES_ROTATION = {
 };
 
 export const INTIES_CREATIVES = [
-  // Creative 1 — the official logo lockup already contains the "INTIES" wordmark and
-  // "A safer way to meet." tagline, so no extra headline text is layered over it.
-  { id: 'inties-1', headline: null, subline: null, url: 'INTIESLTD.COM', logo: IntiesLogo },
-  { id: 'inties-2', headline: 'GET PIGEONED.', subline: "DON'T WING YOUR SAFETY.", url: 'INTIESLTD.COM', logo: IntiesLogo },
-  { id: 'inties-3', headline: 'THE PIGEON MAKES\nBAD DECISIONS.', subline: "YOU DON'T HAVE TO.", url: 'INTIESLTD.COM', logo: IntiesLogo },
+  { id: 'inties-1', headline: 'INTIES', subline: 'LTD.com', url: 'INTIESLTD.com' },
+  { id: 'inties-2', headline: 'INTIES', subline: 'LTD.com', url: 'INTIESLTD.com' },
+  { id: 'inties-3', headline: 'INTIES', subline: 'LTD.com', url: 'INTIESLTD.com' },
 ];
 
 // Sequential rotation memory (session-scoped, reset each time a billboard mounts — see
@@ -159,10 +151,14 @@ function activeCampaigns(mapId, nowMs) {
 // through to the house-ad pool (which now occasionally includes an INTIES creative, see
 // pickIntiesOrHouseAd()) — paid 3rd-party artwork is never shown to them. Selection uses
 // only the slot seed + map + date: never player behaviour or personal data. An active
-// EXCLUSIVE campaign always wins every slot on its booked map(s). A non-exclusive campaign
+// EXCLUSIVE campaign wins every subsequent ad slot on its booked map(s). The
+// opening scenery board is the house invitation. A non-exclusive campaign
 // wins AD_MIX.nonExclusivePaidShare of slots; the remainder fall through to the house/INTIES
 // pool exactly like a map with no active campaign at all.
-export function pickBillboardAd({ mapId, nowMs, removeAds, seed }) {
+export function pickBillboardAd({ mapId, nowMs, removeAds, seed, slotIndex }) {
+  // The opening scenery board is always the house invitation, on every map/run.
+  // Later slots retain the existing paid/house/INTIES selection and cooldown.
+  if (slotIndex === 0) return { ...HOUSE_ADS.find(ad => ad.id === 'house-yourad'), kind: 'house', label: 'DRUNK PIGEONS' };
   if (!removeAds) {
     const camps = activeCampaigns(mapId, nowMs);
     const exclusive = camps.filter((c) => c.exclusive);

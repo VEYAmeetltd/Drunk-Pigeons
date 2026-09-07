@@ -8,7 +8,9 @@
     "userInterfaceStyle": "light",
     "backgroundColor": "#1b1030",
     "icon": "./assets/icon.png",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
@@ -20,7 +22,7 @@
     },
     "android": {
       "package": "com.intiesltd.drunkpigeons",
-      "versionCode": 10,
+      "versionCode": 23,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#070B35"
@@ -35,12 +37,14 @@
       }
     },
     "plugins": [
+      "./plugins/withDPVisualEffects",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash.png",
+          "image": "./assets/splash-blank.png",
           "backgroundColor": "#070B35",
-          "resizeMode": "contain"
+          "resizeMode": "contain",
+          "imageWidth": 1
         }
       ],
       [

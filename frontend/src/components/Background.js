@@ -52,6 +52,8 @@ function ParallaxLayer({ world, factor, tileW, top, height, children }) {
   });
   return (
     <Animated.View
+      // Do not allocate a second full-size hardware surface per SVG layer.
+      // At native pixel density, these double-width canvases are very large.
       style={[{ position: 'absolute', left: 0, top, width: tileW * 2, height }, style]}
       pointerEvents="none"
     >
@@ -60,9 +62,30 @@ function ParallaxLayer({ world, factor, tileW, top, height, children }) {
   );
 }
 
+// Android SvgView rasterizes the ENTIRE viewport to an ARGB bitmap. Keep the
+// artwork's original coordinates but exclude empty rows from that bitmap.
+// marginTop and the viewBox offset cancel: nothing moves or changes scale.
+function ScenerySvg({ width, height, cropTop = 0, cropBottom = height, children, ...props }) {
+  const top = Math.max(0, Math.floor(cropTop));
+  const bottom = Math.min(height, Math.ceil(cropBottom));
+  const croppedHeight = Math.max(1, bottom - top);
+  return (
+    <Svg
+      {...props}
+      width={width}
+      height={croppedHeight}
+      viewBox={`0 ${top} ${width} ${croppedHeight}`}
+      preserveAspectRatio="none"
+      style={{ marginTop: top }}
+    >
+      {children}
+    </Svg>
+  );
+}
+
 function SkylineSvg({ tileW, height, items, color, windowColor, opacity }) {
   return (
-    <Svg width={tileW * 2} height={height} opacity={opacity}>
+    <ScenerySvg width={tileW * 2} height={height} cropTop={height - Math.max(0, ...items.map((b) => b.h)) - 2} opacity={opacity}>
       {[0, tileW].map((off) =>
         items.map((b, i) => (
           <React.Fragment key={`${off}-${i}`}>
@@ -73,7 +96,7 @@ function SkylineSvg({ tileW, height, items, color, windowColor, opacity }) {
           </React.Fragment>
         ))
       )}
-    </Svg>
+    </ScenerySvg>
   );
 }
 
@@ -117,10 +140,10 @@ function DistantSvg({ tileW, height, seed, style: kind, color }) {
       return <G key={`${off}-${i}`}>{parts}</G>;
     });
   return (
-    <Svg width={tileW * 2} height={height}>
+    <ScenerySvg width={tileW * 2} height={height} cropTop={height * 0.66 - 48}>
       {draw(0)}
       {draw(tileW)}
-    </Svg>
+    </ScenerySvg>
   );
 }
 
@@ -128,14 +151,20 @@ function DistantSvg({ tileW, height, seed, style: kind, color }) {
 function propSvg(type, x, baseY, theme, rng) {
   const k = `${type}-${x}`;
   switch (type) {
-    case 'bus': // red double-decker
+    case 'bus': // unmistakable red London double-decker, within the 64dp scenery strip
       return (
         <G key={k}>
-          <Rect x={x} y={baseY - 30} width={54} height={26} rx={4} fill="#d1332e" />
-          <Rect x={x + 4} y={baseY - 26} width={46} height={7} rx={2} fill="#ffe9a8" opacity={0.9} />
-          <Rect x={x + 4} y={baseY - 15} width={46} height={7} rx={2} fill="#ffe9a8" opacity={0.9} />
-          <Circle cx={x + 14} cy={baseY - 3} r={5} fill="#20232b" />
-          <Circle cx={x + 42} cy={baseY - 3} r={5} fill="#20232b" />
+          <Rect x={x} y={baseY - 44} width={70} height={38} rx={5} fill="#cf272e" />
+          <Rect x={x + 4} y={baseY - 39} width={61} height={10} rx={2} fill="#cceaf0" />
+          <Rect x={x + 4} y={baseY - 24} width={46} height={10} rx={2} fill="#cceaf0" />
+          {[18, 33, 48].map((dx) => <Rect key={dx} x={x + dx} y={baseY - 39} width={3} height={10} fill="#cf272e" />)}
+          <Rect x={x + 55} y={baseY - 24} width={10} height={17} rx={1} fill="#28434d" />
+          <Rect x={x + 6} y={baseY - 28} width={43} height={3} fill="#f3dfc3" />
+          <Rect x={x + 65} y={baseY - 12} width={4} height={3} rx={1} fill="#fff2b3" />
+          <Circle cx={x + 15} cy={baseY - 5} r={6} fill="#20232b" />
+          <Circle cx={x + 52} cy={baseY - 5} r={6} fill="#20232b" />
+          <Circle cx={x + 15} cy={baseY - 5} r={2} fill="#9da9ae" />
+          <Circle cx={x + 52} cy={baseY - 5} r={2} fill="#9da9ae" />
         </G>
       );
     case 'phonebox':
@@ -268,12 +297,22 @@ function PropSvg({ tileW, height, seed, theme }) {
     placements.push({ type, x });
     x += 120 + rng() * 140;
   }
+  // A fixed random subset can omit every bus forever: the same short tile
+  // repeats for the entire run. Guarantee London's recognisable street props.
+  if (theme.id === 'day') {
+    placements.length = 0;
+    placements.push(
+      { type: 'bus', x: tileW * 0.14 },
+      { type: 'phonebox', x: tileW * 0.62 },
+      { type: 'postbox', x: tileW * 0.86 },
+    );
+  }
   const draw = (off) => placements.map((p, i) => <G key={`${off}-${i}`}>{propSvg(p.type, off + p.x, baseY, theme, rng)}</G>);
   return (
-    <Svg width={tileW * 2} height={height} opacity={0.82}>
+    <ScenerySvg width={tileW * 2} height={height} cropTop={height - 64} opacity={0.82}>
       {draw(0)}
       {draw(tileW)}
-    </Svg>
+    </ScenerySvg>
   );
 }
 
@@ -286,18 +325,18 @@ function Birds({ tileW, groundY, color }) {
     [tileW * 0.8, groundY * 0.26],
   ];
   return (
-    <Svg width={tileW * 2} height={groundY} opacity={0.6}>
+    <ScenerySvg width={tileW * 2} height={groundY} cropTop={groundY * 0.22 - 8} cropBottom={groundY * 0.34 + 3} opacity={0.6}>
       {[0, tileW].map((off) =>
         pts.map(([cx, cy], i) => (
           <Path key={`${off}-${i}`} d={`M ${off + cx - 6} ${cy} q 6 -6 6 0 q 0 -6 6 0`} stroke={color} strokeWidth={2} fill="none" />
         ))
       )}
-    </Svg>
+    </ScenerySvg>
   );
 }
 
 // Themed environment with layered parallax + subtle distance-based tone shift.
-export default function Background({ theme, width, height, world, removeAds }) {
+export default function Background({ theme, width, height, world, telemetry, removeAds }) {
   const groundY = height - CONFIG.GROUND_H;
   const tileW = Math.max(320, Math.round(width));
   const isEasy = theme.id === 'easy';
@@ -346,7 +385,7 @@ export default function Background({ theme, width, height, world, removeAds }) {
 
       {/* clouds (slowest), tinted with an underside shadow */}
       <ParallaxLayer world={world} factor={0.05} tileW={tileW} top={0} height={groundY}>
-        <Svg width={tileW * 2} height={groundY}>
+        <ScenerySvg width={tileW * 2} height={groundY} cropTop={groundY * 0.18 - 22} cropBottom={groundY * 0.32 + 25}>
           {[0, tileW].map((off) => (
             <React.Fragment key={off}>
               <Ellipse cx={off + tileW * 0.22} cy={groundY * 0.2} rx="48" ry="21" fill={theme.cloudShadow || theme.cloud} opacity="0.6" />
@@ -357,7 +396,7 @@ export default function Background({ theme, width, height, world, removeAds }) {
               <Ellipse cx={off + tileW * 0.82} cy={groundY * 0.32} rx="34" ry="15" fill={theme.cloud} opacity="0.8" />
             </React.Fragment>
           ))}
-        </Svg>
+        </ScenerySvg>
       </ParallaxLayer>
 
       {/* chippy seagulls high in the sky */}
@@ -370,14 +409,14 @@ export default function Background({ theme, width, height, world, removeAds }) {
       {isEasy ? (
         <>
           <ParallaxLayer world={world} factor={0.12} tileW={tileW} top={0} height={groundY}>
-            <Svg width={tileW * 2} height={groundY} opacity={0.7}>
+            <ScenerySvg width={tileW * 2} height={groundY} cropTop={groundY * 0.64 - 2} opacity={0.7}>
               <Path d={hillPath(tileW, groundY, 0.74, groundY * 0.1, 2, 3, 1.2)} fill={theme.skylineBack} />
-            </Svg>
+            </ScenerySvg>
           </ParallaxLayer>
           <ParallaxLayer world={world} factor={0.3} tileW={tileW} top={0} height={groundY}>
-            <Svg width={tileW * 2} height={groundY} opacity={0.95}>
+            <ScenerySvg width={tileW * 2} height={groundY} cropTop={groundY * 0.78 - 2} opacity={0.95}>
               <Path d={hillPath(tileW, groundY, 0.86, groundY * 0.08, 1, 2, 0.4)} fill={theme.skyline} />
-            </Svg>
+            </ScenerySvg>
           </ParallaxLayer>
         </>
       ) : (
@@ -408,7 +447,7 @@ export default function Background({ theme, width, height, world, removeAds }) {
 
       {/* sponsored background billboard (mid-ground scenery — behind all gameplay,
           no collision, never intercepts input, separate from scoring/run logic) */}
-      <SponsorBillboard world={world} theme={theme} width={width} groundY={groundY} removeAds={removeAds} />
+      <SponsorBillboard world={world} telemetry={telemetry} theme={theme} width={width} groundY={groundY} removeAds={removeAds} />
 
       {/* ground */}
       <View style={{ position: 'absolute', top: groundY, width, height: CONFIG.GROUND_H, backgroundColor: theme.ground }} />

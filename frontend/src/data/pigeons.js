@@ -13,6 +13,8 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'The original menace.',
+    profileName: 'Frank',
+    profileStory: 'This is Frank',
   },
   {
     id: 'business',
@@ -26,6 +28,8 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Late for a very important meeting.',
+    profileName: 'Masta Damo',
+    profileStory: 'Masta Damo told the office he was stepping out for a quick client meeting. Three pubs, two kebabs and one missing briefcase later, he is still technically networking—and still late for a very important meeting.',
   },
   {
     id: 'roadman',
@@ -39,6 +43,8 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Allow it, bruv.',
+    profileName: 'DeathRoad',
+    profileStory: "I'll lay you out bruv...........in C.O.D",
   },
   {
     id: 'king',
@@ -52,6 +58,8 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Ruler of the rooftops.',
+    profileName: 'ShArpClAw',
+    profileStory: 'ShArpClAw crowned himself ruler of the rooftops after winning a fight over the last chip. His kingdom has no laws, no borders and absolutely no closing time.',
   },
   {
     id: 'gym',
@@ -65,6 +73,8 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Never skips leg day. Skips flying day.',
+    profileName: 'Shumbies',
+    profileStory: 'Shumbies treats every night out like a training session. He curls whatever is nearby, counts pints as hydration and insists the violent wobble is just his core engaging.',
   },
   {
     id: 'tourist',
@@ -78,19 +88,24 @@ export const PIGEONS = [
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Where is the nearest chippy?',
+    profileName: 'Tourist Pigeon',
+    profileStory: 'He travels so much he changes his name as he pleases',
+    profileAliases: ['Barry Abroad', 'Pedro Peckham', 'Klaus von Crumb'],
   },
   {
     id: 'fancy',
     name: 'Fancy Pigeon',
     locked: true,
     premium: true,
-    accessory: 'monocle',
+    accessory: 'cocktail',
     body: '#d9a441',
     belly: '#f6dd9a',
     wing: '#b9861f',
     beak: '#f2a93b',
     eye: '#20232b',
     tagline: 'Frightfully well bred.',
+    profileName: 'Claireiosa',
+    profileStory: 'Claireiosa was raised around rooftop soirées and has never knowingly arrived without high heels or a cocktail. No matter how sideways the evening gets, she calls it poise.',
   },
 ];
 

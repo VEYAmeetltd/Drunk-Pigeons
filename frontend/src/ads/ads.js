@@ -40,7 +40,11 @@ export const Ads = {
   // NEVER for Remove Ads owners. The ad is actually shown at the transition via
   // showInterstitialIfDue().
   registerDeath() {
+    // Replenish consumed ads at game over, rather than starting native WebView
+    // creation in the close callback that immediately resumes a rewarded run.
+    AdProvider.preloadRewarded();
     if (removeAdsOwned) return false;
+    AdProvider.preloadInterstitial();
     deathsSinceInterstitial += 1;
     if (deathsSinceInterstitial >= interstitialDeathInterval) {
       deathsSinceInterstitial = 0;

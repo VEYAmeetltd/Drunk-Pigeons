@@ -23,144 +23,123 @@ const RewardedAdEventType = SDK && SDK.RewardedAdEventType;
 
 const REQ = { requestNonPersonalizedAdsOnly: true };
 
-let interstitial = null;
-let interstitialLoaded = false;
-let rewarded = null;
-let rewardedLoaded = false;
-let initialized = false;
+// An ad that is loading is already owned by its slot. Never create another
+// native instance just because the first one has not emitted LOADED yet.
+const interstitial = { ad: null, phase: 'idle', unsubscribe: [] };
+const rewarded = { ad: null, phase: 'idle', unsubscribe: [] };
+let initialization = null;
 
-function buildInterstitial() {
-  if (!SDK) return;
-  try {
-    interstitial = InterstitialAd.createForAdRequest(interstitialUnitId(), REQ);
-    interstitialLoaded = false;
-    interstitial.addAdEventListener(AdEventType.LOADED, () => {
-      interstitialLoaded = true;
-    });
-    interstitial.addAdEventListener(AdEventType.ERROR, () => {
-      interstitialLoaded = false;
-    });
-    interstitial.load();
-  } catch (e) {
-    interstitial = null;
+function initialize() {
+  if (!SDK) return Promise.resolve(false);
+  if (!initialization) {
+    initialization = Promise.resolve()
+      .then(() => mobileAds().initialize())
+      .then(() => true)
+      .catch(() => {
+        initialization = null; // a later explicit preload can retry
+        return false;
+      });
   }
+  return initialization;
 }
 
-function buildRewarded() {
-  if (!SDK) return;
+function release(slot) {
+  const listeners = slot.unsubscribe;
+  slot.unsubscribe = [];
+  slot.ad = null;
+  slot.phase = 'idle';
+  listeners.forEach((unsubscribe) => unsubscribe());
+}
+
+function preload(slot) {
+  if (!SDK || slot.phase !== 'idle') return;
+  slot.phase = 'loading'; // reserve BEFORE awaiting SDK initialization
+  initialize().then((ok) => {
+    if (!ok) {
+      release(slot);
+      return;
+    }
+    try {
+      const isRewarded = slot === rewarded;
+      const ad = isRewarded
+        ? RewardedAd.createForAdRequest(rewardedUnitId(), REQ)
+        : InterstitialAd.createForAdRequest(interstitialUnitId(), REQ);
+      slot.ad = ad;
+      slot.unsubscribe.push(ad.addAdEventListener(
+        isRewarded ? RewardedAdEventType.LOADED : AdEventType.LOADED,
+        () => {
+          if (slot.ad === ad && slot.phase === 'loading') slot.phase = 'ready';
+        },
+      ));
+      slot.unsubscribe.push(ad.addAdEventListener(AdEventType.ERROR, () => {
+        // show() owns errors while showing. Events from a discarded instance
+        // must never change the ready state of its replacement.
+        if (slot.ad === ad && slot.phase !== 'showing') release(slot);
+      }));
+      ad.load();
+    } catch (e) {
+      release(slot);
+    }
+  });
+}
+
+function show(slot, done) {
+  if (!SDK || slot.phase !== 'ready') {
+    preload(slot); // deduplicated if an earlier request is still loading
+    done(false);
+    return;
+  }
+  const ad = slot.ad;
+  const isRewarded = slot === rewarded;
+  slot.phase = 'showing';
+  let earned = false;
+  let settled = false;
+  const finish = (closed) => {
+    if (settled) return;
+    settled = true;
+    release(slot); // removes ALL load/show listeners, including the unused ones
+    // Closing a rewarded ad resumes flight. Leave this slot idle; the next
+    // menu/game-over preload owns replenishment, outside that resumed run.
+    done(isRewarded ? earned : closed);
+  };
   try {
-    rewarded = RewardedAd.createForAdRequest(rewardedUnitId(), REQ);
-    rewardedLoaded = false;
-    rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      rewardedLoaded = true;
-    });
-    rewarded.addAdEventListener(AdEventType.ERROR, () => {
-      rewardedLoaded = false;
-    });
-    rewarded.load();
+    if (isRewarded) {
+      slot.unsubscribe.push(ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        if (!settled) earned = true;
+      }));
+    }
+    slot.unsubscribe.push(ad.addAdEventListener(AdEventType.CLOSED, () => finish(true)));
+    slot.unsubscribe.push(ad.addAdEventListener(AdEventType.ERROR, () => finish(false)));
+    // The SDK can reject its Promise as well as throw synchronously.
+    Promise.resolve(ad.show()).catch(() => finish(false));
   } catch (e) {
-    rewarded = null;
+    finish(false);
   }
 }
 
 export const AdProvider = {
   supported: !!SDK,
 
-  init() {
-    if (!SDK || initialized) return;
-    initialized = true;
-    try {
-      mobileAds()
-        .initialize()
-        .then(() => {
-          buildInterstitial();
-          buildRewarded();
-        });
-    } catch (e) {
-      // SDK present but init failed — stay in safe fallback state
-    }
-  },
+  // Initialization is shared by all callers. Only preload() creates ads, so
+  // Ads.init() cannot create two more WebViews when this Promise resolves.
+  init: initialize,
 
-  preloadInterstitial() {
-    if (!SDK) return;
-    if (!interstitial || !interstitialLoaded) buildInterstitial();
-  },
-
-  preloadRewarded() {
-    if (!SDK) return;
-    if (!rewarded || !rewardedLoaded) buildRewarded();
-  },
+  preloadInterstitial() { preload(interstitial); },
+  preloadRewarded() { preload(rewarded); },
 
   isRewardedReady() {
-    return !!(SDK && rewarded && rewardedLoaded);
+    return !!(SDK && rewarded.phase === 'ready');
   },
 
-  // Show interstitial at a natural transition. Never blocks the game — resolves
-  // immediately if nothing is loaded. Preloads the next one after close.
   showInterstitial() {
-    return new Promise((resolve) => {
-      if (!SDK || !interstitial || !interstitialLoaded) {
-        buildInterstitial();
-        resolve(false);
-        return;
-      }
-      let done = false;
-      const finish = (shown) => {
-        if (done) return;
-        done = true;
-        buildInterstitial(); // preload next
-        resolve(shown);
-      };
-      try {
-        const unsubClose = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-          if (unsubClose) unsubClose();
-          finish(true);
-        });
-        const unsubErr = interstitial.addAdEventListener(AdEventType.ERROR, () => {
-          if (unsubErr) unsubErr();
-          finish(false);
-        });
-        interstitial.show();
-      } catch (e) {
-        finish(false);
-      }
-    });
+    return new Promise((resolve) => show(interstitial, resolve));
   },
 
-  // Rewarded revive — grants ONLY on the verified EARNED_REWARD callback.
-  // Prevents double-reward; preloads the next ad after close.
   showRewarded(onReward, onUnavailable) {
-    if (!SDK || !rewarded || !rewardedLoaded) {
-      buildRewarded();
-      if (onUnavailable) onUnavailable();
-      return;
-    }
-    let earned = false;
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      buildRewarded(); // preload next
+    show(rewarded, (earned) => {
       if (earned) onReward();
       else if (onUnavailable) onUnavailable();
-    };
-    try {
-      const unsubEarned = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        earned = true;
-        if (unsubEarned) unsubEarned();
-      });
-      const unsubClosed = rewarded.addAdEventListener(AdEventType.CLOSED, () => {
-        if (unsubClosed) unsubClosed();
-        settle();
-      });
-      const unsubErr = rewarded.addAdEventListener(AdEventType.ERROR, () => {
-        if (unsubErr) unsubErr();
-        settle();
-      });
-      rewarded.show();
-    } catch (e) {
-      settle();
-    }
+    });
   },
   // Google UMP privacy-options form. Uses the SDK's AdsConsent when present and the
   // form is available; otherwise resolves gracefully so callers never crash.

@@ -1,11 +1,13 @@
 import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, useDerivedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
-import Svg, { Circle, Rect as SvgRect, Line, G, Path } from 'react-native-svg';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, cancelAnimation } from 'react-native-reanimated';
+import Svg, { Circle, Rect as SvgRect, Text as SvgText, Line, G, Path } from 'react-native-svg';
 import DrunkPigeon from './DrunkPigeon';
 import { CONFIG, pigeonSizeFor } from '../config';
 import { FONT } from '../ui/theme';
 import { FAMILIES } from '../game/obstacleGeometry';
+import { pigeonSpeechPresentation, PIGEON_SPEECH_WIDTH, PIGEON_SPEECH_HEIGHT } from '../game/pigeonSpeech';
+import { hecklerPresentation, wrapHecklerInsult, HECKLER_WINDOW, HECKLER_BUBBLE_WIDTH, HECKLER_BUBBLE_HEIGHT } from '../game/hecklerPresentation';
 
 const OW = CONFIG.OBSTACLE_WIDTH;
 // Stable, always-safe placeholder geometry for whichever side/family is NOT
@@ -43,11 +45,11 @@ function rngFrom(seed) {
 
 /* ---------------- Pigeon ---------------- */
 // The outer Animated.View owns ONLY the gameplay/physics-driven presentation:
-// world position, velocity tilt, flap squash and death/invincible opacity.
+// world position, velocity tilt, guaranteed beer roll, flap squash and opacity.
 // The drunk personality (sway, wobble, bob, hiccups, HIC!, bubbles, wing flail
 // and the 360° barrel roll) lives INSIDE, in DrunkPigeon, so it can never touch
 // physics — collision/hitbox use world.px/py + size only, not this visual transform.
-export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1, deflateSignal = 0, suppressQuips = false }) {
+export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 1, deflateSignal = 0, active = true, suppressQuips = false }) {
   const size = pigeonSizeFor(fatLevel);
   const style = useAnimatedStyle(() => {
     const w = world.value;
@@ -62,7 +64,7 @@ export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 
       transform: [
         { translateX: w.px - size / 2 },
         { translateY: w.py - size / 2 },
-        { rotate: `${w.tilt}deg` },
+        { rotate: `${w.tilt + (w.beerRoll || 0)}deg` },
         { scaleX: squashX },
         { scaleY: squashY },
       ],
@@ -70,95 +72,60 @@ export function PigeonView({ world, pigeon, fatLevel, boost = false, strength = 
   });
   return (
     <Animated.View style={[styles.abs, { width: size, height: size }, style]} pointerEvents="none">
-      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} sound deflateSignal={deflateSignal} suppressQuips={suppressQuips} testID="game-pigeon" />
+      <DrunkPigeon pigeon={pigeon} fatLevel={fatLevel} size={size} intensity="full" eyes boost={boost} strength={strength} active={active} deflateSignal={deflateSignal} suppressQuips={suppressQuips} testID="game-pigeon" />
     </Animated.View>
   );
 }
 
-/* Scripted priority speech bubble for the player pigeon (e.g. Roadman's one-time
- * intro/milestone lines). Independent of the ordinary HIC/quip system inside
- * DrunkPigeon — tracks the pigeon's live world.px/py every frame and reuses the SAME
- * flip/clamp containment recipe as HecklerView so it can never clip off any screen edge,
- * including the top safe-area inset on notch/Dynamic-Island devices. */
-export function PigeonSpeechBubble({ world, text = 'Wargwarn?', visible = false, screenW = 400, screenH = 800, topInset = 0 }) {
-  const anchorHalf = 26; // approx pigeon radius, purely for bubble placement (not physics)
-
-  const layout = useDerivedValue(() => {
-    const w = world.value;
-    const bh = PIGEON_BUBBLE_H;
-    const safeTop = topInset + BUBBLE_MARGIN;
-    const safeBottom = screenH - BUBBLE_MARGIN;
-    const safeLeft = BUBBLE_MARGIN;
-    const safeRight = screenW - BUBBLE_MARGIN;
-    const anchorTop = w.py - anchorHalf;
-    const anchorBottom = w.py + anchorHalf;
-
-    let bubY = anchorTop - BUBBLE_GAP - bh;
-    let tailBelow = 0;
-    if (bubY < safeTop) {
-      bubY = anchorBottom + BUBBLE_GAP;
-      tailBelow = 1;
-      if (bubY + bh > safeBottom) bubY = Math.max(safeTop, safeBottom - bh);
-    }
-    let bubX = w.px - PIGEON_BUBBLE_W / 2;
-    if (bubX < safeLeft) bubX = safeLeft;
-    if (bubX + PIGEON_BUBBLE_W > safeRight) bubX = safeRight - PIGEON_BUBBLE_W;
-    const tailX = Math.max(TAIL_HALF * 2, Math.min(PIGEON_BUBBLE_W - TAIL_HALF * 2, w.px - bubX));
-    return { bubX, bubY, tailX, tailBelow };
+/* Roadman's bubble follows his simulated position, upright and inside the
+ * screen. Its three SVG text slots stay mounted, just like window speech. */
+export function PigeonSpeechBubble({ world, text = 'Wargwarn?', visible = false, screenW, screenH, fatLevel = 0, topInset = 0, bottomInset = 0 }) {
+  const lines = useMemo(() => wrapHecklerInsult(text), [text]);
+  const size = pigeonSizeFor(fatLevel);
+  const textTop = 34 - (lines.filter(Boolean).length - 1) * 8;
+  const bubbleStyle = useAnimatedStyle(() => {
+    const p = pigeonSpeechPresentation(world.value, visible, screenW, screenH, topInset + 74, bottomInset, size);
+    return { opacity: p.opacity, transform: [{ translateX: p.x }, { translateY: p.y }] };
   });
-
-  const bubbleStyle = useAnimatedStyle(() => ({
-    opacity: visible ? 1 : 0,
-    transform: [{ translateX: layout.value.bubX }, { translateY: layout.value.bubY }],
-  }));
   const tailStyle = useAnimatedStyle(() => {
-    const left = layout.value.tailX - TAIL_HALF;
-    return layout.value.tailBelow
-      ? { left, top: -TAIL_HALF, bottom: undefined, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 3, borderTopWidth: 3 }
-      : { left, bottom: -TAIL_HALF, top: undefined, borderRightWidth: 3, borderBottomWidth: 3, borderLeftWidth: 0, borderTopWidth: 0 };
+    const p = pigeonSpeechPresentation(world.value, visible, screenW, screenH, topInset + 74, bottomInset, size);
+    return { opacity: p.opacity, transform: [{ translateX: p.tailX }, { translateY: p.tailY }, { scaleY: p.tailLength }] };
   });
-
   return (
-    <Animated.View style={[styles.abs, hkStyles.bubble, { width: PIGEON_BUBBLE_W, height: PIGEON_BUBBLE_H }, bubbleStyle]} pointerEvents="none" testID="roadman-script-bubble">
-      <View style={hkStyles.fixedBubbleContent}>
-        <Text style={hkStyles.bubbleTxt} testID="roadman-script-text">{text}</Text>
-        {/* Shape/rasterise every scripted line while the initially-hidden bubble
-            is mounted, instead of paying that native text cost during play. */}
-        <Text accessible={false} style={[hkStyles.bubbleTxt, hkStyles.warmText]}>
-          Wargwarn? I said wargwarn fam? A'ight say less, deekhed
-        </Text>
-      </View>
-      <Animated.View style={[hkStyles.bubbleTail, tailStyle]} />
-    </Animated.View>
+    <React.Fragment>
+      <Animated.View style={[styles.abs, { width: 4, height: 1, backgroundColor: '#ffffff', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#20232b' }, tailStyle]} pointerEvents="none" />
+      <Animated.View style={[styles.abs, { width: PIGEON_SPEECH_WIDTH, height: PIGEON_SPEECH_HEIGHT }, bubbleStyle]} pointerEvents="none" testID="roadman-script-bubble">
+        <Svg width={PIGEON_SPEECH_WIDTH} height={PIGEON_SPEECH_HEIGHT} viewBox={`0 0 ${PIGEON_SPEECH_WIDTH} ${PIGEON_SPEECH_HEIGHT}`}>
+          <SvgRect x={1.5} y={1.5} width={PIGEON_SPEECH_WIDTH - 3} height={PIGEON_SPEECH_HEIGHT - 3} rx={11} fill="#ffffff" stroke="#20232b" strokeWidth={3} />
+          <SvgText x={PIGEON_SPEECH_WIDTH / 2} y={textTop} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[0]}</SvgText>
+          <SvgText x={PIGEON_SPEECH_WIDTH / 2} y={textTop + 16} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[1]}</SvgText>
+          <SvgText x={PIGEON_SPEECH_WIDTH / 2} y={textTop + 32} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[2]}</SvgText>
+        </Svg>
+      </Animated.View>
+    </React.Fragment>
   );
 }
 
 /* "SKINNY AGAIN!" toast — flashes on Skinny Jab pickup, then fades. */
 export function SkinnyToast({ signal = 0 }) {
-  const p = useSharedValue(0);
+  const [visible, setVisible] = React.useState(false);
   useEffect(() => {
-    if (!signal) return;
-    cancelAnimation(p);
-    p.value = 0;
-    p.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.quad) });
+    if (!signal) return undefined;
+    setVisible(true);
+    const id = setTimeout(() => setVisible(false), 950);
+    return () => clearTimeout(id);
   }, [signal]);
-  const st = useAnimatedStyle(() => {
-    const inA = Math.min(p.value / 0.14, 1);
-    const outA = p.value < 0.6 ? 1 : 1 - (p.value - 0.6) / 0.4;
-    return {
-      opacity: Math.max(0, Math.min(inA, outA)),
-      transform: [{ translateY: -p.value * 46 }, { scale: 0.6 + inA * 0.7 }, { rotate: `${(p.value - 0.5) * 10}deg` }],
-    };
-  });
   return (
-    <View pointerEvents="none" style={skinnyStyles.host}>
-      <Animated.Text style={[skinnyStyles.txt, st]}>SKINNY AGAIN!</Animated.Text>
+    <View pointerEvents="none" style={[skinnyStyles.host, visible ? skinnyStyles.shown : skinnyStyles.hidden]}>
+      <Text style={skinnyStyles.txt}>SKINNY AGAIN!</Text>
     </View>
   );
 }
 
 const skinnyStyles = StyleSheet.create({
   host: { position: 'absolute', top: '32%', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
+  shown: { opacity: 1 },
+  hidden: { opacity: 0 },
   txt: {
     fontFamily: FONT,
     color: '#7ef0c0',
@@ -583,13 +550,9 @@ export function PintView({ world }) {
    obstacle positions always match their hitboxes. It only breathes a soft-focus haze
    + (web) a light backdrop blur, scaling with the Drunkness level (0..~1.4 with Pub
    boost). Rendered BELOW the HUD so distance/chips/buttons remain sharp.
-   Native has no CSS backdropFilter, so it previously rendered NOTHING but a faint
-   colour wash — the Pub Pint boost was invisible on Android. Below, two low-opacity
-   colour-fringed "ghost" layers drift in slow opposing loops on native only: a cheap,
-   compositor-only (opacity + transform, no blur/filter) soft-focus/double-vision
-   imitation that reads as hazy/drunk without a real blur pass or a new GPU bottleneck.
-   All three layers are permanently mounted here; only their opacity/transform change. */
-export function DrunkScreenFX({ level = 0 }) {
+   Native Pub Pint uses BeerWorld's Android RenderEffect on the scene container.
+   It adds no tinted overlay and does not change positions or hitboxes. */
+function WebDrunkScreenFX({ level, boosted }) {
   const lv = Math.max(0, Math.min(1.4, level));
   const focus = useSharedValue(0);
   useEffect(() => {
@@ -598,40 +561,29 @@ export function DrunkScreenFX({ level = 0 }) {
   }, []);
   const style = useAnimatedStyle(() => {
     if (lv <= 0.02) return { opacity: 0 };
-    // irregular breathing: two sines so it never feels like a clean loop
     const breathe = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(focus.value * Math.PI * 2 + Math.sin(focus.value * 7)));
     const opacity = Math.min(0.2, lv * (0.05 + breathe * 0.09));
-    const blurPx = Platform.OS === 'web' ? lv * (0.7 + breathe * 1.4) : 0; // max ~ 2.9px @ boosted
-    const web = Platform.OS === 'web' ? { backdropFilter: `blur(${blurPx}px)`, WebkitBackdropFilter: `blur(${blurPx}px)` } : {};
-    return { opacity: 1, ...web, backgroundColor: `rgba(245,240,255,${opacity})` };
-  });
-  const ghostA = useAnimatedStyle(() => {
-    if (Platform.OS === 'web' || lv <= 0.02) return { opacity: 0 };
-    const s = focus.value;
-    const o = Math.min(0.11, lv * 0.08);
+    const blurPx = boosted ? 9 : lv * (0.7 + breathe * 1.4);
     return {
-      opacity: o,
-      backgroundColor: 'rgba(255,120,190,1)',
-      transform: [{ translateX: Math.sin(s * Math.PI * 2) * (2 + lv * 5) }, { translateY: Math.cos(s * Math.PI * 2) * (1 + lv * 2) }],
-    };
-  });
-  const ghostB = useAnimatedStyle(() => {
-    if (Platform.OS === 'web' || lv <= 0.02) return { opacity: 0 };
-    const s = focus.value;
-    const o = Math.min(0.11, lv * 0.08);
-    return {
-      opacity: o,
-      backgroundColor: 'rgba(110,210,255,1)',
-      transform: [{ translateX: Math.sin(s * Math.PI * 2 + Math.PI) * (2 + lv * 5) }, { translateY: Math.cos(s * Math.PI * 2 + Math.PI) * (1 + lv * 2) }],
+      opacity: 1,
+      backdropFilter: `blur(${blurPx}px)`,
+      WebkitBackdropFilter: `blur(${blurPx}px)`,
+      backgroundColor: boosted ? 'transparent' : `rgba(245,240,255,${opacity})`,
     };
   });
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="drunk-screen-fx">
-      <Animated.View style={[StyleSheet.absoluteFill, ghostA]} />
-      <Animated.View style={[StyleSheet.absoluteFill, ghostB]} />
       <Animated.View style={[StyleSheet.absoluteFill, style]} />
     </View>
   );
+}
+
+export function DrunkScreenFX({ level = 0, boosted = false }) {
+  const lv = Math.max(0, Math.min(1.4, level));
+  if (Platform.OS === 'web') return <WebDrunkScreenFX level={lv} boosted={boosted} />;
+  // BeerWorld owns the native scene blur, driven by the same 4.5s pintBoost
+  // state as the pigeon animation. Do not add another fullscreen overlay here.
+  return null;
 }
 
 
@@ -653,83 +605,46 @@ export function FeatherView({ world, index, color }) {
 }
 
 /* ---------------- Window heckler (person clipped inside a window) ---------------- */
-// The speech bubble is positioned/sized independently of the anchor window so it can
-// flip above/below and slide horizontally to stay fully inside the visible viewport
-// (including the top safe-area inset on notch/Dynamic-Island devices) — its own real
-// measured height (text can wrap to any number of lines) drives the containment math,
-// never a text-shrinking fallback.
-const BUBBLE_W = 168;
+// Person and speech share the same simulation event/visibility. The small speech
+// SVG is static between events; only its parent transform moves. There is no
+// moving native Text, text measurement, wall-clock timeout or per-frame React update.
 const PIGEON_BUBBLE_W = 176;
 const PIGEON_BUBBLE_H = 46;
-const BUBBLE_MARGIN = 10; // safe margin kept from every screen edge
-const BUBBLE_GAP = 8;     // gap kept between the bubble and its window anchor
-const TAIL_HALF = 7;
 
-export function HecklerView({ world, text, reaction, theme, screenW = 400, screenH = 800, topInset = 0 }) {
-  const WIN = 36;
-  const bubbleH = useSharedValue(48); // corrected on layout once the real (wrapped) text height is known
-
-  const layout = useDerivedValue(() => {
-    const h = world.value.heckler;
-    if (!h || !h.active) {
-      return { op: 0, winX: -999, winY: -999, bubX: -999, bubY: -999, tailX: BUBBLE_W / 2, tailBelow: 0 };
-    }
-    const op = h.life > 0.35 ? 1 : Math.max(0, h.life / 0.35);
-    const winX = h.x - WIN / 2;
-    const winY = h.y - WIN / 2;
-    const bh = bubbleH.value;
-    const safeTop = topInset + BUBBLE_MARGIN;
-    const safeBottom = screenH - BUBBLE_MARGIN;
-    const safeLeft = BUBBLE_MARGIN;
-    const safeRight = screenW - BUBBLE_MARGIN;
-
-    // Prefer above the window (classic speech-bubble placement); flip below it
-    // when there isn't enough safe-area room above (e.g. window near the top
-    // of the screen, behind a notch/Dynamic Island).
-    let bubY = winY - BUBBLE_GAP - bh;
-    let tailBelow = 0; // 0 = tail points down at the window (bubble above it)
-    if (bubY < safeTop) {
-      bubY = winY + WIN + BUBBLE_GAP;
-      tailBelow = 1; // tail points up at the window (bubble below it)
-      if (bubY + bh > safeBottom) bubY = Math.max(safeTop, safeBottom - bh);
-    }
-
-    let bubX = h.x - BUBBLE_W / 2;
-    if (bubX < safeLeft) bubX = safeLeft;
-    if (bubX + BUBBLE_W > safeRight) bubX = safeRight - BUBBLE_W;
-
-    // Tail stays aimed at the actual window x position even after the bubble
-    // itself was shifted inward to stay on-screen.
-    const tailX = Math.max(TAIL_HALF * 2, Math.min(BUBBLE_W - TAIL_HALF * 2, h.x - bubX));
-
-    return { op, winX, winY, bubX, bubY, tailX, tailBelow };
+export function HecklerView({ world, eventId = 0, text, reaction, theme, screenW, topInset = 0 }) {
+  const WIN = HECKLER_WINDOW;
+  const lines = useMemo(() => wrapHecklerInsult(text), [text]);
+  const safeTop = topInset + 74;
+  const winStyle = useAnimatedStyle(() => {
+    const p = hecklerPresentation(world.value, eventId, screenW, safeTop);
+    return { opacity: p.opacity, transform: [{ translateX: p.windowX }, { translateY: p.windowY }] };
   });
-
-  const winStyle = useAnimatedStyle(() => ({
-    opacity: layout.value.op,
-    transform: [{ translateX: layout.value.winX }, { translateY: layout.value.winY }],
-  }));
-
-  const bubbleStyle = useAnimatedStyle(() => ({
-    opacity: layout.value.op,
-    transform: [{ translateX: layout.value.bubX }, { translateY: layout.value.bubY }],
-  }));
-
-  const tailStyle = useAnimatedStyle(() => {
-    const left = layout.value.tailX - TAIL_HALF;
-    return layout.value.tailBelow
-      ? { left, top: -TAIL_HALF, bottom: undefined, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 3, borderTopWidth: 3 }
-      : { left, bottom: -TAIL_HALF, top: undefined, borderRightWidth: 3, borderBottomWidth: 3, borderLeftWidth: 0, borderTopWidth: 0 };
+  const bubbleStyle = useAnimatedStyle(() => {
+    const p = hecklerPresentation(world.value, eventId, screenW, safeTop);
+    return { opacity: p.opacity, transform: [{ translateX: p.bubbleX }, { translateY: p.bubbleY }] };
+  });
+  const connectorStyle = useAnimatedStyle(() => {
+    const p = hecklerPresentation(world.value, eventId, screenW, safeTop);
+    return { opacity: p.opacity, transform: [{ translateX: p.connectorX }, { translateY: p.connectorY }] };
   });
 
   return (
     <React.Fragment>
-      {/* speech bubble — positioned independently so it can flip/slide to stay on-screen */}
-      <Animated.View style={[styles.abs, hkStyles.bubble, { width: BUBBLE_W }, bubbleStyle]} pointerEvents="none" testID="heckler-bubble">
-        <View onLayout={(e) => { bubbleH.value = e.nativeEvent.layout.height; }}>
-          <Text style={hkStyles.bubbleTxt} testID="heckler-insult">{text}</Text>
-        </View>
-        <Animated.View style={[hkStyles.bubbleTail, tailStyle]} />
+      <Animated.View
+        style={[styles.abs, hkStyles.hecklerConnector, connectorStyle]}
+        pointerEvents="none"
+      />
+      <Animated.View
+        style={[styles.abs, { width: HECKLER_BUBBLE_WIDTH, height: HECKLER_BUBBLE_HEIGHT }, bubbleStyle]}
+        pointerEvents="none"
+        testID="heckler-bubble"
+      >
+        <Svg width={HECKLER_BUBBLE_WIDTH} height={HECKLER_BUBBLE_HEIGHT} viewBox={`0 0 ${HECKLER_BUBBLE_WIDTH} ${HECKLER_BUBBLE_HEIGHT}`}>
+          <SvgRect x={1.5} y={1.5} width={HECKLER_BUBBLE_WIDTH - 3} height={HECKLER_BUBBLE_HEIGHT - 3} rx={11} fill="#ffffff" stroke="#20232b" strokeWidth={3} />
+          <SvgText x={HECKLER_BUBBLE_WIDTH / 2} y={19} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[0]}</SvgText>
+          <SvgText x={HECKLER_BUBBLE_WIDTH / 2} y={35} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[1]}</SvgText>
+          <SvgText x={HECKLER_BUBBLE_WIDTH / 2} y={51} textAnchor="middle" fontFamily={FONT} fontSize={12} fontWeight="700" fill="#20232b">{lines[2]}</SvgText>
+        </Svg>
       </Animated.View>
       {/* window opening clips the person's body (lower body hidden behind wall) */}
       <Animated.View style={[styles.abs, { width: WIN, height: WIN }, winStyle]} pointerEvents="none" testID="heckler">
@@ -811,8 +726,11 @@ const hkStyles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   bubbleTxt: { fontFamily: FONT, color: '#20232b', fontWeight: '700', fontSize: 12, textAlign: 'center' },
-  fixedBubbleContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  warmText: { position: 'absolute', opacity: 0 },
+  scriptHost: { position: 'absolute', left: 0, right: 0, height: PIGEON_BUBBLE_H, alignItems: 'center', zIndex: 30 },
+  scriptBubble: { width: PIGEON_BUBBLE_W, height: PIGEON_BUBBLE_H, alignItems: 'center', justifyContent: 'center' },
+  hecklerConnector: { width: 4, height: 10, backgroundColor: '#ffffff', borderColor: '#20232b', borderLeftWidth: 1, borderRightWidth: 1 },
+  shown: { opacity: 1 },
+  hidden: { opacity: 0 },
   bubbleTail: {
     position: 'absolute',
     width: 14,
@@ -821,6 +739,7 @@ const hkStyles = StyleSheet.create({
     borderColor: '#20232b',
     transform: [{ rotate: '45deg' }],
   },
+  fixedTail: { left: PIGEON_BUBBLE_W / 2 - 7, bottom: -7, borderRightWidth: 3, borderBottomWidth: 3 },
 });
 
 const obStyles = StyleSheet.create({

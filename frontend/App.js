@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import MainMenu from './src/screens/MainMenu';
+import IntroScreen from './src/screens/IntroScreen';
 import PigeonsScreen from './src/screens/PigeonsScreen';
 import GameScreen from './src/screens/GameScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
@@ -33,6 +34,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [introDone, setIntroDone] = useState(() => Platform.OS === 'web');
+  const finishIntro = useCallback(() => setIntroDone(true), []);
 
   // Web: enable viewport-fit=cover so notched mobile browsers expose
   // env(safe-area-inset-*) to react-native-safe-area-context (native handles insets already).
@@ -195,8 +198,8 @@ export default function App() {
     const v = Math.max(0, Math.min(1, level));
     setState((s) => ({ ...s, drunkLevel: v }));
   }, []);
-  const handleCommitDrunk = useCallback(() => {
-    setState((s) => { Persistence.setDrunk(s.drunkLevel); return s; });
+  const handleCommitDrunk = useCallback((level) => {
+    if (Number.isFinite(level)) Persistence.setDrunk(Math.max(0, Math.min(1, level)));
   }, []);
 
   const handleSelectMap = useCallback((id) => {
@@ -355,6 +358,10 @@ export default function App() {
   }, []);
 
   if (!ready) return <View style={styles.boot} />;
+
+  if (!introDone && screen === 'menu') {
+    return <SafeAreaProvider><StatusBar hidden /><IntroScreen soundEnabled={state.soundEnabled} onDone={finishIntro} /></SafeAreaProvider>;
+  }
 
   const drunkStrength = drunkStrengthFor(state.drunkLevel);
 

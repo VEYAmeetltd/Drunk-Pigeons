@@ -1,0 +1,34 @@
+{
+  "summary": "v23 frontend integration smoke test on web preview (mobile viewport 390x844). All 9 requested checks executed successfully. Main menu, PLAY -> flap -> game-over -> revive overlay, LEADERBOARD (Global + Silly toggle), PIGEONS roster, LEGAL & PRIVACY, CODE entry modal, drunkness slider, all manor selections including Easy Mode (£14.99 premium/locked with dev simulator overlay) all rendered and interacted without crashes or console errors. No regressions from the ZIP sync.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "main_menu": "PASS - Title 'DRUNK PIGEONS', 'flap responsibly.', BEST SCORE 0m, PIGEONS INJURED 0, avatar image, drunkness slider (Sober/Tipsy/Absolutely Pigeoned), all manor cards (Sunny London selected default, Gritty Backstreet, Chippy Sunset, Random, Easy Mode £14.99 with lock icon), PLAY / PIGEONS / LEADERBOARD buttons, CODE and LEGAL & PRIVACY links all visible. Testids present: play-button, pigeons-button, leaderboard-button, drunkness-slider, map-day/night/dusk/random/easy, easy-lock, easy-price, open-code-button, legal-privacy-button, sound-toggle, menu-best-score, menu-pigeon, menu-injured.",
+    "play_flow": "PASS - PLAY navigates to GameScreen showing 'TAP TO FLAP', bird sprite, city obstacles (bus, phone-box, buildings), distance HUD 0m and chip HUD. Repeated tap-to-flap advanced distance to 17m over ~5s. Bird crashed and Game Over overlay ('SPLAT! Flight privileges revoked. NEW BEST!') appeared with DISTANCE 17m, BEST 17m, CHIPS EATEN 1, and PLAY AGAIN / REVIVE (Watch an ad to continue) / MAIN MENU buttons.",
+    "leaderboard_flow": "PASS - Leaderboard opens with GLOBAL/SILLY toggle, nickname picker with rules-acceptance checkbox, and 100+ populated rows (#1 BestPigeon 3,000m ... #29+ NormOnly* 1,200m). SILLY toggle switches successfully. Data fetches successfully. NOTE ON URL: on this Expo WEB DEV bundle (__DEV__=true) the leaderboard hits the EXPO_PUBLIC_BACKEND_URL dev override => https://d3e2f44b-...preview.emergentagent.com/api/leaderboard/top?mode=normal|easy - NOT chip-pigeon.emergent.host. This matches the intentional code in /app/frontend/src/leaderboard/api.js lines 8-12 which permits dev override only when __DEV__ is truthy. Release/APK builds have __DEV__=false and will hit PRODUCTION_BACKEND_URL=https://chip-pigeon.emergent.host as required. Cannot verify prod URL from web preview because the served bundle is Hermes dev (visible in bundle query string: dev=true). Design is correct; behavior on web preview is expected and per-spec.",
+    "pigeons_flow": "PASS - Pigeons roster opens with Classic Pigeon (SELECTED), Business, Roadman £1.99, King £1.99, Gym £1.99, Tourist £1.99, Fancy £1.99, 'UNLOCK ALL 5 - £7.99', 'REMOVE ADS - £2.99', RESTORE PURCHASES, Purchase terms. BACK returns to menu. No crash.",
+    "drunkness_slider": "PASS - slider testid drunkness-slider + drunkness-thumb visible; labels SOBER / TIPSY / ABSOLUTELY PIGEONED render. Default value=Tipsy (highlighted).",
+    "manor_selection": "PASS - Sunny London selected by default (yellow ring). Easy Mode (£14.99) opens a premium purchase overlay ('An absurdly easy version...Silly Mode leaderboard only') with DEV SIMULATOR containing Simulate Success/Simulate Failure/Cancel - does NOT crash. Lock icon and price tag both render.",
+    "legal_privacy": "PASS - Opens 'LEGAL & PRIVACY' screen with 7 documents (Privacy Policy, Terms of Use, Purchases/Advertising/Refund Terms, Leaderboard & Fair Play Rules, Privacy Choices & Data Deletion, Online Safety Reporting & Complaints, Advertising Booking Terms) all v2.0 dated 3 Sept 2026, plus 'PIGEON PROMOTIONS - GET YOUR BRAND AIRBORNE' and footer 'Published by INTIES LTD. Company number 17433193'. BACK works.",
+    "code_entry": "PASS - CODE button opens modal 'ENTER CODE' with 4-digit input, SUBMIT and CANCEL. No crash.",
+    "console_errors": "PASS - Zero errors, zero pageerrors. Only benign RN-Web deprecation warnings (pointerEvents, shadow*, textShadow*) which pre-existed. One [DP diagnostics - game over @ 17m] info log fired on crash - expected.",
+    "menu_play_gameover_menu_loop": "PASS - Completed menu -> play -> crash -> exit-to-menu with no crashes."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Leaderboard dev-override behavior is by design and documented in api.js lines 3-12. When testing final APK on physical device the URL WILL be chip-pigeon.emergent.host because __DEV__ resolves to false in release Hermes. Web-preview verification of that specific URL is architecturally impossible; recommend main agent confirms with adb logcat or a release web build if that URL confirmation is a hard release-gate.",
+    "dev-perf-stats overlay at bottom of game screen still shipping in this preview build - already flagged in iteration 40/41. Confirm eas.json 'preview'/'production' profile strips it in APK.",
+    "React-Native-Web deprecation warnings (pointerEvents, shadow*, textShadow*) are noise but abundant - safe to defer, not user-facing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100% (all 9 requested checks PASS)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "v23 ZIP-sync integration is regression-clean on web preview. If future task requires strictly verifying chip-pigeon.emergent.host is hit for leaderboard, note that __DEV__ is TRUE in the Expo web preview served here (bundle URL contains dev=true), so the EXPO_PUBLIC_BACKEND_URL override path is exercised - this is per-spec, not a bug. All UI testids remain stable across MainMenu, GameScreen, GameOverOverlay, LeaderboardScreen, PigeonsScreen, LegalScreen."
+}
