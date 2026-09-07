@@ -7,7 +7,7 @@ export const COMPANY = {
   companyNumber: '17433193',
   jurisdiction: 'England and Wales',
   office: '128 City Road, London, EC1V 2NX, United Kingdom',
-  email: 'gordon@intiesltd.com',
+  email: 'support@intiesltd.com',
 };
 
 export const SUPPORT_URL = 'https://intiesltd.com/drunk-pigeons/support';
@@ -30,7 +30,7 @@ export const LEGAL_DOCUMENTS = [
       {
         "type": "callout",
         "title": "PUBLICATION DETAILS",
-        "text": "Privacy/support email: gordon@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. Controller/publisher: INTIES LTD., company number 17433193, registered in England and Wales."
+        "text": "Privacy/support email: support@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. Controller/publisher: INTIES LTD., company number 17433193, registered in England and Wales."
       },
       {
         "type": "heading",
@@ -42,7 +42,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "Privacy and support contact: gordon@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom."
+        "text": "Privacy and support contact: support@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom."
       },
       {
         "type": "heading",
@@ -332,7 +332,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "To request deletion of leaderboard or other personal data, contact gordon@intiesltd.com and include the DRUNK PIGEONS Support ID / player identifier shown in the app's Settings or Legal area. Do not send a password or payment-card number."
+        "text": "To request deletion of leaderboard or other personal data, contact support@intiesltd.com and include the DRUNK PIGEONS Support ID / player identifier shown in the app's Settings or Legal area. Do not send a password or payment-card number."
       },
       {
         "type": "paragraph",
@@ -368,7 +368,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "Privacy questions or requests: gordon@intiesltd.com. Correspondence: 128 City Road, London, EC1V 2NX, United Kingdom."
+        "text": "Privacy questions or requests: support@intiesltd.com. Correspondence: 128 City Road, London, EC1V 2NX, United Kingdom."
       },
       {
         "type": "paragraph",
@@ -393,7 +393,7 @@ export const LEGAL_DOCUMENTS = [
       {
         "type": "callout",
         "title": "PUBLICATION DETAILS",
-        "text": "Support email: gordon@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. Publisher: INTIES LTD., company number 17433193, registered in England and Wales."
+        "text": "Support email: support@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. Publisher: INTIES LTD., company number 17433193, registered in England and Wales."
       },
       {
         "type": "heading",
@@ -609,7 +609,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "Support/legal contact: gordon@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom."
+        "text": "Support/legal contact: support@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom."
       }
     ]
   },
@@ -701,7 +701,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "If the store confirms a purchase but the content is not delivered, first use Restore Purchases where appropriate and then contact gordon@intiesltd.com with the store order/transaction information that the store permits you to share. Do not send full card details."
+        "text": "If the store confirms a purchase but the content is not delivered, first use Restore Purchases where appropriate and then contact support@intiesltd.com with the store order/transaction information that the store permits you to share. Do not send full card details."
       },
       {
         "type": "heading",
@@ -756,7 +756,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "If you believe a purchase is defective, missing or materially different from its description, contact the relevant store and/or gordon@intiesltd.com. Nothing in these terms restricts statutory remedies that cannot lawfully be excluded."
+        "text": "If you believe a purchase is defective, missing or materially different from its description, contact the relevant store and/or support@intiesltd.com. Nothing in these terms restricts statutory remedies that cannot lawfully be excluded."
       },
       {
         "type": "heading",
@@ -812,7 +812,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "Purchase/support contact: gordon@intiesltd.com. Include the app platform, product and store order/transaction reference where available. Never send full card numbers or account passwords."
+        "text": "Purchase/support contact: support@intiesltd.com. Include the app platform, product and store order/transaction reference where available. Never send full card numbers or account passwords."
       }
     ]
   },
@@ -960,7 +960,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "If you believe your nickname or legitimate score was wrongly rejected or removed, contact gordon@intiesltd.com with the support/player identifier and relevant details. We may be unable to restore a run if sufficient technical evidence is no longer retained, particularly after the transient run-record retention period."
+        "text": "If you believe your nickname or legitimate score was wrongly rejected or removed, contact support@intiesltd.com with the support/player identifier and relevant details. We may be unable to restore a run if sufficient technical evidence is no longer retained, particularly after the transient run-record retention period."
       }
     ]
   },
@@ -1040,7 +1040,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "For privacy questions, access/correction/deletion requests or concerns, contact INTIES LTD. at gordon@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. The full Privacy Policy explains your rights and how data is used in more detail."
+        "text": "For privacy questions, access/correction/deletion requests or concerns, contact INTIES LTD. at support@intiesltd.com. Correspondence address: 128 City Road, London, EC1V 2NX, United Kingdom. The full Privacy Policy explains your rights and how data is used in more detail."
       }
     ]
   },
@@ -1064,7 +1064,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "DRUNK PIGEONS is published by INTIES LTD., registered in England and Wales under company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Online-safety and support contact: gordon@intiesltd.com."
+        "text": "DRUNK PIGEONS is published by INTIES LTD., registered in England and Wales under company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Online-safety and support contact: support@intiesltd.com."
       },
       {
         "type": "heading",
@@ -1122,7 +1122,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "The production leaderboard will place clearly labelled Report and Hide/Block controls beside public entries. Reporting sends the entry and selected reason for review. Hiding/blocking removes that player's entry from the reporting player's view where technically appropriate. A person may also report content to us at gordon@intiesltd.com and should include the nickname, score/rank, approximate date/time and a screenshot if available. Do not send illegal files or payment-card details."
+        "text": "The production leaderboard will place clearly labelled Report and Hide/Block controls beside public entries. Reporting sends the entry and selected reason for review. Hiding/blocking removes that player's entry from the reporting player's view where technically appropriate. A person may also report content to us at support@intiesltd.com and should include the nickname, score/rank, approximate date/time and a screenshot if available. Do not send illegal files or payment-card details."
       },
       {
         "type": "paragraph",
@@ -1142,7 +1142,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "You may complain about content, a moderation decision, reporting access, or the way a report was handled by emailing gordon@intiesltd.com with the relevant Support ID and facts. We aim to acknowledge ordinary complaints within three business days and give an outcome or progress update within ten business days, although complex, safety-critical or legal matters may take longer. A different reviewer will be used where reasonably practicable."
+        "text": "You may complain about content, a moderation decision, reporting access, or the way a report was handled by emailing support@intiesltd.com with the relevant Support ID and facts. We aim to acknowledge ordinary complaints within three business days and give an outcome or progress update within ten business days, although complex, safety-critical or legal matters may take longer. A different reviewer will be used where reasonably practicable."
       },
       {
         "type": "paragraph",
@@ -1170,7 +1170,7 @@ export const LEGAL_DOCUMENTS = [
       },
       {
         "type": "paragraph",
-        "text": "INTIES LTD. is registered in England and Wales under company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Contact: gordon@intiesltd.com."
+        "text": "INTIES LTD. is registered in England and Wales under company number 17433193. Registered office: 128 City Road, London, EC1V 2NX, United Kingdom. Contact: support@intiesltd.com."
       }
     ]
   },
