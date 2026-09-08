@@ -49,6 +49,10 @@ export default function MainMenu({
   // Responsive menu pigeon size: slightly smaller than before (was 150) so BEST | PIGEON | INJURED
   // fits on one row across common widths; scales down on narrow phones before anything clips.
   const heroSize = Math.round(Math.max(88, Math.min(110, width * 0.28)));
+  // Below this, there isn't enough room for an independent left-margin Merch
+  // card to avoid visually colliding with the centred stats group, so Merch
+  // moves to its own row above the group instead (see merchRow/heroWrap below).
+  const wideLayout = width >= 760;
   const [showCode, setShowCode] = useState(false);
   const [easySheet, setEasySheet] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -130,25 +134,42 @@ export default function MainMenu({
         <Text style={styles.subtitle}>flap responsibly.</Text>
       </View>
 
-      <View style={styles.heroRow}>
-        <Pressable
-          testID="merch-button"
-          onPress={() => { Audio.ui(); onMerch && onMerch(); }}
-          style={styles.merchCard}
-          accessibilityRole="button"
-        >
-          <Text style={styles.merchCardTxt}>MERCH</Text>
-        </Pressable>
-        <Stat label="BEST SCORE" value={`${formatInt(bestDistance)}m`} color={COLORS.yellow} testID="menu-best-score" />
-        <Animated.View style={[styles.hero, pigeonStyle]}>
-          <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
-        </Animated.View>
-        <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
+      {!wideLayout && (
+        <View style={styles.merchRow}>
+          <Pressable
+            testID="merch-button"
+            onPress={() => { Audio.ui(); onMerch && onMerch(); }}
+            style={[styles.merchCard, styles.merchCardInRow]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.merchCardTxt}>MERCH</Text>
+          </Pressable>
+          <View style={{ width: heroSize, marginHorizontal: 4 }} />
+          <View style={[styles.stat, { opacity: 0 }]} />
+        </View>
+      )}
+      <View style={styles.heroWrap}>
+        {wideLayout && (
+          <Pressable
+            testID="merch-button"
+            onPress={() => { Audio.ui(); onMerch && onMerch(); }}
+            style={[styles.merchCard, styles.merchCardAbsolute]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.merchCardTxt}>MERCH</Text>
+          </Pressable>
+        )}
+        <View style={styles.heroRow} pointerEvents="box-none">
+          <Stat label="BEST SCORE" value={`${formatInt(bestDistance)}m`} color={COLORS.yellow} testID="menu-best-score" />
+          <Animated.View style={[styles.hero, pigeonStyle]}>
+            <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
+          </Animated.View>
+          <Stat label="PIGEONS INJURED" value={pigeonsInjured} color={COLORS.pink} testID="menu-injured" />
+        </View>
       </View>
 
       {/* Speaker toggle sits directly under the PIGEONS INJURED column, centred with it. */}
       <View style={styles.speakerRow} pointerEvents="box-none">
-        <View style={styles.speakerSpacer} />
         <View style={styles.speakerSpacer} />
         <View style={{ width: heroSize, marginHorizontal: 4 }} />
         <View style={styles.speakerCol}>
@@ -301,8 +322,16 @@ const styles = StyleSheet.create({
   stat: { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 7, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, maxWidth: 132, minHeight: 60 },
   statLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textAlign: 'center' },
   statValue: { fontFamily: FONT, fontSize: 26, fontWeight: '700', marginTop: 2 },
-  merchCard: { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 7, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, maxWidth: 132, minHeight: 60 },
+  merchCard: { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 7, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', minHeight: 60 },
   merchCardTxt: { fontFamily: FONT, color: COLORS.pink, fontWeight: '700', fontSize: 15, letterSpacing: 1 },
+  // Narrow/phone row: flex:1 + maxWidth:132 exactly mirrors the Stat card's own
+  // sizing math (same values), so Merch is pixel-identical in width to Best Score.
+  merchCardInRow: { flex: 1, minWidth: 0, maxWidth: 132 },
+  // Wide layout: absolutely overlaid at the content's left margin so it has ZERO
+  // effect on the centred stats row's own flex/centering calculation.
+  merchCardAbsolute: { position: 'absolute', left: 0, top: 0, width: 132 },
+  heroWrap: { width: '100%', position: 'relative' },
+  merchRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   mapLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 2, marginTop: 8, fontWeight: '600' },
   maps: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' },
   mapCard: { backgroundColor: COLORS.card, borderRadius: 14, padding: 8, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', width: 96 },
