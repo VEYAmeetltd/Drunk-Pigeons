@@ -19,7 +19,6 @@ const VIEWS = [
 export default function MerchProductScreen({ product, onBack }) {
   const [view, setView] = useState('front');
   const [size, setSize] = useState(null);
-  const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -39,7 +38,7 @@ export default function MerchProductScreen({ product, onBack }) {
     setBusy(true);
     setNotice('');
     Audio.ui();
-    const res = await requestMerchCheckout({ productId: product.id, size, quantity: qty });
+    const res = await requestMerchCheckout({ productId: product.id, size, quantity: 1 });
     setBusy(false);
     if (!res || !res.ok) {
       // Honest, on-brand version of the same "checkout being connected" state
@@ -97,17 +96,6 @@ export default function MerchProductScreen({ product, onBack }) {
           ))}
         </View>
 
-        <Text style={styles.sectionLabel}>QUANTITY</Text>
-        <View style={styles.qtyRow}>
-          <Pressable testID="merch-qty-minus" onPress={() => { Audio.ui(); setQty((q) => Math.max(1, q - 1)); }} style={styles.qtyBtn}>
-            <Text style={styles.qtyBtnTxt}>−</Text>
-          </Pressable>
-          <Text style={styles.qtyValue} testID="merch-qty-value">{qty}</Text>
-          <Pressable testID="merch-qty-plus" onPress={() => { Audio.ui(); setQty((q) => Math.min(9, q + 1)); }} style={styles.qtyBtn}>
-            <Text style={styles.qtyBtnTxt}>+</Text>
-          </Pressable>
-        </View>
-
         {!!notice && <Text style={styles.notice} testID="merch-checkout-notice">{notice}</Text>}
 
         <Button
@@ -152,10 +140,6 @@ const styles = StyleSheet.create({
   sizePillActive: { borderColor: COLORS.yellow },
   sizePillTxt: { fontFamily: FONT, color: COLORS.text, fontSize: 14, fontWeight: '700' },
   sizePillTxtActive: { color: COLORS.yellow },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  qtyBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.card, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnTxt: { fontFamily: FONT, color: COLORS.text, fontSize: 20, fontWeight: '700' },
-  qtyValue: { fontFamily: FONT, color: COLORS.text, fontSize: 18, fontWeight: '700', minWidth: 24, textAlign: 'center' },
   notice: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 16 },
   deliveryNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 14, fontStyle: 'italic' },
 });
