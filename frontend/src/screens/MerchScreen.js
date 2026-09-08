@@ -42,8 +42,7 @@ export default function MerchScreen({ onBack, onOpenProduct, isDev, onDevPreview
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.kicker}>◆ {MERCH_STORE_INFO.kicker}</Text>
-        <View style={styles.heroWrap}>
+        <View style={[styles.heroWrap, styles.heroWrapTop]}>
           <Text style={styles.headlineShadow}>{MERCH_STORE_INFO.headline}</Text>
           <Text style={styles.headline}>{MERCH_STORE_INFO.headline}</Text>
         </View>
@@ -111,8 +110,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   headerTitle: { fontFamily: FONT, color: COLORS.yellow, fontSize: 20, fontWeight: '700', letterSpacing: 1 },
   content: { paddingHorizontal: 18, paddingTop: 6, paddingBottom: 36 },
-  kicker: { fontFamily: FONT, color: COLORS.pink, fontSize: 12, fontWeight: '700', letterSpacing: 2, textAlign: 'center', marginTop: 6 },
   heroWrap: { width: '100%', marginTop: 6, alignItems: 'center' },
+  heroWrapTop: { marginTop: 16 },
   headline: { width: '100%', fontFamily: FONT, color: COLORS.yellow, fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 1 },
   headlineShadow: { position: 'absolute', top: 3, left: 0, width: '100%', fontFamily: FONT, color: COLORS.pink, fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 1, opacity: 0.5 },
   subhead: { fontFamily: FONT, color: COLORS.textDim, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 10 },

@@ -31,7 +31,11 @@ async function request(path, { method = 'GET', body, timeout = 8000 } = {}) {
   try {
     res = await fetch(`${API}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      // Only send Content-Type when there's actually a JSON body (POST). Setting it
+      // on a plain GET turns an otherwise-"simple" CORS request into one that forces
+      // a preflight OPTIONS — unnecessary for GET and the root cause of the DP game's
+      // web-preview store-load failure (native apps aren't affected by CORS at all).
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
