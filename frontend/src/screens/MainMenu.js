@@ -131,7 +131,17 @@ export default function MainMenu({
       </View>
 
       <View style={styles.heroRow}>
-        <Stat label="BEST SCORE" value={`${formatInt(bestDistance)}m`} color={COLORS.yellow} testID="menu-best-score" />
+        <View style={styles.bestScoreGroup}>
+          <Pressable
+            testID="merch-button"
+            onPress={() => { Audio.ui(); onMerch && onMerch(); }}
+            style={styles.merchPill}
+            accessibilityRole="button"
+          >
+            <Text style={styles.merchPillTxt}>MERCH</Text>
+          </Pressable>
+          <Stat label="BEST SCORE" value={`${formatInt(bestDistance)}m`} color={COLORS.yellow} testID="menu-best-score" />
+        </View>
         <Animated.View style={[styles.hero, pigeonStyle]}>
           <DrunkPigeon pigeon={pigeon} fatLevel={2} size={heroSize} intensity="full" eyes strength={drunkStrength} testID="menu-pigeon" />
         </Animated.View>
@@ -217,14 +227,6 @@ export default function MainMenu({
         onPress={onLeaderboard}
         style={{ width: '100%', marginTop: 12, marginBottom: 10 }}
       />
-      <Button
-        testID="merch-button"
-        label="DP MERCH"
-        variant="ghost"
-        small
-        onPress={() => { Audio.ui(); onMerch && onMerch(); }}
-        style={{ width: '100%', marginBottom: 4 }}
-      />
       </ScrollView>
 
       <SecretCode visible={showCode} onClose={() => setShowCode(false)} onUnlock={onLeetUnlock} />
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
   codeMark: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   codeTxt: { fontFamily: FONT, color: 'rgba(199,184,230,0.5)', fontWeight: '700', fontSize: 12, letterSpacing: 3 },
   speakerRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 8, marginTop: 2 },
-  speakerSpacer: { flex: 1, minWidth: 0, maxWidth: 132 },
+  speakerSpacer: { flex: 1.6, minWidth: 0, maxWidth: 170 },
   speakerCol: { flex: 1, minWidth: 0, maxWidth: 132, alignItems: 'center' },
   speakerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   legalPill: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: COLORS.bgAlt, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
@@ -300,6 +302,9 @@ const styles = StyleSheet.create({
   stat: { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 7, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, maxWidth: 132 },
   statLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textAlign: 'center' },
   statValue: { fontFamily: FONT, fontSize: 26, fontWeight: '700', marginTop: 2 },
+  bestScoreGroup: { flex: 1.6, minWidth: 0, maxWidth: 170, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  merchPill: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 14, backgroundColor: COLORS.bgAlt, minHeight: 40, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
+  merchPillTxt: { fontFamily: FONT, color: COLORS.pink, fontWeight: '700', fontSize: 11, letterSpacing: 1 },
   mapLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 12, letterSpacing: 2, marginTop: 8, fontWeight: '600' },
   maps: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, justifyContent: 'center' },
   mapCard: { backgroundColor: COLORS.card, borderRadius: 14, padding: 8, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', width: 96 },
