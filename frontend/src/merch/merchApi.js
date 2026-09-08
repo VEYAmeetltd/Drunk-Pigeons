@@ -69,3 +69,10 @@ export async function createCheckoutSession({ quoteId, contactEmail, clientReque
     body: { quote_id: quoteId, contact_email: contactEmail, client_request_id: clientRequestId },
   });
 }
+
+// Public, unauthenticated order-status lookup — token-gated (no auth header).
+// Backend returns 404 for a wrong/missing token OR a nonexistent order (never
+// distinguished, so this client never leaks which one it was).
+export async function getOrderStatus({ orderId, statusToken }) {
+  return request(`/orders/${encodeURIComponent(orderId)}/status?token=${encodeURIComponent(statusToken)}`);
+}

@@ -78,9 +78,12 @@ export default function App() {
   }, []);
 
   // DP Merch: selected product id (for the product-detail screen) and an
-  // optional checkout return ({status:'success'|'cancel', sessionId}) shown
-  // as a top overlay once the (currently unbuilt) Stripe backend redirects
-  // back into the app. See src/merch/merchDeepLinks.js.
+  // optional checkout return ({status:'success'|'cancel'}) shown as a top
+  // overlay when Stripe redirects back into the app via the real
+  // MERCH_CHECKOUT_SUCCESS_URL/MERCH_CHECKOUT_CANCEL_URL
+  // (drunkpigeons://merch/success | drunkpigeons://merch/cancel). Payment is
+  // confirmed by MerchReturnOverlay polling the order-status endpoint, never
+  // by this deep link alone. See src/merch/merchDeepLinks.js.
   const [merchProductId, setMerchProductId] = useState(null);
   const [merchReturn, setMerchReturn] = useState(null);
   useEffect(() => {
@@ -462,7 +465,7 @@ export default function App() {
             isDev={Billing.isDev}
             onBack={() => setScreen('menu')}
             onOpenProduct={(id) => { setMerchProductId(id); setScreen('merchProduct'); }}
-            onDevPreviewReturn={() => setMerchReturn({ status: 'success', sessionId: 'dev-preview', devPreview: true })}
+            onDevPreviewReturn={() => setMerchReturn({ status: 'success', devPreview: true })}
           />
         )}
         {screen === 'merchProduct' && (
@@ -541,7 +544,6 @@ export default function App() {
         <View style={styles.merchReturnOverlay}>
           <MerchReturnOverlay
             status={merchReturn.status}
-            sessionId={merchReturn.sessionId}
             devPreview={merchReturn.devPreview}
             onDone={() => { setMerchReturn(null); setScreen('merch'); }}
           />

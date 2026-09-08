@@ -20,6 +20,7 @@ const KEYS = {
   drunk: 'dp_drunkLevel',
   rulesAccepted: 'dp_rulesAccepted',
   hiddenNames: 'dp_hiddenNames',
+  pendingMerchOrder: 'dp_pendingMerchOrder',
 };
 
 async function getNumber(key, def) {
@@ -150,5 +151,30 @@ export const Persistence = {
   },
   setUnlocked(list) {
     AsyncStorage.setItem(KEYS.unlocked, list.join(',')).catch(() => {});
+  },
+  // Pending DP Merch order (order_id + status_token), stored right before
+  // opening the Stripe Checkout URL so the deep-link return can poll
+  // GET /merch/orders/{id}/status even if the app was fully killed while
+  // the user paid in the external browser.
+  setPendingMerchOrder({ orderId, statusToken }) {
+    try {
+      AsyncStorage.setItem(KEYS.pendingMerchOrder, JSON.stringify({ orderId, statusToken, createdAt: Date.now() })).catch(() => {});
+    } catch {
+      // JSON.stringify can't fail on this plain shape; guarded for safety
+    }
+  },
+  async getPendingMerchOrder() {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.pendingMerchOrder);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.orderId || !parsed.statusToken) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  },
+  clearPendingMerchOrder() {
+    AsyncStorage.removeItem(KEYS.pendingMerchOrder).catch(() => {});
   },
 };

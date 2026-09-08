@@ -6,6 +6,7 @@ import { FONT, COLORS } from '../ui/theme';
 import { Audio } from '../audio/audio';
 import { requestMerchQuote, requestMerchCheckout } from '../merch/checkoutClient';
 import { formatMinor } from '../merch/products';
+import { Persistence } from '../storage/persistence';
 
 const VIEWS = [
   { key: 'front', label: 'FRONT' },
@@ -86,6 +87,11 @@ export default function MerchProductScreen({ product, onBack }) {
     const res = await requestMerchCheckout({ quoteId: activeQuote.id, contactEmail: email.trim() });
     setCheckoutBusy(false);
     if (res.ok && res.checkoutUrl) {
+      // Stored BEFORE opening Stripe so the deep-link return can poll order
+      // status even if the app is fully killed while the user pays in the
+      // external browser (see Persistence.getPendingMerchOrder in
+      // MerchReturnOverlay.js). Never logged — status_token stays local-only.
+      Persistence.setPendingMerchOrder({ orderId: res.orderId, statusToken: res.statusToken });
       Linking.openURL(res.checkoutUrl);
       return;
     }

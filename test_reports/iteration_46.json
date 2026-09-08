@@ -1,0 +1,29 @@
+{
+  "summary": "Verified DP Merch order-status polling + deep-link return patch. All 5 UI flows and the direct 404 curl check pass. No regressions on Main Menu or merch storefront. Backend order-status endpoint returns real 404 as documented. No console.log leaks of status_token/checkoutUrl in changed files.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "tests_performed": [
+    "curl GET /api/merch/orders/any-fake-id/status?token=any-fake-token -> HTTP 404 {\"detail\":\"Order not found.\"} (PASS)",
+    "Main Menu regression: DRUNK PIGEONS, MERCH, PLAY, PIGEONS, LEADERBOARD, drunkness slider, manor tiles all render (PASS)",
+    "Full merch flow: MERCH -> 5 product list -> The Fancy Hoodie detail -> size S -> live quote (Subtotal £85, Shipping £4.99, Total £89.99) -> email entered -> BUY NOW -> 'Checkout is temporarily unavailable — please check back soon.' shown (503, PASS). window.localStorage['dp_pendingMerchOrder'] === null after 503 (PASS: no stray pending order on failure)",
+    "Seeded LS with fake {orderId, statusToken}, navigated to /?merch_status=success&order_id=fake-order-id: real 404 from backend, UI resolves to merch-return-unavailable ('WE CAN'T CONFIRM THIS RIGHT NOW' + support@intiesltd.com message), no raw 404/stack trace, no 'ORDER CONFIRMED' shown, localStorage cleared (PASS)",
+    "BACK TO STORE (merch-return-done) from unavailable state returns cleanly to merch store screen, no overlay leftover, no crash (PASS)",
+    "DEV: PREVIEW ORDER-CONFIRMED SCREEN (merch-dev-preview-return) shows merch-return-confirmed instantly with 'DEV PREVIEW — NOT A REAL ORDER' tag and no API calls (PASS). BACK TO STORE from this state also works (PASS)",
+    "?merch_status=cancel with no pending LS shows merch-return-unavailable (correct: nothing to poll) (PASS)",
+    "Code grep: no console.log in merchApi.js, checkoutClient.js, MerchProductScreen.js, MerchReturnOverlay.js, persistence.js, merchDeepLinks.js (PASS)"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: In MerchReturnOverlay.js line 53, if payment_status stays 'pending' AND deep-link status==='cancel', the code short-circuits to 'cancelled' after the first poll — behavior matches spec but relies on the poll running at least once for cancel; acceptable given a cancel with a real pending order is a valid state.",
+    "Minor observation: several deprecation console warnings in the app ('shadow*'/'textShadow*'/'pointerEvents') — pre-existing, unrelated to this patch."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "N/A — no auth required",
+  "seed_data_creation": "None persisted. Test 2 seeded window.localStorage.dp_pendingMerchOrder with fake ids; the app itself cleared it during the flow.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Merch order-status + polling deep-link return flow is fully working. Backend /api/merch/checkout-sessions is still a real 503 (Stripe key not configured server-side) — expected. Do not attempt real payments.",
+  "rca of the issue": "No issues found."
+}
