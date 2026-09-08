@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "backgroundColor": "#1b1030",
     "icon": "./assets/icon.png",
+    "scheme": "drunkpigeons",
     "assetBundlePatterns": [
       "**/*"
     ],

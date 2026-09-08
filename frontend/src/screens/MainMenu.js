@@ -35,6 +35,7 @@ export default function MainMenu({
   onLeaderboard,
   onLegal,
   onOpenPurchaseTerms,
+  onMerch,
   drunkStrength = 1,
   drunkLevel = 0.5,
   onSetDrunk,
@@ -215,6 +216,14 @@ export default function MainMenu({
         variant="teal"
         onPress={onLeaderboard}
         style={{ width: '100%', marginTop: 12, marginBottom: 10 }}
+      />
+      <Button
+        testID="merch-button"
+        label="DP MERCH"
+        variant="ghost"
+        small
+        onPress={() => { Audio.ui(); onMerch && onMerch(); }}
+        style={{ width: '100%', marginBottom: 4 }}
       />
       </ScrollView>
 

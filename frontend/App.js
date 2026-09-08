@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, Platform, useWindowDimensions, BackHandler } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions, BackHandler, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,8 +10,13 @@ import GameScreen from './src/screens/GameScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import AdvertiseScreen from './src/screens/AdvertiseScreen';
+import MerchScreen from './src/screens/MerchScreen';
+import MerchProductScreen from './src/screens/MerchProductScreen';
+import MerchReturnOverlay from './src/screens/MerchReturnOverlay';
 import LegalDocumentViewer from './src/legal/LegalDocumentViewer';
 import { getLegalDoc } from './src/legal/legalDocuments';
+import { getMerchProduct } from './src/merch/products';
+import { parseMerchReturn } from './src/merch/merchDeepLinks';
 import { Persistence } from './src/storage/persistence';
 import { LeaderboardAPI, generatePlayerId, GAME_VERSION } from './src/leaderboard/api';
 import { Audio } from './src/audio/audio';
@@ -58,7 +63,7 @@ export default function App() {
       if (/advertise/i.test(p)) return 'advertise';
     }
     return 'menu';
-  }); // menu | game | pigeons | leaderboard | legal | advertise
+  }); // menu | game | pigeons | leaderboard | legal | advertise | merch | merchProduct
   // Legal document overlay (docId) — shown above any screen so opening "Purchase
   // terms" / rules links never resets store/menu/leaderboard state.
   const [legalOverlay, setLegalOverlay] = useState(null);
@@ -72,6 +77,31 @@ export default function App() {
     setNickname('');
   }, []);
 
+  // DP Merch: selected product id (for the product-detail screen) and an
+  // optional checkout return ({status:'success'|'cancel', sessionId}) shown
+  // as a top overlay once the (currently unbuilt) Stripe backend redirects
+  // back into the app. See src/merch/merchDeepLinks.js.
+  const [merchProductId, setMerchProductId] = useState(null);
+  const [merchReturn, setMerchReturn] = useState(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      if (typeof window === 'undefined' || !window.location) return;
+      const url = (window.location.pathname || '') + (window.location.search || '') + (window.location.hash || '');
+      const parsed = parseMerchReturn(url);
+      if (parsed) setMerchReturn(parsed);
+      return;
+    }
+    Linking.getInitialURL().then((url) => {
+      const parsed = parseMerchReturn(url);
+      if (parsed) setMerchReturn(parsed);
+    });
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      const parsed = parseMerchReturn(url);
+      if (parsed) setMerchReturn(parsed);
+    });
+    return () => sub.remove();
+  }, []);
+
   // Phone-landscape guard: show a "rotate to portrait" overlay only on phone-sized
   // landscape (short side < 500). Leaves desktop/tablet alone. Native is already
   // portrait-locked via app.json; this covers mobile web.
@@ -83,14 +113,16 @@ export default function App() {
   // the OS default (exit) only when already on the menu. No-op on web/iOS.
   useEffect(() => {
     const onBack = () => {
+      if (merchReturn) { setMerchReturn(null); return true; }
       if (legalOverlay) { closeLegalDoc(); return true; }
       if (screen === 'advertise') { setScreen('legal'); return true; }
+      if (screen === 'merchProduct') { setMerchProductId(null); setScreen('merch'); return true; }
       if (screen !== 'menu') { setScreen('menu'); return true; }
       return false;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [screen, legalOverlay, closeLegalDoc]);
+  }, [screen, legalOverlay, closeLegalDoc, merchReturn]);
   const [state, setState] = useState({
     bestDistance: 0,
     bestDistanceSilly: 0,
@@ -422,6 +454,21 @@ export default function App() {
             onLeaderboard={() => setScreen('leaderboard')}
             onLegal={() => setScreen('legal')}
             onOpenPurchaseTerms={() => openLegalDoc('purchases')}
+            onMerch={() => setScreen('merch')}
+          />
+        )}
+        {screen === 'merch' && (
+          <MerchScreen
+            isDev={Billing.isDev}
+            onBack={() => setScreen('menu')}
+            onOpenProduct={(id) => { setMerchProductId(id); setScreen('merchProduct'); }}
+            onDevPreviewReturn={() => setMerchReturn({ status: 'success', sessionId: 'dev-preview', devPreview: true })}
+          />
+        )}
+        {screen === 'merchProduct' && (
+          <MerchProductScreen
+            product={getMerchProduct(merchProductId)}
+            onBack={() => { setMerchProductId(null); setScreen('merch'); }}
           />
         )}
         {screen === 'leaderboard' && (
@@ -490,6 +537,16 @@ export default function App() {
           />
         </View>
       )}
+      {merchReturn && (
+        <View style={styles.merchReturnOverlay}>
+          <MerchReturnOverlay
+            status={merchReturn.status}
+            sessionId={merchReturn.sessionId}
+            devPreview={merchReturn.devPreview}
+            onDone={() => { setMerchReturn(null); setScreen('merch'); }}
+          />
+        </View>
+      )}
       <RotateOverlay visible={phoneLandscape} />
     </SafeAreaProvider>
   );
@@ -499,4 +556,5 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
   boot: { flex: 1, backgroundColor: COLORS.bg },
   legalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.bg, zIndex: 80 },
+  merchReturnOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.bg, zIndex: 90 },
 });

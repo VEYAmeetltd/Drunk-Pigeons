@@ -1,0 +1,26 @@
+{
+  "summary": "Focused UI test of new DP Merch storefront (frontend-only). All in-scope flows pass on both 412x915 and 320x568 viewports: merch-button on MainMenu opens store; store shows kicker/headline/subhead/3 badges and all 5 product cards (fancy/king/roadman/business/gym) with £85 prices, real remote hoodie imagery, and 'A NOTE FROM US' section; product screen renders with FRONT/BACK/LEFT/RIGHT view tabs (all switch image), size pills S/M/L/XL/2XL, quantity stepper (clamped 1..9, verified min clamp), and BUY NOW CTA that shows 'SELECT A SIZE' until a size is chosen. Clicking BUY NOW before size selection is a no-op (no notice). After selecting a size, label becomes 'BUY NOW — £85' and clicking it displays merch-checkout-notice text 'Checkout is being connected — check back soon.' without navigating away or claiming success. Back navigation works both levels (product -> store -> menu). Main menu state (best score, pigeons injured) unchanged after visiting merch. No crashes, no page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MerchScreen", "issues": ["3x console error 'Unexpected text node: . A text node cannot be a child of a <View>.' — caused by stray whitespace between `</View>` and `<Text style={styles.subhead}>` on lines 35-36 of MerchScreen.js (the closing </View> is followed by spaces before the next <Text>, which react-native-web treats as a text node child of ScrollView). Non-blocking, but pollutes the console. Fix: move the <Text> to a new line without inline whitespace after </View>."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Trivial cleanup in /app/frontend/src/screens/MerchScreen.js: remove the stray whitespace between `</View>` and `<Text style={styles.subhead}>` on lines 35-36 to eliminate the 3x 'Unexpected text node' console error on react-native-web."
+  ],
+  "critical_code_review_comments": [
+    "checkoutClient.js stub is correctly wired and honest — no fake success, no fabricated URL; matches task's explicit scope.",
+    "MerchProductScreen quantity capped at 9 (Math.min(9, q+1)) — reasonable but undocumented; consider surfacing in UI if it matters commercially.",
+    "MerchScreen has a benign JSX whitespace bug producing console noise (see design_issues)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not in scope)", "frontend": "100% of in-scope merch flows"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Merch storefront/product/checkout-stub is verified end-to-end on 412 and 320 widths. Only remaining item is the cosmetic 'Unexpected text node' console warning from MerchScreen.js lines 35-36 whitespace. Regression smoke on PLAY/PIGEONS/LEADERBOARD not re-run (already done in iterations 42/43 and merch is fully isolated additive code — MainMenu only adds one button; App.js only adds two new screen states; no digital-IAP/gameplay code was touched)."
+}
