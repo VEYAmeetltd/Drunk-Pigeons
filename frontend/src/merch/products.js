@@ -1,9 +1,15 @@
-// DRUNK PIGEONS physical merch catalogue — transcribed verbatim from the live,
-// authoritative website store (https://intiesltd.com/DPmerch) on 2026-09-08.
-// This is a READ-ONLY mirror for display purposes only. Prices, names, sizes,
-// descriptions and images are NOT invented here — do not add products, sizes
-// or variants that don't exist on the website. Product ids are prefixed
-// "merch-" so they can never collide with the digital IAP ids in ../store/products.js.
+// DRUNK PIGEONS physical merch catalogue.
+// COMMERCE-FACING IDENTITY: the backend's product ids (dp-fancy-hoodie,
+// dp-king-hoodie, dp-roadman-hoodie, dp-business-hoodie, dp-gym-hoodie) are
+// the ONE canonical id used everywhere (cart/quote/checkout/testIDs) — there
+// is no second local id system. name/colour/price/currency/sizes are
+// AUTHORITATIVE from the backend (GET /api/merch/products); the backend
+// currently returns image_asset_keys: null for every product, so the real
+// product photography (mirrored verbatim from https://intiesltd.com/DPmerch)
+// stays local and is merged in by id. Taglines/descriptions/features are the
+// same live-website creative copy transcribed previously — not invented.
+import { fetchMerchProducts } from './merchApi';
+
 const IMG_BASE = 'https://intiesltd.com/merch';
 
 function hoodieImages(slug) {
@@ -22,85 +28,108 @@ const HOODIE_FEATURES = [
   'Kangaroo pocket with durable ribbed cuffs and hem',
 ];
 
-const HOODIE_SIZES = ['S', 'M', 'L', 'XL', '2XL'];
+const DELIVERY_NOTE = 'Price excludes delivery. UK delivery is £4.99. International delivery is calculated for your country and shown before you pay.';
 
-const DELIVERY_NOTE = '£85 excluding delivery. UK delivery is £4.99. International delivery is calculated from your country and shown before you pay.';
-
-export const MERCH_PRODUCTS = [
-  {
-    id: 'merch-fancy',
-    name: 'The Fancy Hoodie',
+// Local creative content keyed by the BACKEND product id — everything here
+// is display-only; price/sizes/name/colour always come from the live API.
+const CREATIVE_CONTENT = {
+  'dp-fancy-hoodie': {
     tagline: 'CLASSY. TRASHY. ALWAYS PISSED.',
-    color: 'White',
     fit: 'Relaxed unisex fit',
-    price: 85,
-    priceLabel: '£85',
     description: "Fancy never enters quietly—and neither does this hoodie.\n\nHer full-colour Drunk Pigeons artwork owns the front, while the unapologetic back print finishes the job from across the room. Clean white fabric, loud pink detail and absolutely no interest in blending in.",
     features: HOODIE_FEATURES,
-    sizes: HOODIE_SIZES,
-    deliveryNote: DELIVERY_NOTE,
     images: hoodieImages('fancy'),
   },
-  {
-    id: 'merch-king',
-    name: 'The King Hoodie',
+  'dp-king-hoodie': {
     tagline: 'NOT ELECTED. BARELY UPRIGHT. STILL KING.',
-    color: 'Black',
     fit: 'Relaxed unisex fit',
-    price: 85,
-    priceLabel: '£85',
     description: "Royal authority, questionable decision-making.\n\nThe King takes centre stage in purple and gold against deep black, crowned, sceptred and gloriously unqualified. Turn around and the understated INTIES feather-crown mark signs it off without stealing the throne.",
     features: HOODIE_FEATURES,
-    sizes: HOODIE_SIZES,
-    deliveryNote: DELIVERY_NOTE,
     images: hoodieImages('king'),
   },
-  {
-    id: 'merch-roadman',
-    name: 'The Roadman Hoodie',
+  'dp-roadman-hoodie': {
     tagline: 'NO JOB. NO SHAME. FULL CONFIDENCE.',
-    color: 'Black',
     fit: 'Relaxed unisex fit',
-    price: 85,
-    priceLabel: '£85',
     description: "Roadman doesn't do 9-to-5. He does whatever gets him home with the tin still cold.\n\nBomber jacket, cross-body bag and a beer he's definitely not sharing. The Roadman print owns the front in cool greys and street-grade grime, built for pigeons who consider the corner shop a personality trait.",
     features: HOODIE_FEATURES,
-    sizes: HOODIE_SIZES,
-    deliveryNote: DELIVERY_NOTE,
     images: hoodieImages('roadman'),
   },
-  {
-    id: 'merch-business',
-    name: 'The Business Hoodie',
+  'dp-business-hoodie': {
     tagline: 'SUITED. BOOTED. STILL A DEGENERATE.',
-    color: 'Black',
     fit: 'Relaxed unisex fit',
-    price: 85,
-    priceLabel: '£85',
     description: "Business handles the boardroom exactly how he handles everything else—badly, but with total confidence.\n\nSharp navy suit, briefcase, tie loosened by 9:15am. The Business print anchors the front in boardroom colours for pigeons who talk a big game and still can't answer their emails on time.",
     features: HOODIE_FEATURES,
-    sizes: HOODIE_SIZES,
-    deliveryNote: DELIVERY_NOTE,
     images: hoodieImages('business'),
   },
-  {
-    id: 'merch-gym',
-    name: 'The Gym Hoodie',
+  'dp-gym-hoodie': {
     tagline: 'ZERO GAINS. MAXIMUM DELUSION.',
-    color: 'Black',
     fit: 'Relaxed unisex fit',
-    price: 85,
-    priceLabel: '£85',
     description: "Gym skipped leg day, skipped every day, and still walks around like he owns the place.\n\nGreen tank, a dumbbell he's clearly struggling with, and the face of a pigeon who peaked at the vending machine. The Gym print brings unearned muscle to the front for pigeons who talk protein but live on chips.",
     features: HOODIE_FEATURES,
-    sizes: HOODIE_SIZES,
-    deliveryNote: DELIVERY_NOTE,
     images: hoodieImages('gym'),
   },
+};
+
+// Fixed display order on the storefront (matches the live website drop order).
+const CATALOGUE_ORDER = [
+  'dp-fancy-hoodie',
+  'dp-king-hoodie',
+  'dp-roadman-hoodie',
+  'dp-business-hoodie',
+  'dp-gym-hoodie',
 ];
 
+// Minor units (pence) -> a clean £ label. Drops ".00" so £85.00 reads "£85".
+export function formatMinor(amountMinor, currency) {
+  if (typeof amountMinor !== 'number') return '';
+  const val = amountMinor / 100;
+  const str = Number.isInteger(val) ? String(val) : val.toFixed(2);
+  if ((currency || '').toLowerCase() === 'gbp') return `£${str}`;
+  return `${str} ${(currency || '').toUpperCase()}`;
+}
+
+function mergeProduct(apiProduct) {
+  const creative = CREATIVE_CONTENT[apiProduct.id];
+  if (!creative) return null; // unknown backend product — skip rather than invent content
+  return {
+    id: apiProduct.id,
+    name: apiProduct.name,
+    color: apiProduct.colour,
+    price_minor: apiProduct.price_minor,
+    currency: apiProduct.currency,
+    priceLabel: formatMinor(apiProduct.price_minor, apiProduct.currency),
+    sizes: apiProduct.sizes,
+    tagline: creative.tagline,
+    fit: creative.fit,
+    description: creative.description,
+    features: creative.features,
+    images: creative.images,
+    deliveryNote: DELIVERY_NOTE,
+  };
+}
+
+// In-memory cache of the last successfully-loaded catalogue, keyed by id.
+let _cache = {};
+
+// Fetches the live catalogue, merges in local creative content, and caches
+// it so getMerchProduct(id) can be read synchronously afterwards (used when
+// navigating from the already-loaded store list into a product detail
+// screen). Throws on failure — callers own the loading/error UI.
+export async function loadMerchCatalogue() {
+  const apiProducts = await fetchMerchProducts();
+  const byId = {};
+  apiProducts.forEach((p) => { byId[p.id] = p; });
+  const merged = CATALOGUE_ORDER
+    .map((id) => (byId[id] ? mergeProduct(byId[id]) : null))
+    .filter(Boolean);
+  const next = {};
+  merged.forEach((p) => { next[p.id] = p; });
+  _cache = next;
+  return merged;
+}
+
 export function getMerchProduct(id) {
-  return MERCH_PRODUCTS.find((p) => p.id === id) || null;
+  return _cache[id] || null;
 }
 
 // Store-front hero copy — verbatim from the live website.

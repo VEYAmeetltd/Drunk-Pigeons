@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, BackHandler } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, BackHandler, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import { FONT, COLORS } from '../ui/theme';
 import { Audio } from '../audio/audio';
-import { requestMerchCheckout } from '../merch/checkoutClient';
+import { requestMerchQuote, requestMerchCheckout } from '../merch/checkoutClient';
+import { formatMinor } from '../merch/products';
 
 const VIEWS = [
   { key: 'front', label: 'FRONT' },
@@ -13,14 +14,24 @@ const VIEWS = [
   { key: 'right', label: 'RIGHT' },
 ];
 
-// Mobile product-detail view for one hoodie. Purchase CTA hands off to the
-// separately-implemented Stripe backend via requestMerchCheckout() — DP never
-// invents an endpoint, a Stripe URL, or a card-entry form (see checkoutClient.js).
+const DESTINATION_COUNTRY = 'GB'; // only destination the backend currently returns
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Mobile product-detail view for one hoodie. Fetches an authoritative price
+// quote (POST /merch/quotes) the moment a size is picked, then hands off to
+// the real Stripe backend via requestMerchCheckout() — DP never estimates
+// price client-side and never invents a checkout URL (see checkoutClient.js).
 export default function MerchProductScreen({ product, onBack }) {
   const [view, setView] = useState('front');
   const [size, setSize] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState('');
+  const [quote, setQuote] = useState(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const [quoteError, setQuoteError] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const reqSeq = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
@@ -31,22 +42,63 @@ export default function MerchProductScreen({ product, onBack }) {
     return () => sub.remove();
   }, [onBack]);
 
+  const fetchQuote = useCallback((chosenSize) => {
+    if (!product || !chosenSize) return;
+    const seq = ++reqSeq.current;
+    setQuoteBusy(true);
+    setQuoteError(false);
+    setQuote(null);
+    setNotice('');
+    requestMerchQuote({ productId: product.id, size: chosenSize, quantity: 1, destinationCountry: DESTINATION_COUNTRY })
+      .then((res) => {
+        if (seq !== reqSeq.current) return; // stale response from a size changed mid-flight
+        setQuoteBusy(false);
+        if (res.ok) setQuote(res.quote);
+        else setQuoteError(true);
+      });
+  }, [product]);
+
+  const chooseSize = (s) => {
+    Audio.ui();
+    setSize(s);
+    fetchQuote(s);
+  };
+
   if (!product) return null;
 
+  const isQuoteExpired = () => !quote || (quote.expires_at && new Date(quote.expires_at).getTime() <= Date.now());
+
   const runCheckout = async () => {
-    if (!size || busy) return;
-    setBusy(true);
+    if (!size || checkoutBusy || quoteBusy) return;
+    if (!EMAIL_RE.test(email.trim())) { setNotice('Enter a valid email to continue.'); return; }
+    setCheckoutBusy(true);
     setNotice('');
     Audio.ui();
-    const res = await requestMerchCheckout({ productId: product.id, size, quantity: 1 });
-    setBusy(false);
-    if (!res || !res.ok) {
-      // Honest, on-brand version of the same "checkout being connected" state
-      // the live website itself currently shows — never a fake success, never
-      // a generic crash-y error.
-      setNotice("Checkout is being connected — check back soon.");
+
+    let activeQuote = quote;
+    if (isQuoteExpired()) {
+      const refreshed = await requestMerchQuote({ productId: product.id, size, quantity: 1, destinationCountry: DESTINATION_COUNTRY });
+      if (!refreshed.ok) { setCheckoutBusy(false); setNotice("Couldn't refresh the price — please try again."); return; }
+      activeQuote = refreshed.quote;
+      setQuote(activeQuote);
+    }
+
+    const res = await requestMerchCheckout({ quoteId: activeQuote.id, contactEmail: email.trim() });
+    setCheckoutBusy(false);
+    if (res.ok && res.checkoutUrl) {
+      Linking.openURL(res.checkoutUrl);
+      return;
+    }
+    if (res.reason === 'unavailable') {
+      setNotice('Checkout is temporarily unavailable — please check back soon.');
+    } else if (res.reason === 'network') {
+      setNotice("Can't reach the store right now — check your connection and try again.");
+    } else {
+      setNotice('Something went wrong — please try again.');
     }
   };
+
+  const canBuy = size && quote && !quoteBusy && !checkoutBusy && !quoteError;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom', 'left', 'right']} testID="merch-product-screen">
@@ -90,19 +142,65 @@ export default function MerchProductScreen({ product, onBack }) {
         <Text style={styles.sectionLabel}>CHOOSE YOUR SIZE</Text>
         <View style={styles.sizeRow}>
           {product.sizes.map((s) => (
-            <Pressable key={s} testID={`merch-size-${s}`} onPress={() => { Audio.ui(); setSize(s); }} style={[styles.sizePill, size === s && styles.sizePillActive]}>
+            <Pressable key={s} testID={`merch-size-${s}`} onPress={() => chooseSize(s)} style={[styles.sizePill, size === s && styles.sizePillActive]}>
               <Text style={[styles.sizePillTxt, size === s && styles.sizePillTxtActive]}>{s}</Text>
             </Pressable>
           ))}
         </View>
 
+        {!!size && (
+          <View style={styles.quoteBox} testID="merch-quote-box">
+            {quoteBusy && (
+              <View style={styles.quoteLoading}>
+                <ActivityIndicator size="small" color={COLORS.textDim} />
+                <Text style={styles.quoteLoadingTxt}>Getting your price...</Text>
+              </View>
+            )}
+            {!quoteBusy && quoteError && (
+              <View>
+                <Text style={styles.quoteErrorTxt} testID="merch-quote-error">Couldn't get a price quote — check your connection.</Text>
+                <Button testID="merch-quote-retry" label="RETRY" variant="ghost" small onPress={() => fetchQuote(size)} style={{ marginTop: 10, alignSelf: 'flex-start' }} />
+              </View>
+            )}
+            {!quoteBusy && !quoteError && quote && (
+              <>
+                <View style={styles.quoteRow}>
+                  <Text style={styles.quoteLabel}>Subtotal</Text>
+                  <Text style={styles.quoteValue} testID="merch-quote-subtotal">{formatMinor(quote.subtotal_minor, quote.currency)}</Text>
+                </View>
+                <View style={styles.quoteRow}>
+                  <Text style={styles.quoteLabel}>{quote.shipping.label}</Text>
+                  <Text style={styles.quoteValue} testID="merch-quote-shipping">{formatMinor(quote.shipping.amount_minor, quote.currency)}</Text>
+                </View>
+                <View style={[styles.quoteRow, styles.quoteTotalRow]}>
+                  <Text style={styles.quoteTotalLabel}>Total</Text>
+                  <Text style={styles.quoteTotalValue} testID="merch-quote-total">{formatMinor(quote.total_minor, quote.currency)}</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>YOUR EMAIL (for order confirmation)</Text>
+        <TextInput
+          testID="merch-email-input"
+          style={styles.emailInput}
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          placeholderTextColor="#8a7bb5"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+        />
+
         {!!notice && <Text style={styles.notice} testID="merch-checkout-notice">{notice}</Text>}
 
         <Button
           testID="merch-buy-now"
-          label={busy ? '…' : size ? `BUY NOW — ${product.priceLabel}` : 'SELECT A SIZE'}
-          variant={size ? 'primary' : 'ghost'}
-          disabled={!size || busy}
+          label={checkoutBusy ? '…' : quote ? `BUY NOW — ${formatMinor(quote.total_minor, quote.currency)}` : size ? 'SELECT A SIZE' : 'SELECT A SIZE'}
+          variant={canBuy ? 'primary' : 'ghost'}
+          disabled={!canBuy}
           onPress={runCheckout}
           style={{ width: '100%', marginTop: 18 }}
         />
@@ -140,6 +238,17 @@ const styles = StyleSheet.create({
   sizePillActive: { borderColor: COLORS.yellow },
   sizePillTxt: { fontFamily: FONT, color: COLORS.text, fontSize: 14, fontWeight: '700' },
   sizePillTxtActive: { color: COLORS.yellow },
+  quoteBox: { marginTop: 16, backgroundColor: COLORS.card, borderRadius: 16, padding: 14 },
+  quoteLoading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  quoteLoadingTxt: { fontFamily: FONT, color: COLORS.textDim, fontSize: 13 },
+  quoteErrorTxt: { fontFamily: FONT, color: COLORS.pink, fontSize: 13 },
+  quoteRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  quoteLabel: { fontFamily: FONT, color: COLORS.textDim, fontSize: 13 },
+  quoteValue: { fontFamily: FONT, color: COLORS.text, fontSize: 13, fontWeight: '600' },
+  quoteTotalRow: { marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
+  quoteTotalLabel: { fontFamily: FONT, color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  quoteTotalValue: { fontFamily: FONT, color: COLORS.yellow, fontSize: 17, fontWeight: '700' },
+  emailInput: { fontFamily: FONT, color: COLORS.text, fontSize: 15, backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, minHeight: 44 },
   notice: { fontFamily: FONT, color: COLORS.pink, fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 16 },
   deliveryNote: { fontFamily: FONT, color: COLORS.textDim, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 14, fontStyle: 'italic' },
 });

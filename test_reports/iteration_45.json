@@ -1,0 +1,47 @@
+{
+  "summary": "Full frontend E2E of new live DP Merch storefront wiring against the real Stripe-based merch backend (https://trusted-connect-20.preview.emergentagent.com). All 4 backend endpoints verified via curl, all 8 UI flows verified via Playwright on mobile viewport. Every acceptance criterion in the review request passed. The expected 503 on POST /api/merch/checkout-sessions is rendered cleanly as the branded 'Checkout is temporarily unavailable — please check back soon.' notice with no crash and no fake success URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "backend_verification": {
+    "GET /api/merch/products": "200 — 5 products returned with ids dp-fancy-hoodie, dp-king-hoodie, dp-roadman-hoodie, dp-business-hoodie, dp-gym-hoodie",
+    "GET /api/merch/shipping-destinations": "200 — GB / 'UK Standard Shipping' / 499 minor",
+    "POST /api/merch/quotes (items=[{roadman,L,1}], destination_country=GB)": "200 — subtotal_minor=8500, shipping.amount_minor=499, total_minor=8999, currency=gbp",
+    "POST /api/merch/checkout-sessions (valid quote_id)": "503 with detail 'Merchandise checkout is not configured yet - please try again later.' — EXPECTED per task"
+  },
+  "ui_flow_results": {
+    "MERCH button opens store": "PASS — top-left pink MERCH button navigates to merch-screen",
+    "Live catalogue (5 hoodies at £85)": "PASS — spinner then 5 product cards, price £85 fetched from backend",
+    "Product detail (Roadman) with 4 view tabs": "PASS — front/back/left/right tabs all present and switch image",
+    "Size pick triggers live quote": "PASS — merch-quote-subtotal=£85, merch-quote-shipping=£4.99 (UK Standard Shipping), merch-quote-total=£89.99",
+    "Email validation (empty/invalid) blocks checkout": "PASS — notice 'Enter a valid email to continue.' shown; checkout API not called",
+    "Valid email + 503 handled cleanly": "PASS — notice 'Checkout is temporarily unavailable — please check back soon.' shown; no stack trace; no fake URL",
+    "Size change re-fetches fresh quote": "PASS — changing L→M triggered a new /quotes POST (verified via reqSeq logic + UI update)",
+    "Back navigation store→menu": "PASS — merch-product-back returns to merch-screen; merch-back returns to main menu",
+    "Main menu regression": "PASS visually — Main Menu with DRUNK PIGEONS, PLAY, PIGEONS, LEADERBOARD (via CODE/LEGAL), Drunkness slider, manor tiles incl. Easy Mode £14.99 (locked) all rendered correctly"
+  },
+  "critical_code_review_comments": [
+    "Missing data-testid on MainMenu primary buttons: PLAY, PIGEONS, LEADERBOARD, and the MERCH button itself. Query by data-testid returned 0; had to fall back to text. Recommend adding main-menu-play / main-menu-pigeons / main-menu-leaderboard / main-menu-merch for future regression testability.",
+    "checkoutClient.reason classification: verified 'unavailable' path fires on 503 exactly as intended. No change needed.",
+    "Quote staleness handling in MerchProductScreen (isQuoteExpired + refresh on BUY) is defensively good — no issue.",
+    "Minor: on very small viewports the BUY NOW button initially sits below the fold; user must scroll. Acceptable for a ScrollView layout but worth an anchor/sticky consideration."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, non-blocking) Add data-testid attributes on MainMenu buttons (main-menu-play, main-menu-pigeons, main-menu-leaderboard, main-menu-merch) to strengthen automated regression coverage."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "None required — merch endpoints are unauthenticated in this environment.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Merch wiring is fully green. The 503 on /api/merch/checkout-sessions is the correct steady-state until Stripe key is server-configured; when that changes, re-run the BUY NOW flow and assert the returned checkoutUrl opens via Linking (currently Linking.openURL is called only when res.ok && res.checkoutUrl). Game backend (chip-pigeon) was NOT retested this pass — see iteration_44 and earlier.",
+  "rca of the issue": "N/A — no defects found in this iteration."
+}
