@@ -79,15 +79,28 @@ async function findProduct(productId) {
   return (products || []).find((p) => p && p.identifier === productId) || null;
 }
 
+// A null/undefined/empty productId — or one outside our known 8-product set —
+// must never reach the native RevenueCat bridge (root cause of the crash this
+// guards: com.revenuecat.purchases.hybridcommon.CommonKt.purchaseProduct threw
+// a NullPointerException because a malformed identifier reached it).
+function isKnownProductId(productId) {
+  return typeof productId === 'string' && productId.length > 0 && ALL_PRODUCT_IDS.includes(productId);
+}
+
 // Purchases the EXACT StoreProduct for productId. Grants nothing until
 // CustomerInfo confirms ownership of this exact product identifier — a
 // successful native purchase call alone is never treated as a grant.
 async function purchase(productId) {
   if (!SDK) return { status: 'failed', productId, reason: 'unavailable' };
+  if (!isKnownProductId(productId)) return { status: 'failed', productId, reason: 'invalid-product' };
   try {
     const product = await findProduct(productId);
     if (!product) return { status: 'failed', productId, reason: 'unavailable' };
-    const { customerInfo } = await Purchases.purchaseStoreProduct({ product });
+    // purchaseStoreProduct(product) takes the StoreProduct itself (it carries
+    // .identifier) — it must NEVER be wrapped in an extra { product } object,
+    // which is exactly what caused productIdentifier to arrive as null/undefined
+    // at the native bridge and crash the app on every purchase.
+    const { customerInfo } = await Purchases.purchaseStoreProduct(product);
     const owned = (customerInfo && customerInfo.allPurchasedProductIdentifiers) || [];
     if (owned.includes(productId)) return { status: 'success', productId };
     return { status: 'failed', productId, reason: 'not-confirmed' };

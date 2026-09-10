@@ -41,7 +41,15 @@ function fixture() {
       calls.getProducts.push({ ids, category });
       return ids.filter((id) => catalog[id]).map((id) => catalog[id]);
     },
-    async purchaseStoreProduct({ product }) {
+    // REAL native signature: purchaseStoreProduct(product, ...) takes the
+    // StoreProduct itself as arg 1 (it carries .identifier) — NOT wrapped in
+    // an extra { product } object. Wrapping it is exactly the historical bug
+    // (productIdentifier arrived null at the native bridge and crashed the
+    // app) — this fixture intentionally mirrors the real SDK contract so that
+    // regression can never silently reappear.
+    async purchaseStoreProduct(product) {
+      assert.ok(product && typeof product === 'object' && !('product' in product),
+        'purchaseStoreProduct must receive the flat StoreProduct, never a { product } wrapper');
       calls.purchase.push(product.identifier);
       if (nextPurchaseError) { const e = nextPurchaseError; nextPurchaseError = null; throw e; }
       customerInfo = { allPurchasedProductIdentifiers: [...customerInfo.allPurchasedProductIdentifiers, product.identifier] };
@@ -125,7 +133,59 @@ function fixture() {
   assert.deepEqual(f.calls.purchase, [], 'an unavailable product is never sent to purchaseStoreProduct');
 }
 
-// 7. Restore maps all eight product IDs correctly (and ignores unrelated ids).
+// 7. CRASH REGRESSION GUARD: every one of the 8 known DP product IDs purchases
+// successfully and reaches purchaseStoreProduct as the flat StoreProduct (not a
+// { product } wrapper) — this is the exact bug that crashed the app with
+// "Parameter specified as non-null is null: ...CommonKt.purchaseProduct,
+// parameter productIdentifier" on EVERY purchase.
+{
+  for (const id of ALL_IDS) {
+    const f = fixture();
+    f.setProduct(id, '£1.99');
+    const res = await f.provider.purchase(id);
+    assert.deepEqual(res, { status: 'success', productId: id }, `purchase(${id}) must succeed`);
+    assert.deepEqual(f.calls.purchase, [id], `purchaseStoreProduct must receive the exact identifier for ${id}`);
+  }
+}
+
+// 8. null/undefined/empty productId must NEVER reach getProducts or
+// purchaseStoreProduct — fails closed with a safe 'invalid-product' reason.
+{
+  for (const bad of [null, undefined, '', '   ']) {
+    const f = fixture();
+    const res = await f.provider.purchase(bad);
+    assert.deepEqual(res, { status: 'failed', productId: bad, reason: 'invalid-product' },
+      `purchase(${JSON.stringify(bad)}) must fail closed without touching the native bridge`);
+    assert.deepEqual(f.calls.getProducts, [], 'invalid productId must never call getProducts');
+    assert.deepEqual(f.calls.purchase, [], 'invalid productId must never call purchaseStoreProduct');
+  }
+}
+
+// 9. A productId outside the known 8-product set must never reach the native
+// bridge either (e.g. a typo'd id or an id belonging to a different app).
+{
+  const f = fixture();
+  const res = await f.provider.purchase('com.someother.app.product');
+  assert.deepEqual(res, { status: 'failed', productId: 'com.someother.app.product', reason: 'invalid-product' });
+  assert.deepEqual(f.calls.getProducts, [], 'unknown productId must never call getProducts');
+  assert.deepEqual(f.calls.purchase, [], 'unknown productId must never call purchaseStoreProduct');
+}
+
+// 10. Native rejection (e.g. a thrown platform/NPE-style error) is caught and
+// normalized to a 'failed' status — it must never propagate/throw out of
+// purchase() and crash the caller.
+{
+  const f = fixture();
+  f.setProduct(PRODUCTS.pigeons.fancy, '£1.99');
+  f.failNextPurchaseWith(new TypeError('Parameter specified as non-null is null: productIdentifier'));
+  let threw = false;
+  let res;
+  try { res = await f.provider.purchase(PRODUCTS.pigeons.fancy); } catch { threw = true; }
+  assert.equal(threw, false, 'a native rejection must never throw out of purchase()');
+  assert.deepEqual(res, { status: 'failed', productId: PRODUCTS.pigeons.fancy });
+}
+
+// 11. Restore maps all eight product IDs correctly (and ignores unrelated ids).
 {
   const f = fixture();
   f.setCustomerInfo({ allPurchasedProductIdentifiers: [...ALL_IDS, 'some.other.apps.product'] });
@@ -134,7 +194,7 @@ function fixture() {
   assert.equal(f.calls.restore, 1);
 }
 
-// 8. Release builds cannot use the dev simulator — the controller only wires the
+// 12. Release builds cannot use the dev simulator — the controller only wires the
 // real provider for Android RELEASE builds; dev/other-platform init() is a no-op.
 {
   const controllerSource = readFileSync(new URL('../revenuecat.js', import.meta.url), 'utf8');
