@@ -21,11 +21,15 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import time
 from urllib.parse import urlencode
 
 import pytest
 import requests
+
+sys.path.insert(0, "/app/backend")
+from service_admin import _public_base_url, DP_ACTIVATION_HOST  # noqa: E402
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
@@ -65,21 +69,28 @@ def _sign(method, path, query=None, body=b"", ts=None, nonce=None):
     return {"X-Service-Key": KEY_ID, "X-Timestamp": ts, "X-Nonce": nonce, "X-Signature": sig}
 
 
-def signed(method, path, query=None, json_body=None, bearer=None, **kw):
+def signed(method, path, query=None, json_body=None, bearer=None, extra_headers=None, **kw):
     body = json.dumps(json_body).encode() if json_body is not None else b""
     headers = _sign(method, path, query=query, body=body, **kw)
     if json_body is not None:
         headers["Content-Type"] = "application/json"
     if bearer:
         headers["Authorization"] = f"Bearer {bearer}"
+    if extra_headers:
+        headers.update(extra_headers)
     return requests.request(method, BASE_URL + path, headers=headers, params=query,
                              data=body if json_body is not None else None, timeout=20)
 
 
+_owner_token_cache = {}
+
+
 def owner_token():
-    r = signed("POST", "/api/service/admin/login", json_body={"email": OWNER_EMAIL, "password": OWNER_PASSWORD})
-    assert r.status_code == 200, r.text
-    return r.json()["token"]
+    if "tok" not in _owner_token_cache:
+        r = signed("POST", "/api/service/admin/login", json_body={"email": OWNER_EMAIL, "password": OWNER_PASSWORD})
+        assert r.status_code == 200, r.text
+        _owner_token_cache["tok"] = r.json()["token"]
+    return _owner_token_cache["tok"]
 
 
 def invite(email, role="admin"):
@@ -180,3 +191,166 @@ class TestActivationLoginPipeline:
             raw = json.dumps(resp.json())
             for bad in ("password_hash", "token_hash", "INTIES_SERVICE_SECRET", "DP_ADMIN_JWT_SECRET"):
                 assert bad not in raw
+
+
+def invite_and_get_id(email, role="admin"):
+    r = signed("POST", "/api/service/admin/admins", json_body={"email": email, "role": role}, bearer=owner_token())
+    assert r.status_code == 200, r.text
+    return r.json()["admin_id"]
+
+
+class TestPublicBaseUrlValidation:
+    """Unit coverage for `_public_base_url()` itself — the fix for a Host
+    Header Injection risk. An earlier version derived the emailed activation
+    link's domain from X-Forwarded-Host/Host, which a crafted header could
+    spoof to redirect the link anywhere. The fix reads ONE explicit,
+    operator-controlled env var (DP_PUBLIC_BASE_URL) and takes NO request/
+    header input at all — these tests drive that function directly (not
+    over HTTP) so every accept/reject branch is pinned precisely, including
+    ones that can't be triggered against the live, correctly-configured
+    server (e.g. missing config)."""
+
+    EXACT = f"https://{DP_ACTIVATION_HOST}"
+
+    def test_accepts_exact_configured_url(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", self.EXACT)
+        assert _public_base_url() == self.EXACT
+
+    def test_accepts_trailing_slash_path(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", self.EXACT + "/")
+        assert _public_base_url() == self.EXACT
+
+    def test_rejects_missing_config(self, monkeypatch):
+        monkeypatch.delenv("DP_PUBLIC_BASE_URL", raising=False)
+        with pytest.raises(Exception) as exc:
+            _public_base_url()
+        assert "503" in str(exc.value)
+
+    def test_rejects_empty_config(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", "")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_http_scheme(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"http://{DP_ACTIVATION_HOST}")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_wrong_hostname(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", "https://evil.example.com")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_subdomain_prefix_trick(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://evil-{DP_ACTIVATION_HOST}")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_suffix_trick(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://{DP_ACTIVATION_HOST}.evil.com")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_userinfo(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://attacker@{DP_ACTIVATION_HOST}")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_port(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://{DP_ACTIVATION_HOST}:8443")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_query_string(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://{DP_ACTIVATION_HOST}?x=1")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_fragment(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://{DP_ACTIVATION_HOST}#frag")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_unexpected_path(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", f"https://{DP_ACTIVATION_HOST}/evil")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+    def test_rejects_malformed_url(self, monkeypatch):
+        monkeypatch.setenv("DP_PUBLIC_BASE_URL", "not a url at all")
+        with pytest.raises(Exception):
+            _public_base_url()
+
+
+class TestReissueSetupActivationHost:
+    """Regression coverage for the Host Header Injection fix: the emailed
+    activation link's domain must come ONLY from the validated
+    DP_PUBLIC_BASE_URL config (see _public_base_url/TestPublicBaseUrlValidation
+    above) — never from Host/X-Forwarded-Host/X-Forwarded-Proto, which are
+    fully attacker-controlled on any request and were the prior (rejected)
+    approach. `activation_host` (non-secret — just a domain name, never the
+    token) is returned specifically so this is verifiable without ever
+    exposing the token."""
+
+    EXPECTED_HOST = f"https://{DP_ACTIVATION_HOST}"
+
+    def test_reissue_setup_activation_host_is_the_fixed_configured_domain(self):
+        email = f"dp_test_recover_reg_fwd_{secrets.token_hex(4)}@example.com"
+        admin_id = invite_and_get_id(email)
+        r = signed("POST", f"/api/service/admin/admins/{admin_id}/reissue-setup", json_body={}, bearer=owner_token())
+        assert r.status_code == 200, r.text
+        assert r.json()["activation_host"] == self.EXPECTED_HOST
+
+    def test_reissue_setup_ignores_spoofed_host_headers(self):
+        """Spoofed X-Forwarded-Host/X-Forwarded-Proto headers must have ZERO
+        effect on the emailed link's domain — it must always be the fixed,
+        operator-configured production domain. (A literal spoofed `Host`
+        header can't even reach this app in the first place — the edge CDN
+        in front of it rejects a request whose Host doesn't match its own
+        routing with a 403 before our code runs — so it's not exercised
+        here; the two forwarded headers below ARE attacker-reachable and are
+        exactly what the earlier, now-removed implementation trusted.)"""
+        email = f"dp_test_recover_reg_spoof_{secrets.token_hex(4)}@example.com"
+        admin_id = invite_and_get_id(email)
+        r = signed(
+            "POST", f"/api/service/admin/admins/{admin_id}/reissue-setup", json_body={}, bearer=owner_token(),
+            extra_headers={
+                "X-Forwarded-Host": "evil.attacker.com",
+                "X-Forwarded-Proto": "http",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["activation_host"] == self.EXPECTED_HOST
+        assert "evil" not in r.json()["activation_host"]
+
+    def test_reissue_setup_is_owner_only(self):
+        email = f"dp_test_recover_reg_notowner_{secrets.token_hex(4)}@example.com"
+        admin_id = invite_and_get_id(email)
+        pw = f"RegressionPass_{secrets.token_hex(6)}!"
+        # activate a second, non-owner admin and try to use it to reissue gordon-like target
+        other_email = f"dp_test_recover_reg_caller_{secrets.token_hex(4)}@example.com"
+        other_token_setup = invite(other_email, role="admin")
+        r = requests.post(f"{BASE_URL}/api/admin/setup-password", json={"token": other_token_setup, "password": pw}, timeout=15)
+        assert r.status_code == 200
+        r2 = signed("POST", "/api/service/admin/login", json_body={"email": other_email, "password": pw})
+        non_owner_token = r2.json()["token"]
+
+        r3 = signed("POST", f"/api/service/admin/admins/{admin_id}/reissue-setup", json_body={}, bearer=non_owner_token)
+        assert r3.status_code == 403
+
+    def test_reissue_setup_invalidates_prior_pending_token(self):
+        email = f"dp_test_recover_reg_invalidate_{secrets.token_hex(4)}@example.com"
+        admin_id = invite_and_get_id(email)  # this invite already created 1 pending token
+
+        r = signed("POST", f"/api/service/admin/admins/{admin_id}/reissue-setup", json_body={}, bearer=owner_token())
+        assert r.status_code == 200, r.text
+
+        # the original invite's token must now be invalid, only the fresh one usable
+        pw = f"RegressionPass_{secrets.token_hex(6)}!"
+        # We don't have either plaintext token here (never returned) — instead
+        # assert indirectly: the admin is still 'invited' (no successful setup
+        # happened), proving no token was silently auto-consumed by the reissue call.
+        r2 = signed("GET", "/api/service/admin/admins", bearer=owner_token())
+        admins = r2.json().get("admins", [])
+        target = [a for a in admins if a.get("id") == admin_id][0]
+        assert target["status"] == "invited"

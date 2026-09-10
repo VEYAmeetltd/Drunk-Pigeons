@@ -16,6 +16,8 @@ secrets, artwork storage paths. See
 /app/docs/INTIES_DRUNK_PIGEONS_INTEGRATION_CONTRACT.md for the full contract.
 """
 from datetime import datetime, timezone
+import os
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 
@@ -109,6 +111,38 @@ async def revoke_admin(admin_id: str, request: Request, admin=Depends(require_dp
     return {"ok": True, "status": "revoked"}
 
 
+DP_ACTIVATION_HOST = "chip-pigeon.emergent.host"
+
+
+def _public_base_url() -> str:
+    """Activation links must NEVER be derived from a request's Host or
+    X-Forwarded-Host — trusting either is a host-header-injection risk (a
+    crafted header could redirect the emailed link anywhere). Instead this
+    reads ONE explicitly validated, non-secret config value and fails closed
+    (503) if it's missing or not EXACTLY `https://chip-pigeon.emergent.host`
+    with no userinfo/port/query/fragment/unexpected path. No request/header
+    input of any kind participates in this decision."""
+    raw = (os.environ.get("DP_PUBLIC_BASE_URL") or "").strip()
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        parsed = None
+    valid = bool(
+        parsed
+        and parsed.scheme == "https"
+        and parsed.hostname == DP_ACTIVATION_HOST
+        and parsed.port is None
+        and not parsed.username
+        and not parsed.password
+        and not parsed.query
+        and not parsed.fragment
+        and parsed.path in ("", "/")
+    )
+    if not valid:
+        raise HTTPException(status_code=503, detail="Activation base URL is not configured correctly.")
+    return f"https://{DP_ACTIVATION_HOST}"
+
+
 @router.post("/admins/{admin_id}/reissue-setup")
 async def reissue_admin_setup(admin_id: str, request: Request, admin=Depends(require_dp_admin("owner")),
                                _auth=Depends(require_service_auth)):
@@ -117,8 +151,9 @@ async def reissue_admin_setup(admin_id: str, request: Request, admin=Depends(req
     every pending token + any live session for the target, issues one fresh
     single-use token, and emails the setup link via Resend — the plaintext token
     NEVER leaves this process: it is not returned in this response, not logged.
-    The link's host is derived from THIS request so it always points at whichever
-    environment actually served the call (never a hardcoded/stale base URL)."""
+    The link's host comes ONLY from the validated DP_PUBLIC_BASE_URL config
+    (see _public_base_url) — never Host/X-Forwarded-Host."""
+    base_url = _public_base_url()  # fail closed BEFORE touching any token/DB state
     db = request.app.state.db
     target = await db.dp_admins.find_one({"id": admin_id})
     if not target:
@@ -143,7 +178,7 @@ async def reissue_admin_setup(admin_id: str, request: Request, admin=Depends(req
     if not token:
         raise HTTPException(status_code=404, detail="Not found")
 
-    link = f"{str(request.base_url).rstrip('/')}/api/admin/setup?token={token}"
+    link = f"{base_url}/api/admin/setup?token={token}"
     html = (
         "<div style=\"font-family:sans-serif;max-width:480px;margin:0 auto;\">"
         "<h2 style=\"color:#3a0620;\">Drunk Pigeons \u2014 account access</h2>"
@@ -157,9 +192,13 @@ async def reissue_admin_setup(admin_id: str, request: Request, admin=Depends(req
     await log_event(
         db, "dp_admin_recovery_email_sent" if result.get("ok") else "dp_admin_recovery_email_failed",
         actor=f"admin:{admin['id']}", target=admin_id,
-        detail={"email": target["email"], "provider": "resend", "ok": result.get("ok")},
+        detail={"email": target["email"], "provider": "resend", "ok": result.get("ok"), "activation_host": base_url},
     )
-    return {"ok": bool(result.get("ok")), "email": target["email"], "expires_at": expires_at.isoformat()}
+    # activation_host is the public domain the link points to (not a secret) —
+    # returned so a caller can immediately verify it matches the intended
+    # public domain, without ever exposing the token/path.
+    return {"ok": bool(result.get("ok")), "email": target["email"], "expires_at": expires_at.isoformat(),
+            "activation_host": base_url}
 
 # ---------------- tickets ----------------
 
