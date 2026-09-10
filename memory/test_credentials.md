@@ -40,6 +40,15 @@ per owner's scope correction. There is no admin frontend and no admin password a
   email and sets their own password via the link.
 - RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_REPLY_TO / PUBLIC_API_BASE_URL
   are configured in backend/.env (owner-provided) -- values not repeated here.
+- 2026-09-10 (later): a SECOND, corrected recovery run was performed directly
+  against the DEPLOYED production database (https://chip-pigeon.emergent.host)
+  via the new owner-only `POST /api/service/admin/admins/{id}/reissue-setup`
+  endpoint — NOT against preview. gordon@intiesltd.com's prior preview-only
+  activation was never synced to production (deploys don't copy DB data).
+  A fresh single-use token (24h expiry) was generated on the deployed DB,
+  hash-only stored, and emailed via the deployed environment's own Resend
+  config. Plaintext token/link never printed/logged. Status remains `invited`
+  in production until gordon opens that email and completes activation.
 - There is no default/shared password for any other DP admin — new admins are
   invited via `POST /api/service/admin/admins` (OWNER-only), which returns a
   single-use setup token (24h expiry) to complete via the PUBLIC, token-gated

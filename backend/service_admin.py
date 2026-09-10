@@ -108,6 +108,59 @@ async def revoke_admin(admin_id: str, request: Request, admin=Depends(require_dp
     await log_event(db, "dp_admin_revoked", actor=f"admin:{admin['id']}", target=admin_id)
     return {"ok": True, "status": "revoked"}
 
+
+@router.post("/admins/{admin_id}/reissue-setup")
+async def reissue_admin_setup(admin_id: str, request: Request, admin=Depends(require_dp_admin("owner")),
+                               _auth=Depends(require_service_auth)):
+    """OWNER-only account-recovery action for an EXISTING admin/owner (lost/expired
+    setup link, forgotten access before ever completing setup, etc). Invalidates
+    every pending token + any live session for the target, issues one fresh
+    single-use token, and emails the setup link via Resend — the plaintext token
+    NEVER leaves this process: it is not returned in this response, not logged.
+    The link's host is derived from THIS request so it always points at whichever
+    environment actually served the call (never a hardcoded/stale base URL)."""
+    db = request.app.state.db
+    target = await db.dp_admins.find_one({"id": admin_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    from owner_recovery import reissue_setup_token
+    import email_service
+
+    # Fail closed BEFORE generating/invalidating any token if email delivery
+    # isn't configured on THIS running environment — never leave a fresh
+    # single-use credential undeliverable, and never silently invalidate the
+    # target's existing tokens for nothing.
+    missing = []
+    if not email_service.resend.api_key:
+        missing.append("RESEND_API_KEY")
+    if not email_service.FROM_EMAIL:
+        missing.append("RESEND_FROM_EMAIL")
+    if missing:
+        raise HTTPException(status_code=503, detail=f"Email delivery not configured: missing {', '.join(missing)}")
+
+    _, token, expires_at = await reissue_setup_token(db, target["email"], actor=f"admin:{admin['id']}")
+    if not token:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    link = f"{str(request.base_url).rstrip('/')}/api/admin/setup?token={token}"
+    html = (
+        "<div style=\"font-family:sans-serif;max-width:480px;margin:0 auto;\">"
+        "<h2 style=\"color:#3a0620;\">Drunk Pigeons \u2014 account access</h2>"
+        "<p>An owner-approved request was made to (re)issue your Drunk Pigeons admin setup link.</p>"
+        f"<p><a href=\"{link}\" style=\"background:#ff5fa2;color:#3a0620;padding:12px 22px;"
+        "border-radius:24px;text-decoration:none;font-weight:bold;\">Set your password</a></p>"
+        f"<p>This link is single-use and expires in 24 hours (by {expires_at.strftime('%Y-%m-%d %H:%M UTC')}).</p>"
+        "<p>If you didn't expect this, contact support@intiesltd.com immediately.</p></div>"
+    )
+    result = await email_service.send_email(target["email"], "Drunk Pigeons — Set up your admin access", html)
+    await log_event(
+        db, "dp_admin_recovery_email_sent" if result.get("ok") else "dp_admin_recovery_email_failed",
+        actor=f"admin:{admin['id']}", target=admin_id,
+        detail={"email": target["email"], "provider": "resend", "ok": result.get("ok")},
+    )
+    return {"ok": bool(result.get("ok")), "email": target["email"], "expires_at": expires_at.isoformat()}
+
 # ---------------- tickets ----------------
 
 @router.get("/tickets")

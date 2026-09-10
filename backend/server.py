@@ -252,6 +252,13 @@ async def health():
     return {"status": "ok", "moderation": MOD_VERSION}
 
 
+@app.get("/health")
+async def health_root():
+    """Plain, unprefixed health check for the platform's own deploy-time probe
+    (separate from the ingress-routed /api/health used by everything else)."""
+    return {"status": "ok"}
+
+
 @app.get("/api/leaderboard/check")
 async def check_name(nickname: str = "", playerId: str | None = None):
     """Live availability check for the name picker. Read-only, never writes.
