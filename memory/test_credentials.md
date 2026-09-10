@@ -47,8 +47,15 @@ per owner's scope correction. There is no admin frontend and no admin password a
   activation was never synced to production (deploys don't copy DB data).
   A fresh single-use token (24h expiry) was generated on the deployed DB,
   hash-only stored, and emailed via the deployed environment's own Resend
-  config. Plaintext token/link never printed/logged. Status remains `invited`
-  in production until gordon opens that email and completes activation.
+  config. Plaintext token/link never printed/logged.
+- 2026-09 (final): a Host Header Injection risk in the activation-link
+  generation was fixed (strict `DP_PUBLIC_BASE_URL` env validation, no
+  Host/X-Forwarded-Host trust) and deployed. gordon@intiesltd.com then
+  completed activation HIMSELF, self-service, by correcting the hostname on
+  his own original emailed link and submitting it in his own browser — no
+  agent ever saw, requested, or stored his token, activation URL, or
+  password. Production owner account is now ACTIVE. No admin password for
+  production is known to any agent or file, by design.
 - There is no default/shared password for any other DP admin — new admins are
   invited via `POST /api/service/admin/admins` (OWNER-only), which returns a
   single-use setup token (24h expiry) to complete via the PUBLIC, token-gated
