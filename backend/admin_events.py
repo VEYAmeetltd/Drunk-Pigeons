@@ -12,6 +12,7 @@ EVENT_TYPES = {
     "dp_admin_invited", "dp_admin_setup_completed", "dp_admin_setup_failed",
     "dp_admin_enabled", "dp_admin_disabled", "dp_admin_revoked",
     "dp_admin_login_success", "dp_admin_login_failed",
+    "dp_admin_recovery_issued", "dp_admin_recovery_email_sent", "dp_admin_recovery_email_failed",
     "ticket_created", "ticket_resolved", "ticket_note",
     "service_auth_failure",
 }

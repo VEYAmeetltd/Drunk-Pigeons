@@ -27,7 +27,9 @@ from datetime import datetime, timezone, timedelta
 
 import bcrypt
 import jwt
+from pymongo import ReturnDocument
 from fastapi import Request, HTTPException, Header, APIRouter
+from fastapi.responses import HTMLResponse
 
 from admin_events import log_event
 from advertising import rate_limit, client_ip
@@ -194,9 +196,17 @@ async def setup_password(request: Request):
 
     db = request.app.state.db
     now = datetime.now(timezone.utc)
-    row = await db.dp_admin_setup_tokens.find_one({"token_hash": hash_token(token)})
+    # Atomic claim: the used:False filter + used:True update happen as one Mongo
+    # operation, so two concurrent requests with the same valid token can never
+    # both succeed — only the first to reach Mongo gets the BEFORE document back,
+    # every later caller (even microseconds later) gets None here.
+    row = await db.dp_admin_setup_tokens.find_one_and_update(
+        {"token_hash": hash_token(token), "used": False},
+        {"$set": {"used": True}},
+        return_document=ReturnDocument.BEFORE,
+    )
     expires_at = row["expires_at"].replace(tzinfo=timezone.utc) if row and row.get("expires_at") else None
-    if not row or row.get("used") or not expires_at or expires_at < now:
+    if not row or not expires_at or expires_at < now:
         await log_event(db, "dp_admin_setup_failed", actor="anonymous", ip=ip)
         raise HTTPException(status_code=400, detail="Invalid or expired setup link.")
     admin = await db.dp_admins.find_one({"id": row["admin_id"]})
@@ -207,6 +217,73 @@ async def setup_password(request: Request):
         {"id": admin["id"]},
         {"$set": {"password_hash": hash_password(password), "status": "active"}},
     )
-    await db.dp_admin_setup_tokens.update_one({"_id": row["_id"]}, {"$set": {"used": True}})
     await log_event(db, "dp_admin_setup_completed", actor=f"admin:{admin['id']}", target=admin["id"], ip=ip)
     return {"ok": True, "email": admin["email"]}
+
+
+# ---------------- setup-link landing page (static, no server-side token echo) ----------------
+# The token lives only in the URL query string and is read client-side via
+# window.location.search — it is never reflected into the HTML by the server,
+# so there is no injection surface. The page just POSTs to the existing
+# /api/admin/setup-password endpoint above; all real validation stays there.
+_SETUP_PAGE_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Drunk Pigeons · Admin account setup</title>
+<style>
+body{background:#120b1e;color:#f4eefc;font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+  display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px;}
+.card{max-width:380px;width:100%;background:#1c1330;border-radius:20px;padding:28px;}
+h1{font-size:20px;margin:0 0 6px;color:#ffd23f;}
+p{font-size:13px;color:#c7b8e6;line-height:1.5;}
+input{width:100%;box-sizing:border-box;padding:12px 14px;margin-top:12px;border-radius:12px;
+  border:1px solid #3a2a5c;background:#241a3d;color:#f4eefc;font-size:15px;}
+button{width:100%;margin-top:18px;padding:13px;border:none;border-radius:24px;background:#ff5fa2;
+  color:#3a0620;font-weight:700;font-size:15px;cursor:pointer;}
+button:disabled{opacity:0.5;cursor:default;}
+#msg{margin-top:14px;font-size:13px;}
+.ok{color:#5fe3b3;} .err{color:#ff5fa2;}
+</style></head>
+<body><div class="card">
+<h1>Set your password</h1>
+<p>Choose a password to activate your Drunk Pigeons admin account. This link can only be used once.</p>
+<input id="pw" type="password" placeholder="New password (min 12 characters)" autocomplete="new-password"/>
+<input id="pw2" type="password" placeholder="Confirm password" autocomplete="new-password"/>
+<button id="btn">SET PASSWORD</button>
+<div id="msg"></div>
+</div>
+<script>
+var token = new URLSearchParams(window.location.search).get('token') || '';
+document.getElementById('btn').addEventListener('click', async function () {
+  var pw = document.getElementById('pw').value;
+  var pw2 = document.getElementById('pw2').value;
+  var msg = document.getElementById('msg');
+  var btn = document.getElementById('btn');
+  msg.className = ''; msg.textContent = '';
+  if (!token) { msg.className = 'err'; msg.textContent = 'Missing setup token in link.'; return; }
+  if (pw.length < 12) { msg.className = 'err'; msg.textContent = 'Password must be at least 12 characters.'; return; }
+  if (pw !== pw2) { msg.className = 'err'; msg.textContent = "Passwords don't match."; return; }
+  btn.disabled = true; btn.textContent = 'SETTING...';
+  try {
+    var res = await fetch('/api/admin/setup-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, password: pw }),
+    });
+    var data = await res.json();
+    if (res.ok && data.ok) {
+      msg.className = 'ok'; msg.textContent = 'Password set for ' + data.email + '. You can now log in.';
+      btn.textContent = 'DONE';
+    } else {
+      msg.className = 'err'; msg.textContent = data.detail || 'That link is invalid or has expired.';
+      btn.disabled = false; btn.textContent = 'SET PASSWORD';
+    }
+  } catch (e) {
+    msg.className = 'err'; msg.textContent = 'Network error — please try again.';
+    btn.disabled = false; btn.textContent = 'SET PASSWORD';
+  }
+});
+</script></body></html>"""
+
+
+@router.get("/setup", response_class=HTMLResponse)
+async def setup_page():
+    return HTMLResponse(_SETUP_PAGE_HTML)

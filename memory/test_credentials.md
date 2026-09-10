@@ -31,6 +31,15 @@ per owner's scope correction. There is no admin frontend and no admin password a
   - email: dp_test_owner@example.com
   - password: DpTestFixtureOwner_2026!
   - role: owner, status: active
+- 2026-09-10: gordon@intiesltd.com (real production OWNER) account recovery
+  completed. A fresh single-use setup token (24h expiry) was generated
+  server-side and emailed via Resend directly to gordon@intiesltd.com. The
+  plaintext token/link was never printed, logged, or written to any file
+  (including this one) -- only Resend's send-confirmation (ok:true + message
+  id) was observed. Account status is `invited` until the owner opens that
+  email and sets their own password via the link.
+- RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_REPLY_TO / PUBLIC_API_BASE_URL
+  are configured in backend/.env (owner-provided) -- values not repeated here.
 - There is no default/shared password for any other DP admin — new admins are
   invited via `POST /api/service/admin/admins` (OWNER-only), which returns a
   single-use setup token (24h expiry) to complete via the PUBLIC, token-gated
