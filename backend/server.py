@@ -209,6 +209,9 @@ async def _startup():
     await db.dp_events.create_index([("at", -1)])
     await db.dp_events.create_index([("event_type", 1), ("at", -1)])
     await db.dp_events.create_index([("target", 1), ("at", -1)])
+    # One-time-ever pre-release ops lock (e.g. leaderboard_reset) — the unique
+    # index is what makes claim_one_time_lock() atomic, not application logic.
+    await db.dp_admin_ops_locks.create_index("op_name", unique=True)
     await seed_dp_owner(db, os.environ.get("DP_OWNER_EMAIL", ""))
     try:
         from advertising import init_storage

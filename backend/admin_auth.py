@@ -157,7 +157,14 @@ async def do_login(db, request: Request, email: str, password: str):
     return {"ok": True, "token": token, "expires_in_minutes": JWT_TTL_MIN, "admin": public_admin(admin)}
 
 
-def require_dp_admin(min_role: str = "admin"):
+def require_dp_admin(min_role: str = "admin", max_age_s: int | None = None):
+    """max_age_s (optional): for actions sensitive enough to require "recent
+    reauthentication" (there is no separate TOTP/MFA system in this codebase —
+    see leaderboard_reset.py), reject unless the JWT's `iat` is within the last
+    max_age_s seconds. `iat` is set ONLY inside do_login() at the moment of a
+    real bcrypt password check — there is no token-refresh endpoint anywhere in
+    this codebase — so this can never be satisfied by a silently-refreshed
+    token, only by an actual fresh login."""
     async def _dep(request: Request, authorization: str | None = Header(default=None)):
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -170,6 +177,11 @@ def require_dp_admin(min_role: str = "admin"):
             raise HTTPException(status_code=401, detail="Not authenticated")
         if ROLE_RANK.get(admin["role"], 0) < ROLE_RANK.get(min_role, 99):
             raise HTTPException(status_code=403, detail="Insufficient role")
+        if max_age_s is not None:
+            iat = payload.get("iat")
+            age = (datetime.now(timezone.utc).timestamp() - iat) if isinstance(iat, (int, float)) else None
+            if age is None or age > max_age_s or age < 0:
+                raise HTTPException(status_code=401, detail="Recent reauthentication required.")
         return admin
     return _dep
 

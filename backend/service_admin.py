@@ -25,6 +25,7 @@ from service_auth import require_service_auth
 from admin_auth import do_login, public_admin, invite_admin, require_dp_admin, VALID_ROLES
 from admin_events import log_event, public_event, EVENT_TYPES
 from admin_tickets import list_tickets, get_ticket, resolve_ticket, add_note, create_dp_ticket
+from leaderboard_reset import CONFIRM_TEXT, OP_NAME, claim_one_time_lock, reset_leaderboard_data
 
 router = APIRouter(prefix="/api/service/admin", tags=["dp-admin"])
 
@@ -254,3 +255,27 @@ async def list_logs(request: Request, event_type: str | None = None, page: int =
     items = [public_event(d) async for d in cur]
     return {"ok": True, "logs": items, "total": total, "page": page, "page_size": page_size,
             "event_types": sorted(EVENT_TYPES)}
+
+# ---------------- one-time pre-release ops ----------------
+
+@router.post("/ops/leaderboard-reset")
+async def leaderboard_reset(request: Request,
+                             admin=Depends(require_dp_admin("owner", max_age_s=300)),
+                             _auth=Depends(require_service_auth)):
+    """OWNER-only, pre-release, at-most-once-EVER action. Requires: (1) owner
+    role, (2) a JWT issued by an actual login within the last 5 minutes (see
+    require_dp_admin's max_age_s — this is the "recent reauthentication"
+    requirement; there is no separate TOTP/MFA system in this codebase to
+    reuse), (3) the exact confirmation phrase in the body. Empties ONLY
+    reports/flagged/mod_attempts/runs/players via delete_many({}) — never
+    drops a collection or index, never touches any other collection. Can
+    succeed at most once ever, enforced by an atomic DB-level one-use marker
+    (claim_one_time_lock) — not by an application-level flag that could race."""
+    body = await request.json()
+    if str(body.get("confirm", "")) != CONFIRM_TEXT:
+        raise HTTPException(status_code=400, detail="Confirmation text does not match.")
+    db = request.app.state.db
+    if not await claim_one_time_lock(db, OP_NAME):
+        raise HTTPException(status_code=409, detail="This operation has already been executed and cannot be repeated.")
+    deleted, total = await reset_leaderboard_data(db, actor=f"admin:{admin['id']}")
+    return {"ok": True, "deleted": deleted, "total_deleted": total}

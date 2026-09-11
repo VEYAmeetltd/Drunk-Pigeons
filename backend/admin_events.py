@@ -15,6 +15,7 @@ EVENT_TYPES = {
     "dp_admin_recovery_issued", "dp_admin_recovery_email_sent", "dp_admin_recovery_email_failed",
     "ticket_created", "ticket_resolved", "ticket_note",
     "service_auth_failure",
+    "dp_leaderboard_reset",
 }
 
 
