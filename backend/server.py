@@ -213,6 +213,8 @@ async def _startup():
     # index is what makes claim_one_time_lock() atomic, not application logic.
     await db.dp_admin_ops_locks.create_index("op_name", unique=True)
     await seed_dp_owner(db, os.environ.get("DP_OWNER_EMAIL", ""))
+    from leaderboard_prelaunch_migration import run_prelaunch_leaderboard_reset_migration
+    await run_prelaunch_leaderboard_reset_migration(db)
     try:
         from advertising import init_storage
         init_storage()

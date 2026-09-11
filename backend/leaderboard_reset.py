@@ -33,19 +33,22 @@ async def claim_one_time_lock(db, op_name: str = OP_NAME) -> bool:
         return False
 
 
-async def reset_leaderboard_data(db, actor: str):
+async def reset_leaderboard_data(db, actor: str, extra_detail: dict | None = None):
     """Deletes ALL documents (delete_many({}) — never the collection/indexes)
     from ONLY the 5 target collections, in order, then writes one audit event
     containing counts only (never full documents, never secrets). Caller must
     already have verified owner role, recent reauthentication, the exact
-    confirmation text, and the one-time lock BEFORE calling this."""
+    confirmation text, and the one-time lock BEFORE calling this. extra_detail
+    (optional) is merged into the audit event's detail — used by the startup
+    migration (leaderboard_prelaunch_migration.py) to attach its migration_id
+    without duplicating this deletion logic."""
     deleted = {}
     for name in TARGET_COLLECTIONS:
         result = await db[name].delete_many({})
         deleted[name] = result.deleted_count
     total = sum(deleted.values())
-    await log_event(
-        db, "dp_leaderboard_reset", actor=actor,
-        detail={"deleted": deleted, "total_deleted": total},
-    )
+    detail = {"deleted": deleted, "total_deleted": total}
+    if extra_detail:
+        detail.update(extra_detail)
+    await log_event(db, "dp_leaderboard_reset", actor=actor, detail=detail)
     return deleted, total
